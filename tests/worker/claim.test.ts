@@ -6,7 +6,7 @@ import { NETWORK_HASH, SCORE_ADDRESS, testPlayer } from "./helpers/fake-chain";
 describe("claim message", () => {
   it("matches the plan layout", async () => {
     const tape = new Uint8Array([1, 2, 3]);
-    const message = await claimMessage({
+    const message = claimMessage({
       networkHash: NETWORK_HASH,
       scoreContract: SCORE_ADDRESS,
       seedId: 42,

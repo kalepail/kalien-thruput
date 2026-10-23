@@ -138,7 +138,7 @@ export function createRunsRouter(): Hono<AppEnv> {
       return jsonError(c, 503, "chain is not available", { code: "chain_unavailable" });
     }
 
-    const message = await claimMessage({
+    const message = claimMessage({
       networkHash: chain.networkHash,
       scoreContract: chain.score.address,
       seedId,

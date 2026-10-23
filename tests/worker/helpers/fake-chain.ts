@@ -99,7 +99,7 @@ export class FakeChain {
     if (seed === undefined || seed !== replay.seed) {
       return fail("SeedMismatch");
     }
-    const message = await claimMessage({
+    const message = claimMessage({
       networkHash: NETWORK_HASH,
       scoreContract: SCORE_ADDRESS,
       seedId: args.seedId,
@@ -240,6 +240,6 @@ export async function signClaim(
   tape: Uint8Array,
 ): Promise<Uint8Array> {
   return player.sign(
-    await claimMessage({ networkHash: NETWORK_HASH, scoreContract: SCORE_ADDRESS, seedId, tape }),
+    claimMessage({ networkHash: NETWORK_HASH, scoreContract: SCORE_ADDRESS, seedId, tape }),
   );
 }

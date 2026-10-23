@@ -13,8 +13,7 @@ export const MAX_TAPE_BYTES = TAPE_HEADER_SIZE + Math.ceil(MAX_TAPE_FRAMES / 2) 
 export const SEED_EPOCH_SECONDS = 600;
 export const SEED_ACTIVE_EPOCHS = 144;
 
-// Claim signatures and profile signatures use these domain tags.
-export const CLAIM_DOMAIN = "kalien-claim-v1";
+// Profile signatures use this domain tag (claims: shared/thruput/claim.ts).
 export const PROFILE_DOMAIN = "kalien-profile-v1";
 
 // KALIEN has 7 decimals; the contract mints (new - prev) * 1e7 base units.
