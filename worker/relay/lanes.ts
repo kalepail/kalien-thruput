@@ -2,7 +2,9 @@ import type { WorkerEnv } from "../env";
 import { hexToBytes } from "../hex";
 
 /**
- * Relay lanes. Each lane is one relay key and one RelayDO (`relay-<lane>`).
+ * Relay lanes. Each lane is one relay key and one RelayDO per score contract
+ * (`relay-<contract prefix>-<lane>`), so a redeployed contract starts with
+ * empty journals.
  * RELAY_SECRETS is a comma-separated list of 32-byte Ed25519 seeds (hex);
  * lane i signs with entry i. Keep the order stable: a lane's journal holds
  * transactions signed by its key.
@@ -37,6 +39,6 @@ export function laneForRun(runId: string, lanes: number): number {
   return Number.parseInt(runId.slice(0, 8), 16) % lanes;
 }
 
-export function laneObjectName(lane: number): string {
-  return `relay-${lane}`;
+export function laneObjectName(lane: number, scoreContract: string): string {
+  return `relay-${scoreContract.replace(/^0x/iu, "").slice(0, 16)}-${lane}`;
 }

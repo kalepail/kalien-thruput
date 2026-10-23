@@ -89,7 +89,7 @@ export function testApp(options: { lanes?: number } = {}) {
     };
   });
   (env as { RELAY: unknown }).RELAY = {
-    idFromName: (name: string) => Number(name.replace("relay-", "")),
+    idFromName: (name: string) => Number(name.split("-").at(-1)),
     get: (lane: number) => stubs[lane],
   };
   (env as { RELAY_SECRETS?: string }).RELAY_SECRETS = lanes

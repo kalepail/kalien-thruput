@@ -1,9 +1,11 @@
+import { chainSettings } from "../chain/network";
 import type { WorkerEnv } from "../env";
 import { laneCount, laneForRun, laneObjectName } from "./lanes";
 import type { RunView } from "./view";
 
 export function relayLane(env: WorkerEnv, lane: number) {
-  return env.RELAY.get(env.RELAY.idFromName(laneObjectName(lane)));
+  const contract = chainSettings(env).scoreContract ?? "none";
+  return env.RELAY.get(env.RELAY.idFromName(laneObjectName(lane, contract)));
 }
 
 export function allLanes(env: WorkerEnv): number[] {

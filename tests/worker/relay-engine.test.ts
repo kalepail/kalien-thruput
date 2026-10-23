@@ -135,6 +135,31 @@ describe("RelayEngine", () => {
     expect(confirmed).toHaveLength(0);
   });
 
+  it("retries a relay fault (NotRelay) with new transactions, then fails", async () => {
+    const run = await newRun(shortTape);
+    chain.forceFailure = "NotRelay";
+    engine.enqueue(run);
+    for (let i = 0; i < DEFAULT_RELAY_POLICY.maxAttempts; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await engine.tick();
+      // eslint-disable-next-line no-await-in-loop
+      await chain.mine();
+      // eslint-disable-next-line no-await-in-loop
+      await engine.tick();
+    }
+    const done = store.requireRun(run.runId);
+    expect(done.status).toBe("failed");
+    expect(done.error).toBe("NotRelay");
+    expect(chain.signed.size).toBe(DEFAULT_RELAY_POLICY.maxAttempts);
+    // Once the relay is allowed, a new POST queues the failed run again and it confirms.
+    chain.forceFailure = null;
+    expect(engine.enqueue(run).run.status).toBe("queued");
+    await engine.tick();
+    await chain.mine();
+    await engine.tick();
+    expect(store.requireRun(run.runId).status).toBe("confirmed");
+  });
+
   it("re-broadcasts the same bytes while the transaction can still commit", async () => {
     chain.dropBroadcasts = true;
     const run = await newRun(shortTape);

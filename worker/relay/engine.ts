@@ -323,13 +323,15 @@ export class RelayEngine {
     const { store, score } = this.deps;
     const now = this.deps.now();
     if (receiptFailed(receipt)) {
-      store.finish(
-        run.runId,
-        "rejected",
-        score.describeFailure(receipt),
-        receipt.height.toString(),
-        now,
-      );
+      const failure = score.classifyFailure(receipt);
+      if (failure.relayFault) {
+        // The run itself may be fine: the committed failure changed nothing,
+        // so a new attempt is safe (it checks is_claimed first).
+        this.log(`run ${run.runId.slice(0, 12)} relay fault: ${failure.reason}`);
+        this.retryOrFail(run.runId, failure.reason);
+        return;
+      }
+      store.finish(run.runId, "rejected", failure.reason, receipt.height.toString(), now);
       return;
     }
     const event = score.scoreSubmittedFromReceipt(receipt);
@@ -380,7 +382,7 @@ export class RelayEngine {
     if (receipt) {
       store.setSeedTouch(null);
       if (receiptFailed(receipt)) {
-        this.log(`seed touch for ${touch.seedId} failed: ${score.describeFailure(receipt)}`);
+        this.log(`seed touch for ${touch.seedId} failed: ${score.classifyFailure(receipt).reason}`);
       }
       const seed = await score.seedFor(touch.seedId);
       if (seed !== null) {

@@ -183,6 +183,32 @@ describe("POST /api/runs", () => {
   });
 });
 
+describe("contract redeploy", () => {
+  it("starts an empty leaderboard and seed cache for a new score contract", async () => {
+    const t = testApp();
+    t.chain.seeds.set(currentSeedId(), seedOf(shortTape));
+    await submit(t, shortTape);
+    await t.settle();
+    await t.request("/api/seed/current");
+    const all = async () =>
+      (
+        (await (await t.request("/api/leaderboard?window=all")).json()) as {
+          pagination: { total: number };
+        }
+      ).pagination.total;
+    expect(await all()).toBe(1);
+
+    const env = t.env as { SCORE_CONTRACT?: string };
+    const old = env.SCORE_CONTRACT;
+    env.SCORE_CONTRACT = `0x${"77".repeat(32)}`;
+    expect(await all()).toBe(0);
+    const { getSeed } = await import("../../worker/leaderboard/store");
+    expect(await getSeed(t.env, currentSeedId())).toBeNull();
+    env.SCORE_CONTRACT = old;
+    expect(await all()).toBe(1);
+  });
+});
+
 describe("GET /api/seed/current", () => {
   it("returns a stored seed and asks the relay to touch a missing one", async () => {
     const t = testApp();

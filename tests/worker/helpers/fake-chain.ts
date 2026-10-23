@@ -44,6 +44,8 @@ export class FakeChain {
   /** When true, broadcasts are lost (not admitted) but reported as accepted. */
   dropBroadcasts = false;
   failures = new Map<string, string>();
+  /** When set, every submit_score fails with this contract error. */
+  forceFailure: string | null = null;
   private counter = 0;
   readonly gasSeen: bigint[] = [];
 
@@ -92,6 +94,9 @@ export class FakeChain {
       this.failures.set(tx.txHash, reason);
       this.receipts.set(tx.txHash, this.receipt(tx.txHash, false, reason));
     };
+    if (this.forceFailure) {
+      return fail(this.forceFailure);
+    }
     const { args } = tx.invocation;
     const tapeHash = bytesToHex(await sha256(args.tape));
     const seed = this.seeds.get(args.seedId);
@@ -193,8 +198,10 @@ export class FakeChain {
       isClaimed: async (tapeHash) => this.claimed.has(tapeHash.replace(/^0x/u, "")),
       scoreSubmittedFromReceipt: (receipt) =>
         this.eventsByTx.get(receipt.txHash as unknown as string) ?? null,
-      describeFailure: (receipt) =>
-        this.failures.get(receipt.txHash as unknown as string) ?? "failed",
+      classifyFailure: (receipt) => {
+        const reason = this.failures.get(receipt.txHash as unknown as string) ?? "failed";
+        return { reason, relayFault: reason === "NotRelay" || reason === "Paused" };
+      },
       scoreEvents: async ({ fromHeight, cursor, limit }) => {
         const start = cursor.length > 0 ? Number(new DataView(cursor.buffer).getUint32(0)) : 0;
         const matching = this.events.filter((event) => event.blockHeight >= fromHeight);

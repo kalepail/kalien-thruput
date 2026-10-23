@@ -33,6 +33,11 @@ export interface ScoreSubmitted {
   tapeHash: string;
 }
 
+export interface FailureInfo {
+  reason: string;
+  relayFault: boolean;
+}
+
 export interface IndexedScoreSubmitted extends ScoreSubmitted {
   txHash: string;
   blockHeight: bigint;
@@ -61,8 +66,12 @@ export interface ScoreContract {
   isClaimed(tapeHash: string): Promise<boolean>;
   /** The `ScoreSubmitted` event this contract emitted in a receipt, if any. */
   scoreSubmittedFromReceipt(receipt: TransactionReceipt): ScoreSubmitted | null;
-  /** A short reason for a failed receipt, from the contract's error schema. */
-  describeFailure(receipt: TransactionReceipt): string;
+  /**
+   * Why a receipt failed, and whose fault it is. A relay fault (allowlist,
+   * pause, gas, storage conflict) can be retried with a new transaction; a
+   * player fault (bad tape, seed, score) cannot.
+   */
+  classifyFailure(receipt: TransactionReceipt): FailureInfo;
   /** One ascending page of `ScoreSubmitted` events from `fromHeight`. */
   scoreEvents(query: {
     fromHeight: bigint;
@@ -89,6 +98,8 @@ const ERROR_REASONS: Record<string, string> = {
   AlreadyClaimed: "this tape was already claimed",
   ZeroScore: "a score of 0 cannot be claimed",
   NotImproved: "the score does not beat your best for this seed",
+  NotRelay: "this relay key is not on the contract's relay allowlist",
+  TapeBadPadding: "the tape's unused padding nibble is not zero",
   RuleViolation: "the tape breaks the game rules",
   FrameCountMismatch: "the replayed frame count does not match the tape",
   ScoreMismatch: "the replayed score does not match the tape",
@@ -117,28 +128,42 @@ function toScoreSubmitted(event: kalien_score.v0_1.implementation.ScoreSubmitted
   };
 }
 
-/** A failed receipt as text: the contract error name when the abort data has one. */
-export function describeScoreFailure(receipt: TransactionReceipt): string {
+// Contract errors that say nothing about the run itself.
+const RELAY_FAULTS = new Set(["Paused", "NotRelay", "NotAdmin", "AlreadyInitialized"]);
+
+/** A failed receipt: the contract error name when the abort data has one. */
+export function classifyScoreFailure(receipt: TransactionReceipt): FailureInfo {
   if (receipt.abortData && receipt.abortData.length > 0) {
     try {
       const exception = methods.submitScore.decodeException(receipt.abortData);
       if (exception.kind === "declared") {
         const name =
           exception.variant ?? errorNames.get(exception.value) ?? `ScoreError ${exception.value}`;
-        return ERROR_REASONS[name] ? `${name}: ${ERROR_REASONS[name]}` : name;
+        return {
+          reason: ERROR_REASONS[name] ? `${name}: ${ERROR_REASONS[name]}` : name,
+          relayFault: RELAY_FAULTS.has(name),
+        };
       }
     } catch {
       // Not a ScoreError payload; fall through.
     }
   }
+  // Anything else (wallet revert, gas fault, storage conflict) is not the
+  // player's fault.
   const status = receipt.executionStatus;
   if (status?.result === "reverted") {
-    return status.message ? `reverted: ${status.message}` : "reverted";
+    return {
+      reason: status.message ? `reverted: ${status.message}` : "reverted",
+      relayFault: true,
+    };
   }
   if (status?.result === "deterministicError") {
-    return `execution fault: ${status.kind}`;
+    return { reason: `execution fault: ${status.kind}`, relayFault: true };
   }
-  return `execution failed (${ExecResult[receipt.execResult] ?? receipt.execResult})`;
+  return {
+    reason: `execution failed (${ExecResult[receipt.execResult] ?? receipt.execResult})`,
+    relayFault: true,
+  };
 }
 
 export const createScoreContract: ScoreContractFactory = (client, address) => {
@@ -184,7 +209,7 @@ export const createScoreContract: ScoreContractFactory = (client, address) => {
       const [event] = events.ScoreSubmitted.allFromReceipt(receipt, { contractAddress: contract });
       return event ? toScoreSubmitted(event) : null;
     },
-    describeFailure: describeScoreFailure,
+    classifyFailure: classifyScoreFailure,
     async scoreEvents({ fromHeight, cursor, limit }) {
       const page = await client.getContractEvents({
         event: events.ScoreSubmitted,

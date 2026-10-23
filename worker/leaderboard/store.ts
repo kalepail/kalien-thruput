@@ -1,3 +1,4 @@
+import { chainSettings } from "../chain/network";
 import type { WorkerEnv } from "../env";
 
 export type LeaderboardWindow = "10m" | "day" | "all";
@@ -64,6 +65,11 @@ export interface IndexerState {
 
 type Row = Record<string, unknown>;
 
+/** Rows belong to one score contract; a redeploy starts a new leaderboard. */
+function contractOf(env: WorkerEnv): string {
+  return chainSettings(env).scoreContract ?? "";
+}
+
 function db(env: WorkerEnv): D1Database {
   if (!env.LEADERBOARD_DB) {
     throw new Error("LEADERBOARD_DB binding is not configured");
@@ -126,7 +132,7 @@ function windowCutoffIso(window: LeaderboardWindow, nowMs: number): string | nul
 // tape hash for a stable order.
 function rankedCte(cutoff: string | null): string {
   return `WITH filtered AS (
-    SELECT * FROM score_events ${cutoff ? "WHERE closed_at >= ?" : ""}
+    SELECT * FROM score_events WHERE contract = ? ${cutoff ? "AND closed_at >= ?" : ""}
   ),
   best_per_player AS (
     SELECT *,
@@ -209,7 +215,7 @@ export async function getLeaderboardPage(
 }> {
   const nowMs = options.nowMs ?? Date.now();
   const cutoff = windowCutoffIso(options.window, nowMs);
-  const params = cutoff ? [cutoff] : [];
+  const params = [contractOf(env), ...(cutoff ? [cutoff] : [])];
   const database = db(env);
 
   const [totalRow, rows, meRow] = await Promise.all([
@@ -262,7 +268,7 @@ async function playerRank(
   const cutoff = windowCutoffIso(window, nowMs);
   const row = await db(env)
     .prepare(`${rankedCte(cutoff)} SELECT rank FROM ranked WHERE player_address = ? LIMIT 1`)
-    .bind(...(cutoff ? [cutoff] : []), playerAddress)
+    .bind(contractOf(env), ...(cutoff ? [cutoff] : []), playerAddress)
     .first<Row>();
   return row ? toNumber(row.rank) || null : null;
 }
@@ -315,16 +321,16 @@ export async function getPlayer(
       .prepare(
         `SELECT COUNT(*) AS total_runs, COALESCE(MAX(new_best), 0) AS best_score,
            COALESCE(SUM(minted_delta), 0) AS total_minted, MAX(closed_at) AS last_played_at
-         FROM score_events WHERE player_address = ?`,
+         FROM score_events WHERE contract = ? AND player_address = ?`,
       )
-      .bind(playerAddress)
+      .bind(contractOf(env), playerAddress)
       .first<Row>(),
     database
       .prepare(
-        `SELECT * FROM score_events WHERE player_address = ?
+        `SELECT * FROM score_events WHERE contract = ? AND player_address = ?
          ORDER BY closed_at DESC, tape_hash ASC LIMIT ? OFFSET ?`,
       )
-      .bind(playerAddress, runs.limit, runs.offset)
+      .bind(contractOf(env), playerAddress, runs.limit, runs.offset)
       .all<Row>(),
     playerRank(env, playerAddress, "10m", nowMs),
     playerRank(env, playerAddress, "day", nowMs),
@@ -404,17 +410,17 @@ export async function upsertProfile(
 export async function recordSeed(env: WorkerEnv, seedId: number, seed: number): Promise<void> {
   await db(env)
     .prepare(
-      `INSERT INTO seeds (seed_id, seed, recorded_at) VALUES (?, ?, ?)
-       ON CONFLICT(seed_id) DO NOTHING`,
+      `INSERT INTO seeds (contract, seed_id, seed, recorded_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(contract, seed_id) DO NOTHING`,
     )
-    .bind(seedId, seed >>> 0, new Date().toISOString())
+    .bind(contractOf(env), seedId, seed >>> 0, new Date().toISOString())
     .run();
 }
 
 export async function getSeed(env: WorkerEnv, seedId: number): Promise<number | null> {
   const row = await db(env)
-    .prepare(`SELECT seed FROM seeds WHERE seed_id = ?`)
-    .bind(seedId)
+    .prepare(`SELECT seed FROM seeds WHERE contract = ? AND seed_id = ?`)
+    .bind(contractOf(env), seedId)
     .first<Row>();
   return row ? toNumber(row.seed) >>> 0 : null;
 }
@@ -472,12 +478,13 @@ export function indexerStateStatement(env: WorkerEnv, state: IndexerState): D1Pr
 export function scoreEventStatement(env: WorkerEnv, event: ScoreEventRow): D1PreparedStatement {
   return db(env)
     .prepare(
-      `INSERT INTO score_events (tape_hash, player_address, seed_id, seed, frame_count, final_score,
+      `INSERT INTO score_events (contract, tape_hash, player_address, seed_id, seed, frame_count, final_score,
          previous_best, new_best, minted_delta, tx_hash, block_height, closed_at, source, ingested_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(tape_hash) DO NOTHING`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(contract, tape_hash) DO NOTHING`,
     )
     .bind(
+      contractOf(env),
       event.tapeHash,
       event.playerAddress,
       event.seedId,
@@ -496,7 +503,10 @@ export function scoreEventStatement(env: WorkerEnv, event: ScoreEventRow): D1Pre
 }
 
 export async function countScoreEvents(env: WorkerEnv): Promise<number> {
-  const row = await db(env).prepare(`SELECT COUNT(*) AS n FROM score_events`).first<Row>();
+  const row = await db(env)
+    .prepare(`SELECT COUNT(*) AS n FROM score_events WHERE contract = ?`)
+    .bind(contractOf(env))
+    .first<Row>();
   return toNumber(row?.n);
 }
 
@@ -505,8 +515,8 @@ export async function getScoreEvent(
   tapeHash: string,
 ): Promise<ScoreEventRow | null> {
   const row = await db(env)
-    .prepare(`SELECT * FROM score_events WHERE tape_hash = ?`)
-    .bind(tapeHash.toLowerCase())
+    .prepare(`SELECT * FROM score_events WHERE contract = ? AND tape_hash = ?`)
+    .bind(contractOf(env), tapeHash.toLowerCase())
     .first<Row>();
   if (!row) {
     return null;

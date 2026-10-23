@@ -160,4 +160,11 @@ describe("parseAndValidateTape", () => {
     expect(typeof result.seed).toBe("number");
     expect(typeof result.checksum).toBe("number");
   });
+
+  it("rejects a non-zero padding nibble for an odd frame count", () => {
+    const tape = buildTape({ frames: new Uint8Array([1, 2, 3]) });
+    // Body byte 1 holds frame 2 (low nibble) and padding (high nibble).
+    tape[TAPE_HEADER_SIZE + 1] = (tape[TAPE_HEADER_SIZE + 1] ?? 0) | 0x50;
+    expect(() => parseAndValidateTape(tape, MAX_TAPE_BYTES)).toThrow("padding");
+  });
 });

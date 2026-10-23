@@ -1,9 +1,11 @@
 -- Kalien on Thruput: leaderboard, profiles, seeds, and indexer progress.
 
--- One row per ScoreSubmitted event. A tape hash can be claimed once, so it
--- identifies the event for both the relay and the indexer.
+-- One row per ScoreSubmitted event. A tape hash can be claimed once per
+-- score contract, so (contract, tape_hash) identifies the event for both the
+-- relay and the indexer. A redeployed contract starts an empty leaderboard.
 CREATE TABLE score_events (
-  tape_hash TEXT PRIMARY KEY,
+  contract TEXT NOT NULL,
+  tape_hash TEXT NOT NULL,
   player_address TEXT NOT NULL,
   seed_id INTEGER NOT NULL,
   seed INTEGER NOT NULL,
@@ -16,13 +18,15 @@ CREATE TABLE score_events (
   block_height INTEGER NOT NULL,
   closed_at TEXT NOT NULL,
   source TEXT NOT NULL,
-  ingested_at TEXT NOT NULL
+  ingested_at TEXT NOT NULL,
+  PRIMARY KEY (contract, tape_hash)
 );
 
-CREATE INDEX idx_score_events_closed_at ON score_events(closed_at DESC);
-CREATE INDEX idx_score_events_player_closed_at ON score_events(player_address, closed_at DESC);
-CREATE INDEX idx_score_events_rank ON score_events(new_best DESC, closed_at ASC, tape_hash ASC);
-CREATE INDEX idx_score_events_seed ON score_events(seed_id);
+CREATE INDEX idx_score_events_closed_at ON score_events(contract, closed_at DESC);
+CREATE INDEX idx_score_events_player_closed_at
+  ON score_events(contract, player_address, closed_at DESC);
+CREATE INDEX idx_score_events_rank
+  ON score_events(contract, new_best DESC, closed_at ASC, tape_hash ASC);
 CREATE INDEX idx_score_events_tx ON score_events(tx_hash);
 
 CREATE TABLE player_profiles (
@@ -36,9 +40,11 @@ CREATE TABLE player_profiles (
 );
 
 CREATE TABLE seeds (
-  seed_id INTEGER PRIMARY KEY,
+  contract TEXT NOT NULL,
+  seed_id INTEGER NOT NULL,
   seed INTEGER NOT NULL,
-  recorded_at TEXT NOT NULL
+  recorded_at TEXT NOT NULL,
+  PRIMARY KEY (contract, seed_id)
 );
 
 CREATE TABLE indexer_state (

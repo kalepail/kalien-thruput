@@ -4,7 +4,7 @@
 //
 // 1. GET /api/config and check the RPC reports the same network hash.
 // 2. GET /api/seed/current (waits for the seed if the epoch just started).
-// 3. Plays an autopilot game on that seed, signs the claim with a throwaway
+// 3. Plays an autopilot game on that seed (cut at a random length), signs the claim with a throwaway
 //    key, POSTs it, and waits until the run is confirmed.
 // 4. Checks the tape download, the player's run list, the leaderboard, and health.
 /* eslint-disable no-await-in-loop -- operator script: polls and steps in order */
@@ -82,7 +82,10 @@ if (seed.seed === null) process.exit(1);
 const game = new AsteroidsGame({ headless: true, seed: seed.seed });
 game.startNewGame(seed.seed);
 (game as unknown as { autopilot: Autopilot }).autopilot.setEnabled(true);
-for (let frame = 0; frame < maxFrames && game.getMode() !== "game-over"; frame += 1) {
+// The autopilot plays the same game on a seed, so cut it at a random length:
+// each smoke run then sends a new tape.
+const frames = maxFrames - Math.floor(Math.random() * Math.min(1_000, maxFrames / 2));
+for (let frame = 0; frame < frames && game.getMode() !== "game-over"; frame += 1) {
   game.stepSimulation();
 }
 const tape = game.getTape();

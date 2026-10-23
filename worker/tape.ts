@@ -1,5 +1,6 @@
 import {
   EXPECTED_RULES_TAG,
+  MAX_TAPE_FRAMES,
   TAPE_FOOTER_SIZE,
   TAPE_HEADER_SIZE,
   TAPE_MAGIC,
@@ -50,11 +51,20 @@ export function parseAndValidateTape(bytes: Uint8Array, maxTapeBytes: number): T
   if (frameCount === 0) {
     throw new Error("tape has no frames");
   }
+  if (frameCount > MAX_TAPE_FRAMES) {
+    throw new Error(`tape has ${frameCount} frames (max ${MAX_TAPE_FRAMES})`);
+  }
   const bodyBytes = (frameCount + 1) >> 1;
   const expectedLength = TAPE_HEADER_SIZE + bodyBytes + TAPE_FOOTER_SIZE;
 
   if (bytes.length !== expectedLength) {
     throw new Error(`tape size mismatch: expected ${expectedLength} bytes, got ${bytes.length}`);
+  }
+
+  // An odd frame count leaves the last body byte's high nibble unused. The
+  // contract requires it to be zero, so a game has exactly one tape hash.
+  if (frameCount % 2 === 1 && view.getUint8(TAPE_HEADER_SIZE + bodyBytes - 1) >> 4 !== 0) {
+    throw new Error("tape padding nibble is non-zero");
   }
 
   const footerOffset = TAPE_HEADER_SIZE + bodyBytes;
