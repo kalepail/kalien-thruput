@@ -11,8 +11,8 @@ export interface WorkerEnv {
   SCORE_CONTRACT?: string;
   TOKEN_CONTRACT?: string;
   EXPLORER_URL?: string;
-  // Relay key: 32-byte Ed25519 seed as hex (secret)
-  RELAY_SECRET?: string;
+  // Relay keys, one per lane: comma-separated 32-byte Ed25519 seeds as hex (secret)
+  RELAY_SECRETS?: string;
   // Relay gas and pacing (vars, all optional)
   RELAY_GAS_BASE?: string;
   RELAY_GAS_PER_FRAME?: string;

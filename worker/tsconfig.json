@@ -6,5 +6,6 @@
     "lib": ["ES2022", "DOM"],
     "types": ["../worker-configuration.d.ts", "vite/client"]
   },
-  "include": ["./**/*.ts", "../worker-configuration.d.ts"]
+  "include": ["./**/*.ts", "../worker-configuration.d.ts"],
+  "exclude": ["./ops/**"]
 }

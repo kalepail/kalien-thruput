@@ -19,15 +19,6 @@ import { safeErrorMessage } from "../utils";
 import { blockTimeReader } from "./block-time";
 import type { ChainClient } from "./network";
 
-/** Parses RELAY_SECRET: a 32-byte Ed25519 seed as hex, with or without 0x. */
-export function parseRelaySecret(raw: string | undefined): Uint8Array {
-  const clean = raw?.trim().replace(/^0x/iu, "") ?? "";
-  if (!/^[0-9a-f]{64}$/iu.test(clean)) {
-    throw new Error("RELAY_SECRET must be a 32-byte hex Ed25519 seed");
-  }
-  return fromHex0x(`0x${clean}`);
-}
-
 export function createRelayWallet(client: ChainClient, secret: Uint8Array) {
   return createWalletClient({
     client,

@@ -3,15 +3,13 @@
 #
 # Non-secret vars live in wrangler.jsonc "vars". Values here override them
 # locally, for example to point the Worker at a local node.
-#
-# Note: `wrangler types` reads .dev.vars. Regenerate worker-configuration.d.ts
-# with .dev.vars moved aside, so the committed file matches a clean checkout.
 
 # ── Secrets (`wrangler secret put` in production) ─────────────────────────
-# Relay wallet: 32-byte Ed25519 seed as hex. It pays gas (reserved, not
-# burned) for submit_score and ensure_current_seed. Keep >= 9 HOG free per
-# in-flight 36,000-frame run.
-RELAY_SECRET=
+# Relay lanes: comma-separated 32-byte Ed25519 seeds (hex), one per lane.
+# `bun worker/ops/relay-keys.ts --secrets` prints it (to a pipe only). Each key
+# pays gas (reserved, not burned). Keep >= 9 HOG free per in-flight
+# 36,000-frame run (RELAY_MAX_IN_FLIGHT per lane).
+RELAY_SECRETS=
 # Guards /api/admin/* (sync, seed touch). Omit to disable those routes.
 DEV_API_KEY=
 

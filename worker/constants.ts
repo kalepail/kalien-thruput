@@ -18,5 +18,3 @@ export const PROFILE_DOMAIN = "kalien-profile-v1";
 
 // KALIEN has 7 decimals; the contract mints (new - prev) * 1e7 base units.
 export const KALIEN_DECIMALS = 7;
-
-export const RELAY_OBJECT_NAME = "relay-0";

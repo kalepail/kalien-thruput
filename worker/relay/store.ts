@@ -51,6 +51,12 @@ export type NewRun = Pick<
   | "signature"
 >;
 
+/** Position after a run in newest-first order. */
+export interface RunCursor {
+  createdAt: number;
+  runId: string;
+}
+
 /** A pending seed-touch transaction. Only one exists at a time. */
 export interface SeedTouch {
   seedId: number;
@@ -195,15 +201,34 @@ export class RelayStore {
     return { run: this.requireRun(run.runId), created: true };
   }
 
-  listByPlayer(playerAddress: string, limit: number): RunRecord[] {
+  /**
+   * A player's runs, newest first (created_at DESC, run_id DESC). `before`
+   * continues after the last row of a previous page.
+   */
+  listByPlayer(
+    playerAddress: string,
+    options: { limit: number; offset?: number; before?: RunCursor | null },
+  ): RunRecord[] {
+    const before = options.before ?? null;
     return this.sql
       .exec<Row>(
-        `SELECT * FROM runs WHERE player_address = ? ORDER BY created_at DESC LIMIT ?`,
+        `SELECT * FROM runs WHERE player_address = ?
+           ${before ? "AND (created_at < ? OR (created_at = ? AND run_id < ?))" : ""}
+         ORDER BY created_at DESC, run_id DESC LIMIT ? OFFSET ?`,
         playerAddress,
-        limit,
+        ...(before ? [before.createdAt, before.createdAt, before.runId] : []),
+        options.limit,
+        options.offset ?? 0,
       )
       .toArray()
       .map(toRun);
+  }
+
+  countByPlayer(playerAddress: string): number {
+    const [row] = this.sql
+      .exec<Row>(`SELECT COUNT(*) AS n FROM runs WHERE player_address = ?`, playerAddress)
+      .toArray();
+    return row ? num(row.n) : 0;
   }
 
   /** Queued runs whose retry time has come, oldest first. */

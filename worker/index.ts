@@ -4,7 +4,7 @@ import { createApiRouter } from "./api/routes";
 import { applyApiCacheControl } from "./cache-control";
 import type { WorkerEnv } from "./env";
 import { runLeaderboardSync } from "./leaderboard/sync";
-import { relayStub } from "./relay/stub";
+import { allLanes, relayLane } from "./relay/stub";
 import { currentSeedId } from "./seed";
 import { safeErrorMessage } from "./utils";
 
@@ -42,7 +42,7 @@ async function touchCurrentSeed(env: WorkerEnv): Promise<void> {
   // Touch the current epoch so its seed exists before players ask for it.
   // A touch near the epoch end also creates the next one early.
   const seedId = currentSeedId();
-  const result = await relayStub(env).touchSeed(seedId);
+  const result = await relayLane(env, 0).touchSeed(0, seedId);
   console.log(
     `[seed] epoch ${seedId}: ${result.seed !== null ? `seed ${result.seed}` : `touch ${result.txHash}`}`,
   );
@@ -61,6 +61,16 @@ export default {
       });
     }
     if (cron === null || cron === LEADERBOARD_SYNC_CRON) {
+      // Re-arm any lane whose alarm was lost.
+      await Promise.all(
+        allLanes(env).map((lane) =>
+          relayLane(env, lane)
+            .kick(lane)
+            .catch((error: unknown) => {
+              console.warn(`[relay] kick lane ${lane} failed: ${safeErrorMessage(error)}`);
+            }),
+        ),
+      );
       const result = await runLeaderboardSync(env).catch((error: unknown) => {
         console.error(`[leaderboard-sync] failed: ${safeErrorMessage(error)}`);
         return null;

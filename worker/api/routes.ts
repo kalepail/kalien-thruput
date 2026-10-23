@@ -4,7 +4,7 @@ import { chainSettings } from "../chain/network";
 import { CONFIG_CACHE_CONTROL, HEALTH_CACHE_CONTROL, SEED_CACHE_CONTROL } from "../cache-control";
 import { getIndexerState } from "../leaderboard/store";
 import { runLeaderboardSync } from "../leaderboard/sync";
-import { relayStub } from "../relay/stub";
+import { allLanes, relayLane } from "../relay/stub";
 import { currentSeedId, lookupSeed, secondsLeftInEpoch } from "../seed";
 import { safeErrorMessage } from "../utils";
 import { isAdmin, jsonError, type AppEnv } from "./http";
@@ -54,8 +54,8 @@ export function createApiRouter(): Hono<AppEnv> {
     if (seed === null) {
       // Ask the relay to create it; the client polls until it exists.
       c.executionCtx.waitUntil(
-        relayStub(c.env)
-          .touchSeed(seedId)
+        relayLane(c.env, 0)
+          .touchSeed(0, seedId)
           .catch((error: unknown) => {
             console.warn(`[seed] touch failed: ${safeErrorMessage(error)}`);
           }),
@@ -73,14 +73,19 @@ export function createApiRouter(): Hono<AppEnv> {
 
   // GET /api/health
   api.get("/health", async (c) => {
-    const [relay, indexer] = await Promise.all([
-      relayStub(c.env)
-        .status()
-        .catch((error: unknown) => ({ error: safeErrorMessage(error) })),
+    const [lanes, indexer] = await Promise.all([
+      Promise.all(
+        allLanes(c.env).map((lane) =>
+          relayLane(c.env, lane)
+            .status(lane)
+            .then((status) => ({ lane, ...status }))
+            .catch((error: unknown) => ({ lane, error: safeErrorMessage(error) })),
+        ),
+      ),
       getIndexerState(c.env).catch(() => null),
     ]);
     c.header("Cache-Control", HEALTH_CACHE_CONTROL);
-    return c.json({ success: true, relay, indexer });
+    return c.json({ success: true, lanes, indexer });
   });
 
   // Admin routes need `Authorization: Bearer <DEV_API_KEY>`.
@@ -101,7 +106,7 @@ export function createApiRouter(): Hono<AppEnv> {
     }
     try {
       const seedId = currentSeedId();
-      return c.json({ success: true, seedId, ...(await relayStub(c.env).touchSeed(seedId)) });
+      return c.json({ success: true, seedId, ...(await relayLane(c.env, 0).touchSeed(0, seedId)) });
     } catch (error) {
       return jsonError(c, 502, safeErrorMessage(error));
     }

@@ -4,7 +4,8 @@ import { chainContext } from "../chain/context";
 import { MAX_TAPE_BYTES } from "../constants";
 import { bytesToHex, parseFixedHex, sha256 } from "../hex";
 import { replayTape } from "../replay";
-import { relayStub } from "../relay/stub";
+import { allLanes, findRun, laneOf, relayLane } from "../relay/stub";
+import type { RunCursor } from "../relay/store";
 import type { RunView } from "../relay/view";
 import { isSeedIdActive, lookupSeed } from "../seed";
 import { parseAndValidateTape } from "../tape";
@@ -18,6 +19,7 @@ import {
 } from "../cache-control";
 import {
   clientIp,
+  isAdmin,
   jsonError,
   normalizeAddress,
   RateLimiter,
@@ -33,12 +35,34 @@ function parseRunId(raw: string): string | null {
   const id = raw.trim().toLowerCase().replace(/^0x/u, "");
   return RUN_ID_PATTERN.test(id) ? id : null;
 }
-const SUBMIT_LIMIT_PER_WINDOW = 30;
+// Per player key, and per IP (players can share an IP). The admin key skips
+// the IP limit, for load tests.
+const SUBMIT_LIMIT_PER_PLAYER = 30;
+const SUBMIT_LIMIT_PER_IP = 120;
 const SUBMIT_WINDOW_MS = 10 * 60_000;
 const READ_LIMIT_PER_MINUTE = 240;
+const MAX_LIST_OFFSET = 1_000;
 
-const submitByIp = new RateLimiter(SUBMIT_LIMIT_PER_WINDOW, SUBMIT_WINDOW_MS);
-const submitByPlayer = new RateLimiter(SUBMIT_LIMIT_PER_WINDOW, SUBMIT_WINDOW_MS);
+/** Cursor for newest-first run lists: `<createdAt ms>.<runId>`. */
+function formatRunCursor(run: Pick<RunView, "createdAt" | "runId">): string {
+  return `${Date.parse(run.createdAt)}.${run.runId}`;
+}
+
+function parseRunCursor(raw: string): RunCursor | null {
+  const match = /^(\d{1,15})\.([0-9a-f]{64})$/u.exec(raw.trim().toLowerCase());
+  return match ? { createdAt: Number(match[1]), runId: match[2] ?? "" } : null;
+}
+
+function compareNewestFirst(aAt: string, aId: string, bAt: string, bId: string): number {
+  const byTime = Date.parse(bAt) - Date.parse(aAt);
+  if (byTime !== 0) {
+    return byTime;
+  }
+  return aId < bId ? 1 : aId > bId ? -1 : 0;
+}
+
+const submitByIp = new RateLimiter(SUBMIT_LIMIT_PER_IP, SUBMIT_WINDOW_MS);
+const submitByPlayer = new RateLimiter(SUBMIT_LIMIT_PER_PLAYER, SUBMIT_WINDOW_MS);
 const readByIp = new RateLimiter(READ_LIMIT_PER_MINUTE, 60_000);
 
 function runResponse(c: AppContext, run: RunView, status: 200 | 202 = 200): Response {
@@ -103,7 +127,7 @@ export function createRunsRouter(): Hono<AppEnv> {
     }
 
     const pubkeyHex = bytesToHex(pubkey);
-    const retryIp = submitByIp.take(clientIp(c));
+    const retryIp = isAdmin(c) ? 0 : submitByIp.take(clientIp(c));
     if (retryIp > 0) {
       return rateLimited(c, retryIp);
     }
@@ -127,8 +151,9 @@ export function createRunsRouter(): Hono<AppEnv> {
 
     const runId = bytesToHex(await sha256(tape));
     const playerAddress = pubkeyAccountAddress(pubkey);
-    const relay = relayStub(c.env);
-    const existing = await relay.getRun(runId);
+    const found = await findRun(c.env, runId);
+    const existing = found?.run ?? null;
+    const lane = found?.lane ?? laneOf(c.env, runId);
     if (existing && existing.playerAddress !== playerAddress) {
       return jsonError(c, 409, "this tape was already submitted by another player", {
         code: "already_claimed",
@@ -208,7 +233,7 @@ export function createRunsRouter(): Hono<AppEnv> {
     }
 
     await putTape(c.env, runId, tape);
-    const { run } = await relay.submitRun({
+    const { run } = await relayLane(c.env, lane).submitRun(lane, {
       runId,
       playerPubkey: pubkeyHex,
       playerAddress,
@@ -233,9 +258,42 @@ export function createRunsRouter(): Hono<AppEnv> {
     }
     const limitRaw = Number.parseInt(c.req.query("limit") ?? "25", 10);
     const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 25, 1), 100);
-    const runs = await relayStub(c.env).listRuns(player, limit);
+    const offsetRaw = Number.parseInt(c.req.query("offset") ?? "0", 10);
+    const offset = Math.min(
+      Math.max(Number.isFinite(offsetRaw) ? offsetRaw : 0, 0),
+      MAX_LIST_OFFSET,
+    );
+    const cursorRaw = c.req.query("cursor");
+    const before = cursorRaw ? parseRunCursor(cursorRaw) : null;
+    if (cursorRaw && !before) {
+      return jsonError(c, 400, "cursor is not valid", { code: "bad_cursor" });
+    }
+
+    // Each lane returns its newest rows; merge them, newest first.
+    const perLane = before ? limit + 1 : offset + limit + 1;
+    const pages = await Promise.all(
+      allLanes(c.env).map((lane) =>
+        relayLane(c.env, lane).listRuns(lane, player, { limit: perLane, before }),
+      ),
+    );
+    const merged = pages.flatMap((page) => page.runs);
+    // eslint-disable-next-line unicorn/no-array-sort -- sorts a fresh array
+    merged.sort((a, b) => compareNewestFirst(a.createdAt, a.runId, b.createdAt, b.runId));
+    const start = before ? 0 : offset;
+    const runs = merged.slice(start, start + limit);
+    const more = merged.length > start + limit;
+    const last = runs.at(-1);
     c.header("Cache-Control", RUN_STATUS_CACHE_CONTROL);
-    return c.json({ success: true, player, runs });
+    return c.json({
+      success: true,
+      player,
+      runs,
+      total: pages.reduce((sum, page) => sum + page.total, 0),
+      limit,
+      offset: before ? null : offset,
+      nextOffset: !before && more ? offset + limit : null,
+      nextCursor: more && last ? formatRunCursor(last) : null,
+    });
   });
 
   // GET /api/runs/:id
@@ -248,7 +306,7 @@ export function createRunsRouter(): Hono<AppEnv> {
     if (!runId) {
       return jsonError(c, 400, "run id must be 32 bytes of hex", { code: "bad_run_id" });
     }
-    const run = (await relayStub(c.env).getRun(runId)) ?? (await indexedRun(c, runId));
+    const run = (await findRun(c.env, runId))?.run ?? (await indexedRun(c, runId));
     if (!run) {
       return jsonError(c, 404, "run not found", { code: "not_found" });
     }
@@ -261,7 +319,7 @@ export function createRunsRouter(): Hono<AppEnv> {
     if (!runId) {
       return jsonError(c, 400, "run id must be 32 bytes of hex", { code: "bad_run_id" });
     }
-    const run = (await relayStub(c.env).getRun(runId)) ?? (await indexedRun(c, runId));
+    const run = (await findRun(c.env, runId))?.run ?? (await indexedRun(c, runId));
     if (!run || run.status !== "confirmed") {
       return jsonError(c, 404, "no confirmed run with this id", { code: "not_found" });
     }

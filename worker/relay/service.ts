@@ -1,6 +1,6 @@
 import { safeErrorMessage } from "../utils";
 import { RelayEngine, type RelayDeps } from "./engine";
-import { RelayStore, type NewRun, type RunStatus, type SqlLike } from "./store";
+import { RelayStore, type NewRun, type RunCursor, type RunStatus, type SqlLike } from "./store";
 import { runView, type RunView } from "./view";
 
 export type RelayEngineDeps = Omit<RelayDeps, "store">;
@@ -58,8 +58,15 @@ export class RelayService {
     return run ? runView(run) : null;
   }
 
-  listRuns(playerAddress: string, limit: number): RunView[] {
-    return this.store.listByPlayer(playerAddress, limit).map(runView);
+  /** One lane's page of a player's runs, plus that lane's total. */
+  listRuns(
+    playerAddress: string,
+    options: { limit: number; offset?: number; before?: RunCursor | null },
+  ): { runs: RunView[]; total: number } {
+    return {
+      runs: this.store.listByPlayer(playerAddress, options).map(runView),
+      total: this.store.countByPlayer(playerAddress),
+    };
   }
 
   async touchSeed(seedId: number): Promise<{ seed: number | null; txHash: string | null }> {
@@ -84,6 +91,22 @@ export class RelayService {
       seedTouch: touch ? { seedId: touch.seedId, txHash: touch.txHash } : null,
       lastError: this.lastError,
     };
+  }
+
+  /**
+   * Re-arms the alarm when work is pending. Alarms can be lost (for example
+   * across a local restart), so the minute cron and health checks call this.
+   */
+  async kick(): Promise<boolean> {
+    const { store } = this;
+    const pending =
+      store.submitting().length > 0 ||
+      store.getSeedTouch() !== null ||
+      (store.nextQueuedAt() ?? Number.POSITIVE_INFINITY) <= this.now();
+    if (pending) {
+      await this.schedule(this.now());
+    }
+    return pending;
   }
 
   /** Runs one tick unless one is already running. Schedules the next one. */

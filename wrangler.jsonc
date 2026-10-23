@@ -33,12 +33,17 @@
     "RELAY_WALLET_GAS_OVERHEAD": "100000",
     "RELAY_SEED_GAS": "1000000",
     "RELAY_EXPIRY_BLOCKS": "120",
-    "RELAY_MAX_IN_FLIGHT": "1",
+    "RELAY_MAX_IN_FLIGHT": "4",
     // Leaderboard indexer (ScoreSubmitted events → D1), every minute.
     "LEADERBOARD_SYNC_ENABLED": "1",
     "LEADERBOARD_SYNC_MAX_PAGES": "10",
   },
-  // Secrets: RELAY_SECRET (relay Ed25519 seed, hex), DEV_API_KEY (admin routes).
+  // Secrets. RELAY_SECRETS: comma-separated relay Ed25519 seeds (hex), one per lane.
+  // DEV_API_KEY: guards /api/admin/*. Listing them here also keeps `wrangler types`
+  // independent of .dev.vars.
+  "secrets": {
+    "required": ["RELAY_SECRETS", "DEV_API_KEY"],
+  },
   "d1_databases": [
     {
       "binding": "LEADERBOARD_DB",
