@@ -31,6 +31,8 @@
     "@simplewebauthn/browser": "^13.2.2",
     "@simplewebauthn/server": "^13.2.3",
     "@tailwindcss/vite": "^4.2.1",
+    "@thruputchain/client": "0.18.0",
+    "@thruputchain/protocol": "0.15.0",
     "asteroids-score": "file:./shared/stellar/bindings/asteroids-score",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
