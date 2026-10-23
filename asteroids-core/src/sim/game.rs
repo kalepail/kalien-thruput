@@ -8,10 +8,10 @@ pub(super) struct Game {
     wave: i32,
     next_extra_life_score: u32,
     ship: Ship,
-    asteroids: Vec<Asteroid>,
-    bullets: Vec<Bullet>,
-    saucers: Vec<Saucer>,
-    saucer_bullets: Vec<Bullet>,
+    asteroids: FixedVec<Asteroid, ASTEROID_VEC_CAPACITY>,
+    bullets: FixedVec<Bullet, SHIP_BULLET_VEC_CAPACITY>,
+    saucers: FixedVec<Saucer, SAUCER_VEC_CAPACITY>,
+    saucer_bullets: FixedVec<Bullet, SAUCER_BULLET_VEC_CAPACITY>,
     prune_mask: u8,
     saucer_spawn_timer: i32,
     ship_fire_latch: bool,
@@ -44,10 +44,10 @@ impl Game {
                 respawn_timer: 0,
                 invulnerable_timer: 0,
             },
-            asteroids: Vec::with_capacity(ASTEROID_VEC_CAPACITY),
-            bullets: Vec::with_capacity(SHIP_BULLET_VEC_CAPACITY),
-            saucers: Vec::with_capacity(SAUCER_VEC_CAPACITY),
-            saucer_bullets: Vec::with_capacity(SAUCER_BULLET_VEC_CAPACITY),
+            asteroids: FixedVec::new(EMPTY_ASTEROID),
+            bullets: FixedVec::new(EMPTY_BULLET),
+            saucers: FixedVec::new(EMPTY_SAUCER),
+            saucer_bullets: FixedVec::new(EMPTY_BULLET),
             prune_mask: 0,
             saucer_spawn_timer: 0,
             ship_fire_latch: false,
@@ -65,6 +65,7 @@ impl Game {
         game
     }
 
+    #[cfg(feature = "alloc")]
     pub(super) fn checkpoint(&self) -> ReplayCheckpoint {
         ReplayCheckpoint {
             frame_count: self.frame_count,
@@ -88,6 +89,7 @@ impl Game {
         }
     }
 
+    #[cfg(feature = "alloc")]
     pub(super) fn world_snapshot(&self) -> WorldSnapshot {
         WorldSnapshot {
             frame_count: self.frame_count,
@@ -123,6 +125,7 @@ impl Game {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[inline]
     fn ship_snapshot(ship: Ship) -> ShipSnapshot {
         ShipSnapshot {
@@ -139,6 +142,7 @@ impl Game {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[inline]
     fn asteroid_snapshot(asteroid: Asteroid) -> AsteroidSnapshot {
         let size = match asteroid.size {
@@ -160,6 +164,7 @@ impl Game {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[inline]
     fn bullet_snapshot(bullet: Bullet) -> BulletSnapshot {
         BulletSnapshot {
@@ -173,6 +178,7 @@ impl Game {
         }
     }
 
+    #[cfg(feature = "alloc")]
     #[inline]
     fn saucer_snapshot(saucer: Saucer) -> SaucerSnapshot {
         SaucerSnapshot {

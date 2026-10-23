@@ -1,3 +1,4 @@
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
 use crate::constants::{
@@ -13,6 +14,7 @@ use crate::constants::{
     SHIP_THRUST_Q8_8, SHIP_TURN_SPEED_BAM, STARTING_LIVES, WORLD_HEIGHT_Q12_4, WORLD_WIDTH_Q12_4,
 };
 use crate::error::RuleCode;
+use crate::fixed_vec::FixedVec;
 use crate::fixed_point::{
     apply_drag, atan2_bam, clamp_i32, clamp_speed_q8_8, collision_dist_sq_q12_4, cos_bam,
     displace_q12_4, shortest_delta_q12_4, sin_bam, velocity_q8_8, wrap_x_q12_4, wrap_y_q12_4,
@@ -178,6 +180,7 @@ pub struct SaucerSnapshot {
     pub drift_timer: i32,
 }
 
+#[cfg(feature = "alloc")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorldSnapshot {
     pub frame_count: u32,
@@ -234,10 +237,54 @@ const SAUCER_CULL_MAX_X_Q12_4: i32 = 16_640;
 
 const BULLET_RADIUS: i32 = 2;
 
+// Entity storage is fixed-capacity (no allocation while stepping). Upper bounds on length:
+//
+// - Asteroids: at most `ASTEROID_CAP` are alive at the start of a frame (`spawn_wave` adds at
+//   most 16; `destroy_asteroid` only splits into free slots below `ASTEROID_CAP`). Dead entries
+//   stay in place until `prune_destroyed_entities`, and each frame destroys at most one asteroid
+//   per live projectile (`SHIP_BULLET_LIMIT + SAUCER_BULLET_LIMIT` = 6). With `a0` alive at frame
+//   start, `d` destroyed and `p` pushed, `a0 - d + p <= ASTEROID_CAP`, so the length
+//   `a0 + p <= ASTEROID_CAP + d <= 33`.
+// - Ship bullets: `spawn_ship_bullet` runs only while `len < SHIP_BULLET_LIMIT`.
+// - Saucers: `spawn_saucer` runs only while `len < max_saucers_for_wave(..) <= 3`.
+// - Saucer bullets: `spawn_saucer_bullet` returns early at `SAUCER_BULLET_LIMIT`.
+//
+// The bullet buffers keep one spare slot so the over-limit invariant checks stay testable.
 const ASTEROID_VEC_CAPACITY: usize = ASTEROID_CAP + 16;
-const SHIP_BULLET_VEC_CAPACITY: usize = SHIP_BULLET_LIMIT;
+const SHIP_BULLET_VEC_CAPACITY: usize = SHIP_BULLET_LIMIT + 1;
 const SAUCER_VEC_CAPACITY: usize = 4;
-const SAUCER_BULLET_VEC_CAPACITY: usize = SAUCER_BULLET_LIMIT;
+const SAUCER_BULLET_VEC_CAPACITY: usize = SAUCER_BULLET_LIMIT + 1;
+
+const EMPTY_ASTEROID: Asteroid = Asteroid {
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    angle: 0,
+    alive: false,
+    radius: 0,
+    size: AsteroidSize::Small,
+    spin: 0,
+};
+const EMPTY_BULLET: Bullet = Bullet {
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    alive: false,
+    life: 0,
+};
+const EMPTY_SAUCER: Saucer = Saucer {
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    alive: false,
+    radius: 0,
+    small: false,
+    fire_cooldown: 0,
+    drift_timer: 0,
+};
 const MAX_SCORE_DELTA_PER_FRAME: u32 = (SHIP_BULLET_LIMIT as u32) * SCORE_SMALL_SAUCER;
 const LEGAL_SCORE_DELTA_TABLE_SIZE: usize = MAX_SCORE_DELTA_PER_FRAME as usize + 1;
 const SCORE_EVENT_VALUES: [u32; 5] = [
@@ -250,16 +297,30 @@ const SCORE_EVENT_VALUES: [u32; 5] = [
 const LEGAL_SCORE_DELTAS: [bool; LEGAL_SCORE_DELTA_TABLE_SIZE] = build_legal_score_delta_table();
 
 pub fn replay(seed: u32, inputs: &[u8]) -> ReplayResult {
+    replay_inputs(seed, inputs.iter().copied())
+}
+
+/// Loose replay over any input stream (for example [`crate::tape::PackedInputs`]).
+pub fn replay_inputs<I: IntoIterator<Item = u8>>(seed: u32, inputs: I) -> ReplayResult {
     let mut game = Game::new(seed);
 
     for input in inputs {
-        game.step(*input);
+        game.step(input);
     }
 
     game.result()
 }
 
 pub fn replay_strict(seed: u32, inputs: &[u8]) -> Result<ReplayResult, ReplayViolation> {
+    replay_strict_inputs(seed, inputs.iter().copied())
+}
+
+/// Strict replay (transition and invariant rule checks after every frame) over any input
+/// stream. Does not allocate.
+pub fn replay_strict_inputs<I: IntoIterator<Item = u8>>(
+    seed: u32,
+    inputs: I,
+) -> Result<ReplayResult, ReplayViolation> {
     let mut game = Game::new(seed);
     game.validate_invariants().map_err(|rule| ReplayViolation {
         frame_count: game.frame_count(),
@@ -267,7 +328,7 @@ pub fn replay_strict(seed: u32, inputs: &[u8]) -> Result<ReplayResult, ReplayVio
     })?;
 
     for input in inputs {
-        let frame_input = decode_input_byte(*input);
+        let frame_input = decode_input_byte(input);
         let before_step = game.transition_state();
         game.step_decoded(frame_input);
         let after_step = game.transition_state();
@@ -505,6 +566,7 @@ fn is_legal_score_delta(delta: u32) -> bool {
     LEGAL_SCORE_DELTAS[delta as usize]
 }
 
+#[cfg(feature = "alloc")]
 pub fn replay_with_checkpoints(
     seed: u32,
     inputs: &[u8],
@@ -562,6 +624,7 @@ impl LiveGame {
         self.step(encode_input_byte(input));
     }
 
+    #[cfg(feature = "alloc")]
     #[inline]
     pub fn snapshot(&self) -> WorldSnapshot {
         self.game.world_snapshot()

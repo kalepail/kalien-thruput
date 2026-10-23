@@ -654,3 +654,85 @@ fn saucer_bullet_cap_blocks_extra_spawn() {
     game.spawn_saucer_bullet(saucer.x, saucer.y, saucer.radius, saucer.small);
     assert_eq!(game.saucer_bullets.len(), SAUCER_BULLET_LIMIT);
 }
+
+fn peak_entity_counts(seed: u32, inputs: impl IntoIterator<Item = u8>) -> [usize; 4] {
+    let mut game = Game::new(seed);
+    for input in inputs {
+        game.step(input);
+    }
+    [
+        game.asteroids.peak,
+        game.bullets.peak,
+        game.saucers.peak,
+        game.saucer_bullets.peak,
+    ]
+}
+
+#[test]
+fn entity_storage_stays_within_proven_bounds() {
+    // Proven bounds (see the capacity notes in `sim`): asteroids <= ASTEROID_CAP + 6,
+    // ship bullets <= SHIP_BULLET_LIMIT, saucers <= 3, saucer bullets <= SAUCER_BULLET_LIMIT.
+    let bounds = [
+        ASTEROID_CAP + SHIP_BULLET_LIMIT + SAUCER_BULLET_LIMIT,
+        SHIP_BULLET_LIMIT,
+        3,
+        SAUCER_BULLET_LIMIT,
+    ];
+    let mut overall = [0usize; 4];
+    let mut check = |peaks: [usize; 4], label: &str| {
+        for i in 0..4 {
+            assert!(
+                peaks[i] <= bounds[i],
+                "{label}: entity kind {i} reached {} (bound {})",
+                peaks[i],
+                bounds[i]
+            );
+            overall[i] = core::cmp::max(overall[i], peaks[i]);
+        }
+    };
+
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let dirs = [
+        root.join("../test-fixtures"),
+        root.join("../autopilot/fixtures/public"),
+        root.join("tests/fixtures/local"),
+    ];
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|ext| ext != "tape") {
+                continue;
+            }
+            let bytes = std::fs::read(&path).unwrap();
+            let Ok(tape) = crate::tape::parse_tape_ref(&bytes, 36_000) else {
+                continue;
+            };
+            check(
+                peak_entity_counts(tape.seed, tape.inputs()),
+                &path.display().to_string(),
+            );
+        }
+    }
+
+    // Fire-heavy random play, with varied seeds and input mixes.
+    for case in 0u32..64 {
+        let mut rng = SeededRng::new(0x5EED_0000 + case);
+        let fire_bias = 0x08 * (case & 1) as u8;
+        let inputs: Vec<u8> = (0..36_000)
+            .map(|_| ((rng.next() & 0x0F) as u8) | fire_bias)
+            .collect();
+        check(
+            peak_entity_counts(0xC0DE_0000 ^ case.wrapping_mul(0x9E37_79B9), inputs),
+            "random",
+        );
+    }
+
+    eprintln!("peak entity counts [asteroids, bullets, saucers, saucer_bullets]: {overall:?}");
+    // The fixtures must actually exercise the busy cases.
+    assert!(overall[0] > ASTEROID_CAP / 2, "asteroid peak {overall:?}");
+    assert_eq!(overall[1], SHIP_BULLET_LIMIT, "bullet peak {overall:?}");
+    assert_eq!(overall[3], SAUCER_BULLET_LIMIT, "saucer bullet peak {overall:?}");
+}

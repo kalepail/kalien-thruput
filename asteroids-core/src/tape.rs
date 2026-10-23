@@ -1,10 +1,10 @@
+#[cfg(feature = "alloc")]
 use alloc::{vec, vec::Vec};
-use serde::{Deserialize, Serialize};
 
 use crate::constants::{RULES_TAG, TAPE_FOOTER_SIZE, TAPE_HEADER_SIZE, TAPE_MAGIC, TAPE_VERSION};
 use crate::error::VerifyError;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TapeHeader {
     pub magic: u32,
     pub version: u8,
@@ -13,16 +13,121 @@ pub struct TapeHeader {
     pub frame_count: u32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TapeFooter {
     pub final_score: u32,
     pub checksum: u32,
 }
 
+/// Validated tape that borrows its packed body (no allocation).
+///
+/// Inputs stay nibble-packed (low nibble = even frame, high nibble = odd frame) and are read
+/// on demand with [`TapeRef::inputs`] or [`TapeRef::input`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TapeRef<'a> {
+    pub seed: u32,
+    pub frame_count: u32,
+    pub final_score: u32,
+    pub checksum: u32,
+    body: &'a [u8],
+}
+
+impl<'a> TapeRef<'a> {
+    /// Packed body bytes (`ceil(frame_count / 2)` bytes).
+    #[inline]
+    pub fn body(&self) -> &'a [u8] {
+        self.body
+    }
+
+    /// Input byte (low nibble only) for frame index `frame` (0-based).
+    #[inline]
+    pub fn input(&self, frame: u32) -> u8 {
+        debug_assert!(frame < self.frame_count);
+        let byte = self.body[(frame >> 1) as usize];
+        (byte >> ((frame & 1) << 2)) & 0x0F
+    }
+
+    /// Iterates the input bytes for every frame, in order.
+    #[inline]
+    pub fn inputs(&self) -> PackedInputs<'a> {
+        PackedInputs::new(self.body, self.frame_count)
+    }
+
+    #[inline]
+    pub fn header(&self) -> TapeHeader {
+        TapeHeader {
+            magic: TAPE_MAGIC,
+            version: TAPE_VERSION,
+            rules_tag: RULES_TAG,
+            seed: self.seed,
+            frame_count: self.frame_count,
+        }
+    }
+
+    #[inline]
+    pub fn footer(&self) -> TapeFooter {
+        TapeFooter {
+            final_score: self.final_score,
+            checksum: self.checksum,
+        }
+    }
+}
+
+/// Iterator over nibble-packed frame inputs. Yields one input byte (`0..=0x0F`) per frame.
+#[derive(Clone, Debug)]
+pub struct PackedInputs<'a> {
+    body: &'a [u8],
+    next: u32,
+    end: u32,
+}
+
+impl<'a> PackedInputs<'a> {
+    /// `body` must hold at least `ceil(frame_count / 2)` bytes.
+    #[inline]
+    pub fn new(body: &'a [u8], frame_count: u32) -> Self {
+        assert!(body.len() >= body_bytes(frame_count as usize));
+        Self {
+            body,
+            next: 0,
+            end: frame_count,
+        }
+    }
+
+    /// Starts iteration at frame index `start` (clamped to the end).
+    #[inline]
+    pub fn starting_at(mut self, start: u32) -> Self {
+        self.next = core::cmp::min(start, self.end);
+        self
+    }
+}
+
+impl Iterator for PackedInputs<'_> {
+    type Item = u8;
+
+    #[inline]
+    fn next(&mut self) -> Option<u8> {
+        if self.next >= self.end {
+            return None;
+        }
+        let frame = self.next;
+        self.next += 1;
+        let byte = self.body[(frame >> 1) as usize];
+        Some((byte >> ((frame & 1) << 2)) & 0x0F)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = (self.end - self.next) as usize;
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for PackedInputs<'_> {}
+
 /// Parsed tape with unpacked inputs (one byte per frame, low nibble only).
 ///
-/// `inputs` is owned because the body bytes are nibble-packed on disk and must
-/// be expanded into individual frame bytes during parsing.
+/// Host-side convenience. On-chain code uses [`parse_tape_ref`], which does not unpack.
+#[cfg(feature = "alloc")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TapeView {
     pub header: TapeHeader,
@@ -62,7 +167,9 @@ pub fn body_bytes(frame_count: usize) -> usize {
     frame_count.div_ceil(2)
 }
 
-pub fn parse_tape(bytes: &[u8], max_frames: u32) -> Result<TapeView, VerifyError> {
+/// Validates the tape container (magic, version, rules tag, reserved bytes, frame range,
+/// exact length, CRC-32) and borrows the packed body. Does not allocate.
+pub fn parse_tape_ref(bytes: &[u8], max_frames: u32) -> Result<TapeRef<'_>, VerifyError> {
     let min_len = TAPE_HEADER_SIZE + TAPE_FOOTER_SIZE;
     if bytes.len() < min_len {
         return Err(VerifyError::TapeTooShort {
@@ -121,34 +228,27 @@ pub fn parse_tape(bytes: &[u8], max_frames: u32) -> Result<TapeView, VerifyError
         });
     }
 
-    // Unpack nibbles into one byte per frame.
-    let mut inputs = Vec::with_capacity(frame_count as usize);
-    for i in 0..packed_len {
-        let byte = bytes[body_start + i];
-        inputs.push(byte & 0x0F); // low nibble = frame 2i
-        if inputs.len() < frame_count as usize {
-            inputs.push((byte >> 4) & 0x0F); // high nibble = frame 2i+1
-        }
-    }
-
-    let final_score = read_u32_le(bytes, body_end);
-
-    Ok(TapeView {
-        header: TapeHeader {
-            magic,
-            version,
-            rules_tag,
-            seed,
-            frame_count,
-        },
-        inputs,
-        footer: TapeFooter {
-            final_score,
-            checksum,
-        },
+    Ok(TapeRef {
+        seed,
+        frame_count,
+        final_score: read_u32_le(bytes, body_end),
+        checksum,
+        body: &bytes[body_start..body_end],
     })
 }
 
+/// Parses and unpacks a tape into one input byte per frame. Host-side convenience.
+#[cfg(feature = "alloc")]
+pub fn parse_tape(bytes: &[u8], max_frames: u32) -> Result<TapeView, VerifyError> {
+    let tape = parse_tape_ref(bytes, max_frames)?;
+    Ok(TapeView {
+        header: tape.header(),
+        inputs: tape.inputs().collect(),
+        footer: tape.footer(),
+    })
+}
+
+#[cfg(feature = "alloc")]
 pub fn serialize_tape(seed: u32, inputs: &[u8], final_score: u32) -> Vec<u8> {
     let frame_count = inputs.len();
     let packed_len = body_bytes(frame_count);
@@ -194,6 +294,7 @@ fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
     ])
 }
 
+#[cfg(feature = "alloc")]
 #[inline]
 fn write_u32_le(bytes: &mut [u8], offset: usize, value: u32) {
     bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
@@ -242,6 +343,23 @@ mod tests {
 
     fn footer_offset(frame_count: usize) -> usize {
         TAPE_HEADER_SIZE + body_bytes(frame_count)
+    }
+
+    #[test]
+    fn packed_reader_matches_unpacked_inputs() {
+        for frame_count in 1usize..=9 {
+            let inputs: Vec<u8> = (0..frame_count).map(|i| ((i * 7 + 3) & 0x0F) as u8).collect();
+            let bytes = serialize_tape(0x1234_5678, &inputs, 0);
+            let tape = parse_tape_ref(&bytes, 100).unwrap();
+            assert_eq!(tape.frame_count as usize, frame_count);
+            assert_eq!(tape.inputs().len(), frame_count);
+            assert_eq!(tape.inputs().collect::<Vec<_>>(), inputs);
+            for (i, input) in inputs.iter().enumerate() {
+                assert_eq!(tape.input(i as u32), *input);
+                assert_eq!(tape.inputs().starting_at(i as u32).next(), Some(*input));
+            }
+            assert_eq!(tape.inputs().starting_at(frame_count as u32).next(), None);
+        }
     }
 
     #[test]

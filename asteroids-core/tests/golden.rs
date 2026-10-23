@@ -127,7 +127,7 @@ fn golden_line(name: &str, seed: u32, claimed_score: u32, inputs: &[u8]) -> Stri
         game.step(*input);
         hash_world(&mut hash, &game.snapshot());
         let frame = (index + 1) as u32;
-        if frame % HASH_STRIDE == 0 {
+        if frame.is_multiple_of(HASH_STRIDE) {
             checkpoints.push(format!("{:016x}", hash.0));
         }
     }

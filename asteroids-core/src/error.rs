@@ -66,8 +66,6 @@ pub enum VerifyError {
     RuleViolation { frame: u32, rule: RuleCode },
     FrameCountMismatch { claimed: u32, computed: u32 },
     ScoreMismatch { claimed: u32, computed: u32 },
-    InvalidClaimant { reason: &'static str },
-    JournalLengthMismatch { expected: usize, actual: usize },
 }
 
 impl fmt::Display for VerifyError {
@@ -107,11 +105,6 @@ impl fmt::Display for VerifyError {
             Self::ScoreMismatch { claimed, computed } => {
                 write!(f, "score mismatch: claimed={claimed}, computed={computed}")
             }
-            Self::InvalidClaimant { reason } => write!(f, "invalid claimant address: {reason}"),
-            Self::JournalLengthMismatch { expected, actual } => write!(
-                f,
-                "journal length mismatch: expected {expected} bytes, got {actual}"
-            ),
         }
     }
 }
@@ -122,7 +115,6 @@ impl std::error::Error for VerifyError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::JOURNAL_LEN;
 
     #[test]
     fn rule_code_display_is_stable() {
@@ -245,17 +237,6 @@ mod tests {
         }
         .to_string()
         .contains("score mismatch"));
-        assert!(VerifyError::InvalidClaimant {
-            reason: "bad checksum"
-        }
-        .to_string()
-        .contains("bad checksum"));
-        assert!(VerifyError::JournalLengthMismatch {
-            expected: JOURNAL_LEN,
-            actual: JOURNAL_LEN - 1
-        }
-        .to_string()
-        .contains(&format!("expected {JOURNAL_LEN} bytes")));
     }
 
     #[cfg(feature = "std")]
