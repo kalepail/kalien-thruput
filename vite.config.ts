@@ -43,6 +43,8 @@ export default defineConfig({
         "**/docs/**",
         "**/dist/**",
         "**/target/**",
+        // With the API proxied, worker/ edits (even its tsconfig) must not reload the page.
+        ...(apiProxy ? ["**/worker/**"] : []),
       ],
     },
   },

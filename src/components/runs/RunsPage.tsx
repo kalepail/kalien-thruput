@@ -163,68 +163,136 @@ export function RunsPage() {
           </div>
         ) : (
           <>
-            <Table aria-label="Submitted runs">
-              <RunsTableHead />
-              <TableBody>
-                {runs.map((run) => (
-                  <TableRow key={run.runId} data-testid="run-row" data-status={run.status}>
-                    <TableCell className="text-right tabular-nums">
+            <ul className="m-0 grid list-none gap-2 p-0 lg:hidden" aria-label="Submitted runs">
+              {runs.map((run) => (
+                <li
+                  key={run.runId}
+                  data-testid="run-card"
+                  data-status={run.status}
+                  className="grid gap-2 rounded-lg border border-border-subtle bg-[rgba(13,22,40,0.5)] p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-display text-lg tabular-nums text-card-foreground">
                       {formatMetric(run.score)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatMetric(run.frameCount)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    </span>
+                    <StatusBadge variant={runStatusBadgeVariant(run.status)}>
+                      {run.status}
+                    </StatusBadge>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-soft">
+                    <span>
                       {run.minted !== null && run.minted > 0n
-                        ? `+${formatKalien(run.minted)}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell className="font-display tracking-[0.04em]">
-                      {run.seed !== null ? formatHex32(run.seed) : formatMetric(run.seedId)}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge
-                        variant={runStatusBadgeVariant(run.status)}
-                        title={run.error ?? undefined}
+                        ? `+${formatKalien(run.minted)} KALIEN`
+                        : "No KALIEN"}
+                    </span>
+                    <span>{formatMetric(run.frameCount)} frames</span>
+                    <span>
+                      Seed {run.seed !== null ? formatHex32(run.seed) : formatMetric(run.seedId)}
+                    </span>
+                    <RelativeTime value={run.createdAt} />
+                  </div>
+                  {run.txHash ? (
+                    <p className="m-0 text-xs">
+                      <TxLink txHash={run.txHash} />
+                    </p>
+                  ) : null}
+                  {run.error && run.status !== "confirmed" ? (
+                    <p className="m-0 text-xs text-warning [overflow-wrap:anywhere]">{run.error}</p>
+                  ) : null}
+                  {run.status === "confirmed" ? (
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="space"
+                        size="xs"
+                        onClick={() => navigate(`/replay/${run.runId}`)}
                       >
-                        {run.status}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell>{run.txHash ? <TxLink txHash={run.txHash} /> : "—"}</TableCell>
-                    <TableCell>
-                      <RelativeTime value={run.createdAt} />
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="xs"
-                          className="text-primary hover:bg-primary/10 hover:text-primary"
-                          onClick={() => navigate(`/replay/${run.runId}`)}
-                          title="Replay this run"
+                        <Play className="size-3.5" />
+                        Replay
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        onClick={() => void downloadRunTape(run.runId)}
+                      >
+                        <Download className="size-3.5" />
+                        Tape
+                      </Button>
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            <div className="hidden lg:block">
+              <Table aria-label="Submitted runs">
+                <RunsTableHead />
+                <TableBody>
+                  {runs.map((run) => (
+                    <TableRow key={run.runId} data-testid="run-row" data-status={run.status}>
+                      <TableCell className="text-right tabular-nums">
+                        {formatMetric(run.score)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatMetric(run.frameCount)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {run.minted !== null && run.minted > 0n
+                          ? `+${formatKalien(run.minted)}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="font-display tracking-[0.04em]">
+                        {run.seed !== null ? formatHex32(run.seed) : formatMetric(run.seedId)}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          variant={runStatusBadgeVariant(run.status)}
+                          title={run.error ?? undefined}
                         >
-                          <Play className="size-3.5" />
-                          Replay
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="xs"
-                          onClick={() => void downloadRunTape(run.runId)}
-                          title="Download tape"
-                          aria-label="Download tape"
+                          {run.status}
+                        </StatusBadge>
+                      </TableCell>
+                      <TableCell>{run.txHash ? <TxLink txHash={run.txHash} /> : "—"}</TableCell>
+                      <TableCell>
+                        <RelativeTime value={run.createdAt} />
+                      </TableCell>
+                      <TableCell>
+                        {/* Tapes are served only once a run is confirmed. */}
+                        <div
+                          className={
+                            run.status === "confirmed" ? "flex items-center gap-1" : "hidden"
+                          }
                         >
-                          <Download className="size-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            className="text-primary hover:bg-primary/10 hover:text-primary"
+                            onClick={() => navigate(`/replay/${run.runId}`)}
+                            title="Replay this run"
+                          >
+                            <Play className="size-3.5" />
+                            Replay
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => void downloadRunTape(run.runId)}
+                            title="Download tape"
+                            aria-label="Download tape"
+                          >
+                            <Download className="size-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
             {runs.some((run) => run.error && run.status !== "confirmed") && (
-              <div className="grid gap-1 text-xs text-text-soft">
+              <div className="hidden gap-1 lg:grid text-xs text-text-soft">
                 {runs
                   .filter((run) => run.error && run.status !== "confirmed")
                   .slice(0, 5)

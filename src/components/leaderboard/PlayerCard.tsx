@@ -34,7 +34,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
     <Card>
       {/* Player name and address */}
       <div className="grid gap-1">
-        <h2 className="m-0 flex items-center gap-2 font-display text-[clamp(1.2rem,3vw,1.6rem)] tracking-[0.055em] uppercase">
+        <h2 className="m-0 flex min-w-0 items-center gap-2 font-display text-[clamp(1.2rem,3vw,1.6rem)] tracking-[0.055em] uppercase [overflow-wrap:anywhere]">
           <User className="size-5 text-primary" />
           {name}
         </h2>

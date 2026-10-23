@@ -139,9 +139,10 @@ function GameOverOverlay({
   const duration = flow.latestRun ? formatFramesAsTime(flow.latestRun.frameCount) : "";
 
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-[rgba(3,7,14,0.82)] backdrop-blur-sm">
-      <div className="w-full max-w-sm px-4">
-        <div className="flex max-h-[calc(100%-1rem)] flex-col gap-3 overflow-y-auto rounded-xl border border-border-subtle bg-[radial-gradient(circle_at_12%_8%,rgba(94,165,255,0.12),transparent_42%),linear-gradient(160deg,rgba(8,16,29,0.92),rgba(6,13,24,0.98))] p-[clamp(0.8rem,2vw,1.2rem)] shadow-elevated">
+    // Phones: a full-screen sheet, because the game panel is too short for the result card.
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(3,7,14,0.92)] py-6 backdrop-blur-sm sm:absolute sm:z-10 sm:items-center sm:overflow-hidden sm:bg-[rgba(3,7,14,0.82)] sm:py-2">
+      <div className="my-auto flex w-full max-w-sm flex-col px-4 sm:max-h-full">
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-xl border border-border-subtle bg-[radial-gradient(circle_at_12%_8%,rgba(94,165,255,0.12),transparent_42%),linear-gradient(160deg,rgba(8,16,29,0.92),rgba(6,13,24,0.98))] p-[clamp(0.8rem,2vw,1.2rem)] shadow-elevated">
           <div className="flex items-center gap-3">
             <div
               className={cn(

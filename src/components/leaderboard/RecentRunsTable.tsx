@@ -64,77 +64,105 @@ export function RecentRunsTable({
         <p className="m-0 text-text-soft">No confirmed runs yet.</p>
       ) : (
         <>
-          {isLoading ? (
-            <Table aria-label="Recent confirmed runs">
-              <TableHeader>
-                <TableRow>
-                  <TableHead scope="col" className="text-right">
-                    Score
-                  </TableHead>
-                  <TableHead scope="col" className="text-right">
-                    Frames
-                  </TableHead>
-                  <TableHead scope="col" className="text-right">
-                    KALIEN Earned
-                  </TableHead>
-                  <TableHead scope="col">Seed</TableHead>
-                  <TableHead scope="col">Completed</TableHead>
-                  <TableHead scope="col">Transaction</TableHead>
-                  <TableHead scope="col">
-                    <span className="sr-only">Replay</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <SkeletonRows count={3} cols={7} />
-              </TableBody>
-            </Table>
-          ) : (
-            <Table aria-label="Recent confirmed runs">
-              <TableHeader>
-                <TableRow>
-                  <TableHead scope="col" className="text-right">
-                    Score
-                  </TableHead>
-                  <TableHead scope="col" className="text-right">
-                    Frames
-                  </TableHead>
-                  <TableHead scope="col" className="text-right">
-                    KALIEN Earned
-                  </TableHead>
-                  <TableHead scope="col">Seed</TableHead>
-                  <TableHead scope="col">Completed</TableHead>
-                  <TableHead scope="col">Transaction</TableHead>
-                  <TableHead scope="col">
-                    <span className="sr-only">Replay</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {runs.map((run) => (
-                  <TableRow key={run.runId ?? run.txHash ?? `${run.seed}:${run.score}`}>
-                    <TableCell className="text-right tabular-nums">
-                      {run.score.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatMetric(run.frameCount)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {run.minted !== null ? formatKalien(run.minted) : "n/a"}
-                    </TableCell>
-                    <TableCell className="font-display tracking-[0.04em]">
-                      {formatHex32(run.seed)}
-                    </TableCell>
-                    <TableCell>
-                      <RelativeTime value={run.completedAt} />
-                    </TableCell>
-                    <TableCell>{run.txHash ? <TxLink txHash={run.txHash} /> : "n/a"}</TableCell>
-                    <TableCell>{renderReplayButton(run.runId)}</TableCell>
+          <ul className="m-0 grid list-none gap-2 p-0 lg:hidden" aria-label="Recent confirmed runs">
+            {runs.map((run) => (
+              <li
+                key={run.runId ?? run.txHash ?? `${run.seed}:${run.score}`}
+                className="grid gap-1.5 rounded-lg border border-border-subtle bg-[rgba(13,22,40,0.5)] p-3"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-display text-lg tabular-nums text-card-foreground">
+                    {run.score.toLocaleString()}
+                  </span>
+                  {renderReplayButton(run.runId)}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-soft">
+                  <span>{run.minted !== null ? `+${formatKalien(run.minted)} KALIEN` : "n/a"}</span>
+                  <span>{formatMetric(run.frameCount)} frames</span>
+                  <span>Seed {formatHex32(run.seed)}</span>
+                  <RelativeTime value={run.completedAt} />
+                </div>
+                {run.txHash ? (
+                  <p className="m-0 text-xs">
+                    <TxLink txHash={run.txHash} />
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <div className="hidden lg:block">
+            {isLoading ? (
+              <Table aria-label="Recent confirmed runs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col" className="text-right">
+                      Score
+                    </TableHead>
+                    <TableHead scope="col" className="text-right">
+                      Frames
+                    </TableHead>
+                    <TableHead scope="col" className="text-right">
+                      KALIEN Earned
+                    </TableHead>
+                    <TableHead scope="col">Seed</TableHead>
+                    <TableHead scope="col">Completed</TableHead>
+                    <TableHead scope="col">Transaction</TableHead>
+                    <TableHead scope="col">
+                      <span className="sr-only">Replay</span>
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+                </TableHeader>
+                <TableBody>
+                  <SkeletonRows count={3} cols={7} />
+                </TableBody>
+              </Table>
+            ) : (
+              <Table aria-label="Recent confirmed runs">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col" className="text-right">
+                      Score
+                    </TableHead>
+                    <TableHead scope="col" className="text-right">
+                      Frames
+                    </TableHead>
+                    <TableHead scope="col" className="text-right">
+                      KALIEN Earned
+                    </TableHead>
+                    <TableHead scope="col">Seed</TableHead>
+                    <TableHead scope="col">Completed</TableHead>
+                    <TableHead scope="col">Transaction</TableHead>
+                    <TableHead scope="col">
+                      <span className="sr-only">Replay</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {runs.map((run) => (
+                    <TableRow key={run.runId ?? run.txHash ?? `${run.seed}:${run.score}`}>
+                      <TableCell className="text-right tabular-nums">
+                        {run.score.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatMetric(run.frameCount)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {run.minted !== null ? formatKalien(run.minted) : "n/a"}
+                      </TableCell>
+                      <TableCell className="font-display tracking-[0.04em]">
+                        {formatHex32(run.seed)}
+                      </TableCell>
+                      <TableCell>
+                        <RelativeTime value={run.completedAt} />
+                      </TableCell>
+                      <TableCell>{run.txHash ? <TxLink txHash={run.txHash} /> : "n/a"}</TableCell>
+                      <TableCell>{renderReplayButton(run.runId)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
           <Pagination
             offset={offset}
             limit={limit}
