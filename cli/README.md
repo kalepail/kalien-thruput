@@ -1,13 +1,42 @@
 # Kalien CLI
 
-Terminal client for autonomous Asteroids farming and tape replay.
+Terminal client for autonomous Asteroids farming, run submission, and tape
+replay on the Thruput devnet.
+
+The CLI plays headless games, keeps the best tape for each seed epoch, signs a
+claim with a local Ed25519 key, and submits the tape to the Kalien Worker API.
+The Worker relays the run to the Thruput score contract, which replays the tape
+on-chain and mints KALIEN to your address.
+
+## Identity
+
+The CLI keeps one player key file. It makes the file on first use.
+
+- Default path: `$KALIEN_KEY_FILE`, else `$XDG_CONFIG_HOME/kalien/key.json`, else
+  `~/.config/kalien/key.json`. Override with `--key <path>`.
+- The file has mode `0600`. It holds a 32-byte Ed25519 seed as `0x` hex, plus the
+  public key and the address for reference.
+- Your player address is the Thruput pubkey account address of the public key
+  (nonce 0). `kalien whoami` prints it.
+- Back up the key with `kalien key export`. Anyone with the secret controls your
+  runs.
 
 ## Commands
 
-- `kalien run --address <G...|C...>`: run autopilot workers and submit tapes.
-- `kalien replay <file.tape>`: ASCII replay in terminal.
+- `kalien run [--threads <n|max|%>]`: run autopilot workers and submit the best
+  tape of each epoch.
+- `kalien submit <file.tape> [--seed-id <n>] [--no-wait] [--json]`: sign and
+  submit one tape, then wait for `confirmed`, `rejected`, or `failed`.
+- `kalien status <run-id> [--wait]`: show one run.
+- `kalien whoami [--json]`: show the address, public key, and key file.
+- `kalien key path|export|import|new`: manage the key file. `import` takes the
+  secret as an argument, as `-` for stdin, or from `KALIEN_SECRET_KEY`. It never
+  overwrites a key file.
+- `kalien replay <file.tape>`: ASCII replay in the terminal.
 - `kalien ps`: list active `kalien run` processes.
 - `kalien cleanup [options]`: terminate stale `kalien run` processes.
+
+`--address` was removed. Runs are tied to the key that signs them.
 
 ### Cleanup options
 
@@ -16,32 +45,67 @@ Terminal client for autonomous Asteroids farming and tape replay.
 - `--all`: target all matching `kalien run` processes.
 - `--older-than <dur>`: only target older processes (`30s`, `10m`, `2h`, `1d`).
 
+## API
+
+Default API: `https://kalien-thruput.sdf-ecosystem.workers.dev`. Override with
+`--api-url <url>` or `KALIEN_API_URL` (for a local Worker, use
+`http://localhost:8787`).
+
+The CLI uses Worker API v0:
+
+1. `GET /api/config` for `networkHash` and `scoreContract`.
+2. `GET /api/seed/current` for `{ seedId, seed }`.
+3. `POST /api/runs?pubkey=<hex>&seed_id=<n>&sig=<hex>` with the raw tape as the
+   body. `pubkey` is the 32-byte public key and `sig` is the 64-byte Ed25519
+   signature, both as lowercase hex with no `0x`.
+4. `GET /api/runs/:id` until the status is final.
+
+The signature covers the claim message:
+
+```text
+sha256("kalien-claim-v1" || network_hash || score_contract || seed_id u32 LE || sha256(tape))
+```
+
+The score contract checks the same message, so a relay cannot move a run to
+another player, seed, or contract.
+
 ## Local Usage
 
 From `cli/`:
 
 ```bash
 bun run src/index.ts --help
-bun run src/index.ts run --address GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF
+bun run src/index.ts whoami
+bun run src/index.ts run --threads 4
+bun run src/index.ts run --api-url http://localhost:8787
+bun run src/index.ts submit ../generated-tapes/asteroids-1a2b3c4d.tape
 bun run src/index.ts replay ../test-fixtures/test-short.tape
-bun run src/index.ts ps
-bun run src/index.ts cleanup --dry-run
 bun run src/index.ts cleanup --orphan-only --older-than 5m
 ```
 
-## Network Defaults And Preflight
+Autopilot (`autopilot/`) tapes and `scripts/generate-tape.ts` tapes submit with
+`kalien submit`. The tape seed must equal the current seed, or pass the
+`--seed-id` that the seed belongs to (the contract accepts the last 144 epochs).
 
-- Default network is `testnet`.
-- Per-network defaults are applied for API URL, RPC URL, score contract, and token contract.
-- Current defaults:
-  - testnet API: `https://testnet.kalien.xyz`
-  - mainnet API: `https://kalien.xyz`
-  - mainnet score contract: `CDDAYXNY6MMA47Q54VSHG2WV445ZUOJ354NOLSFRC7ZUDTD6OTS4A7PE`
-- `kalien run` performs preflight checks before workers start:
-  - `C...` claimant must exist as a deployed contract on the selected network.
-  - `G...` claimant must exist as an account on the selected network and have the KALIEN trustline for that network’s token contract.
-  - Score contract must be readable on the selected network.
-  - API seed must match RPC seed for the same `seed_id`.
+## Test
+
+From `cli/`:
+
+```bash
+bun test src
+../node_modules/.bin/tsc --noEmit -p tsconfig.json
+```
+
+The tests check the claim message against fixed vectors, the Ed25519 signer
+against RFC 8032, the address against the `thruput` CLI, the key file, and the
+API client against a mock API. When `shared/thruput/claim.ts` exists, a test also
+checks that it gives the same bytes as the CLI.
+
+End-to-end run test against a live Worker:
+
+```bash
+bun run scripts/e2e-runs.ts --api-url http://localhost:8787
+```
 
 ## Build
 

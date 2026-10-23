@@ -2,9 +2,11 @@
  * Headless tape generator using autopilot.
  *
  * Usage: bun run scripts/generate-tape.ts [--seed <hex>] [--max-frames <n>] [--output <path>]
+ *                                         [--api-url <url>]
  *
  * Runs an autopilot game in headless mode, records inputs to a tape,
- * writes the tape to a file, then verifies it inline.
+ * writes the tape to a file, then verifies it inline. Without --seed, the
+ * current seed comes from the Kalien API (GET /api/seed/current).
  */
 
 import { writeFileSync, readFileSync, mkdirSync } from "fs";
@@ -13,19 +15,16 @@ import { AsteroidsGame } from "../src/game/AsteroidsGame";
 import { TapeInputSource } from "../src/game/input-source";
 import { Autopilot } from "../src/game/Autopilot";
 import { deserializeTape } from "../src/game/tape";
-import { fetchSeedFromContract } from "../src/chain/seed";
 
 const DEFAULT_MAX_FRAMES = 36_000;
-const DEFAULT_RPC_URL = process.env.STELLAR_RPC_URL ?? "https://soroban-testnet.stellar.org";
-const DEFAULT_CONTRACT_ID =
-  process.env.SCORE_CONTRACT_ID ??
-  process.env.VITE_SCORE_CONTRACT_ID ??
-  "CAKVUHDKKEG6SYUAVMQMDRMUGCNQJS74BP45NNYS7Y2TTYUMYFSLA7EU";
+const DEFAULT_API_URL =
+  process.env.KALIEN_API_URL ?? "https://kalien-thruput.sdf-ecosystem.workers.dev";
 
 // Parse arguments
 let explicitSeed: number | null = null;
 let maxFrames = DEFAULT_MAX_FRAMES; // ~10 minutes
 let outputPath = "";
+let apiUrl = DEFAULT_API_URL;
 
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
@@ -35,19 +34,35 @@ for (let i = 0; i < args.length; i++) {
     maxFrames = parseInt(args[++i], 10);
   } else if (args[i] === "--output" && args[i + 1]) {
     outputPath = args[++i];
+  } else if (args[i] === "--api-url" && args[i + 1]) {
+    apiUrl = args[++i];
   }
 }
 
-// Resolve seed: use explicit --seed flag, or fetch from contract
+async function fetchCurrentSeed(): Promise<{ seedId: number; seed: number } | null> {
+  try {
+    const response = await fetch(`${apiUrl.replace(/\/+$/, "")}/api/seed/current`, {
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { seedId?: unknown; seed?: unknown };
+    if (typeof body.seedId !== "number" || typeof body.seed !== "number") return null;
+    return { seedId: body.seedId >>> 0, seed: body.seed >>> 0 };
+  } catch {
+    return null;
+  }
+}
+
+// Resolve seed: use explicit --seed flag, or fetch the current seed from the API
 let seed: number;
 if (explicitSeed !== null) {
   seed = explicitSeed;
 } else {
-  process.stdout.write("Fetching seed from contract...");
-  let fetched: number | null = null;
+  process.stdout.write(`Fetching current seed from ${apiUrl}...`);
+  let fetched: { seedId: number; seed: number } | null = null;
   /* eslint-disable no-await-in-loop -- seed retries must remain sequential */
   for (let attempt = 0; attempt < 6; attempt++) {
-    fetched = await fetchSeedFromContract(DEFAULT_CONTRACT_ID, DEFAULT_RPC_URL);
+    fetched = await fetchCurrentSeed();
     if (fetched !== null) break;
     if (attempt < 5) {
       process.stdout.write(" retrying...");
@@ -57,12 +72,12 @@ if (explicitSeed !== null) {
   /* eslint-enable no-await-in-loop */
   if (fetched === null) {
     console.error(
-      "\nNo seed available for the current window. The backend cron may not have fired yet.",
+      "\nNo seed available for the current window. The API cron may not have fired yet.",
     );
     process.exit(1);
   }
-  seed = fetched;
-  console.log(` 0x${seed.toString(16).toUpperCase().padStart(8, "0")}`);
+  seed = fetched.seed;
+  console.log(` 0x${seed.toString(16).toUpperCase().padStart(8, "0")} (seed_id ${fetched.seedId})`);
 }
 
 if (!outputPath) {
