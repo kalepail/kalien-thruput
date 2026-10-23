@@ -139,59 +139,75 @@ describe("identity", () => {
   });
 });
 
-// Vectors published by the contract agent; they pin the TS and Rust layouts together.
+// Vectors published by the contract agent (shared/thruput/claim-vectors.json).
+// They pin the CLI, the shared TS helper, and the contract's claim.rs together.
+interface AddressVector {
+  secretKey: string;
+  pubkey: string;
+  address: string;
+}
+interface ClaimVector {
+  tape: string; // file name in kalien-contract/fixtures/
+  networkHash: string;
+  scoreContract: string;
+  seedId: number;
+  tapeHash: string;
+  digest: string;
+  secretKey: string;
+  pubkey: string;
+  signature: string;
+}
 const vectorsPath = join(repoRoot, "shared/thruput/claim-vectors.json");
+const vectors = existsSync(vectorsPath)
+  ? (JSON.parse(readFileSync(vectorsPath, "utf-8")) as {
+      addresses: AddressVector[];
+      claims: ClaimVector[];
+    })
+  : { addresses: [], claims: [] };
+const strip = (hex: string) => hex.replace(/^0x/, "").toLowerCase();
+
 describe.skipIf(!existsSync(vectorsPath))("shared/thruput/claim-vectors.json", () => {
-  type Vector = Record<string, unknown>;
-  const raw = existsSync(vectorsPath)
-    ? (JSON.parse(readFileSync(vectorsPath, "utf-8")) as Vector[] | Record<string, unknown>)
-    : [];
-  const list: Vector[] = Array.isArray(raw)
-    ? raw
-    : ((Object.values(raw).find((v) => Array.isArray(v)) as Vector[] | undefined) ?? []);
-  const hex = (v: Vector, ...keys: string[]): string | undefined => {
-    for (const k of keys) if (typeof v[k] === "string") return v[k] as string;
-    return undefined;
-  };
-
-  test("has vectors", () => {
-    expect(list.length).toBeGreaterThan(0);
+  test("has address and claim vectors", () => {
+    expect(vectors.addresses.length).toBeGreaterThan(0);
+    expect(vectors.claims.length).toBeGreaterThan(0);
   });
 
-  test("claim digests match", () => {
-    let checked = 0;
-    for (const v of list) {
-      const expected = hex(v, "digest", "message", "claimMessage", "claimDigest");
-      const networkHash = hex(v, "networkHash", "network_hash");
-      const scoreContract = hex(v, "scoreContract", "score_contract");
-      const seedId = Number(v.seedId ?? v.seed_id);
-      if (!expected || !networkHash || !scoreContract || !Number.isFinite(seedId)) continue;
-      const tapeHex = hex(v, "tape", "tapeHex");
-      const tapeFile = hex(v, "tapeFile", "tapePath", "fixture");
-      const tapeHash = hex(v, "tapeHash", "tape_hash");
-      const tapeBytes = tapeHex
-        ? hexToBytes(tapeHex)
-        : tapeFile
-          ? new Uint8Array(readFileSync(resolve(repoRoot, tapeFile)))
-          : null;
-      const got = tapeBytes
-        ? claimMessage({ networkHash, scoreContract, seedId, tape: tapeBytes })
-        : tapeHash
-          ? claimMessageFromTapeHash({ networkHash, scoreContract, seedId, tapeHash })
-          : null;
-      if (!got) continue;
-      expect(bytesToHex(got)).toBe(expected.replace(/^0x/, "").toLowerCase());
-      checked++;
+  test("pubkeys and pubkey account addresses match", () => {
+    for (const v of vectors.addresses) {
+      expect(addressFromPublicKey(v.pubkey)).toBe(v.address.toLowerCase());
+      if (v.secretKey) {
+        const id = identityFromSecret(hexToBytes(v.secretKey));
+        expect(id.publicKeyHex).toBe(strip(v.pubkey));
+        expect(id.address).toBe(v.address.toLowerCase());
+      }
     }
-    expect(checked).toBeGreaterThan(0);
   });
 
-  test("pubkey account addresses match", () => {
-    for (const v of list) {
-      const pubkey = hex(v, "pubkey", "publicKey", "player_pubkey", "playerPubkey");
-      const address = hex(v, "address", "playerAddress", "player_address");
-      if (!pubkey || !address) continue;
-      expect(addressFromPublicKey(pubkey)).toBe(address.toLowerCase());
+  test("claim digests and signatures match", async () => {
+    for (const v of vectors.claims) {
+      const tape = new Uint8Array(readFileSync(join(repoRoot, "kalien-contract/fixtures", v.tape)));
+      expect(bytesToHex(sha256(tape))).toBe(strip(v.tapeHash));
+      const digest = claimMessage({
+        networkHash: v.networkHash,
+        scoreContract: v.scoreContract,
+        seedId: v.seedId,
+        tape,
+      });
+      expect(bytesToHex(digest)).toBe(strip(v.digest));
+      expect(
+        bytesToHex(
+          claimMessageFromTapeHash({
+            networkHash: v.networkHash,
+            scoreContract: v.scoreContract,
+            seedId: v.seedId,
+            tapeHash: v.tapeHash,
+          }),
+        ),
+      ).toBe(strip(v.digest));
+      const id = identityFromSecret(hexToBytes(v.secretKey));
+      expect(id.publicKeyHex).toBe(strip(v.pubkey));
+      // Ed25519 is deterministic, so the signature must match byte for byte.
+      expect(bytesToHex(await signClaim(id, digest))).toBe(strip(v.signature));
     }
   });
 });
