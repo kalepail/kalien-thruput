@@ -13,6 +13,8 @@
  *                (--player-key NAME | --player-secret-file FILE) [--seed-id N] [--gas N]
  *   fixtures     --deployment FILE --admin-key NAME --relay-key NAME --player-key NAME [--out FILE]
  *                fix fixture seeds on free epochs and submit the fixture tapes
+ *   harden       --deployment FILE --admin-key NAME --relay-key NAME [--lock-seeding]
+ *                allow the relay, turn on relay-only mode, optionally lock set_seed for good
  *   export-secret --key NAME                               print the 32-byte seed as hex (for the Worker secret file)
  *   integration  --rpc URL [--out FILE]                     full local-node test with fresh keys
  *
@@ -40,6 +42,7 @@ import { fixedBytes } from "@thruputchain/client/contract";
 import { KalienScore, kalien_score } from "../../shared/thruput/bindings/kalien-score";
 import { ERC20, KalienTokenAdmin } from "../../shared/thruput/bindings/kalien-token";
 import { claimMessage, fromHex, pubkeyAccountAddress, tapeHash, toHex } from "../../shared/thruput/claim";
+import { SCORE_ERRORS } from "../../shared/thruput/kalien";
 
 const REPO = resolve(import.meta.dir, "../..");
 const ARTIFACTS = join(REPO, "kalien-contract/target/thruput");
@@ -267,23 +270,14 @@ function gasUsedOf(receipt: { gasUsed?: bigint } | undefined): string | null {
   return receipt?.gasUsed === undefined ? null : String(receipt.gasUsed);
 }
 
-/** `ScoreError` discriminants (kalien_score implementation.rs). */
-export const SCORE_ERRORS: Record<number, string> = {
-  1: "AlreadyInitialized", 2: "NotAdmin", 3: "Paused", 4: "UnknownSeed", 5: "SeedInactive",
-  6: "SeedMismatch", 7: "BadSignature", 8: "AlreadyClaimed", 9: "ZeroScore", 10: "NotImproved",
-  11: "SeedAlreadySet", 12: "ZeroSeed", 20: "TapeTooShort", 21: "TapeBadMagic", 22: "TapeBadVersion",
-  23: "TapeBadRulesTag", 24: "TapeReservedNonZero", 25: "TapeFrameCountOutOfRange",
-  26: "TapeLengthMismatch", 27: "TapeCrcMismatch", 30: "RuleViolation", 31: "FrameCountMismatch",
-  32: "ScoreMismatch",
-};
-
 /** Name the contract error in a failed submit receipt (the wallet root re-throws it). */
 function describeFailure(receipt: { abortData: Uint8Array | null; execResult: unknown }): string {
   if (receipt.abortData) {
     try {
       const exn = KalienScore.v0_1.submitScore.decodeException(receipt.abortData) as unknown as { kind?: string; value?: unknown };
       const code = typeof exn?.value === "bigint" ? Number(exn.value) : NaN;
-      if (SCORE_ERRORS[code]) return `ScoreError::${SCORE_ERRORS[code]}`;
+      const name = (SCORE_ERRORS as Record<number, string>)[code];
+      if (name) return `ScoreError::${name}`;
       return JSON.stringify(exn, (_, v) => jsonable(v));
     } catch {
       return `abort ${toHex(receipt.abortData)}`;
@@ -412,6 +406,29 @@ async function cmdFixtures(args: Record<string, string>) {
   console.log(`player ${playerAddress} holds ${bal.value} KALIEN base units`);
 }
 
+
+async function cmdHarden(args: Record<string, string>) {
+  const dep = loadDeployment(need(args, "deployment"));
+  const client = await connect(dep.rpcUrl);
+  const admin = walletFor(client, loadKeySecret(need(args, "admin-key")));
+  const relay = walletFor(client, loadKeySecret(need(args, "relay-key")));
+  const score = addressFromHex(dep.scoreContract);
+  const invocations = [
+    KalienScore.v0_1.setRelay.invocation(score, gasAmount(5_000_000n), { relay: relay.account.address, allowed: true }),
+    KalienScore.v0_1.setRelayOnly.invocation(score, gasAmount(5_000_000n), { relayOnly: true }),
+  ];
+  if (args["lock-seeding"] === "true") invocations.push(KalienScore.v0_1.lockSeeding.invocation(score, gasAmount(5_000_000n)));
+  const txs: string[] = [];
+  for (const invocation of invocations) {
+    const res = await admin.executeAndWait({ invocation, gasLimit: gasAmount(10_000_000n) });
+    txs.push(toHex0x(res.txHash));
+  }
+  const cfg = await KalienScore.v0_1.config.view({ client, contract: score });
+  const allowed = await KalienScore.v0_1.isRelay.view({ client, contract: score, args: { relay: relay.account.address } });
+  console.log(JSON.stringify({ relay: toHex0x(relay.account.address), relayAllowed: allowed.value, config: cfg.value, txs }, (_, v) => jsonable(typeof v === "object" && v instanceof Uint8Array && v.length === 32 ? toHex0x(v as ContractAddress) : v)));
+  if (!allowed.value || !(cfg.value as unknown as { relay_only: boolean }).relay_only) throw new Error("harden did not take effect");
+}
+
 async function cmdExportSecret(args: Record<string, string>) {
   // Raw 32-byte Ed25519 seed, lowercase hex, no 0x, no newline: the format
   // `new PrivateKeySigner(fromHex(secret))` expects. Redirect it to a file.
@@ -532,6 +549,7 @@ const commands: Record<string, (a: Record<string, string>) => Promise<void>> = {
   "set-seed": cmdSetSeed,
   submit: cmdSubmit,
   fixtures: cmdFixtures,
+  harden: cmdHarden,
   "export-secret": cmdExportSecret,
   integration: cmdIntegration,
 };

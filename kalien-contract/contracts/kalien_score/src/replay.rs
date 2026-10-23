@@ -23,9 +23,19 @@ pub struct Replayed {
     pub final_score: u32,
 }
 
-/// Container checks only: magic, version, rules tag, length, frame range, CRC.
+/// Container checks only: magic, version, rules tag, length, frame range, CRC,
+/// and a zero padding nibble.
 pub fn tape_summary(tape: &[u8], max_frames: u32) -> Result<TapeSummary, ScoreError> {
     let tape = parse_tape_ref(tape, max_frames).map_err(map_error)?;
+    // An odd frame count leaves the high nibble of the last body byte unused.
+    // Require it to be zero, so one game has exactly one tape encoding (and one
+    // tape hash for the duplicate check).
+    if tape.frame_count % 2 == 1 {
+        let last = tape.body()[tape.body().len() - 1];
+        if last >> 4 != 0 {
+            return Err(ScoreError::TapeBadPadding);
+        }
+    }
     Ok(TapeSummary {
         seed: tape.seed,
         frame_count: tape.frame_count,

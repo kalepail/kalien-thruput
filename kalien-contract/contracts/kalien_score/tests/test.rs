@@ -408,11 +408,20 @@ fn derive_seed_matches_spec() {
     let tx_hash = [0xABu8; 32];
     let mut preimage = tx_hash.to_vec();
     preimage.extend_from_slice(&123_456u32.to_le_bytes());
+    preimage.extend_from_slice(&777i64.to_le_bytes());
+    preimage.extend_from_slice(&1_800_000_000_123_456_789u64.to_le_bytes());
     let hash = sha256_bytes(&preimage);
     let expected = u32::from_le_bytes([hash[0], hash[1], hash[2], hash[3]]);
     let world = setup();
-    let derived = world.view(move |_, _| derive_seed(&tx_hash, 123_456));
+    let derived =
+        world.view(move |_, _| derive_seed(&tx_hash, 123_456, 777, 1_800_000_000_123_456_789));
     assert_eq!(derived, expected);
+    // Block height and timepoint both change the seed: a caller who grinds the
+    // transaction hash cannot know them in advance.
+    let other_height = world.view(move |_, _| derive_seed(&tx_hash, 123_456, 778, 1_800_000_000_123_456_789));
+    let other_time = world.view(move |_, _| derive_seed(&tx_hash, 123_456, 777, 1_800_000_000_123_456_790));
+    assert_ne!(other_height, derived);
+    assert_ne!(other_time, derived);
     assert_ne!(ZERO_SEED_FALLBACK, 0);
 }
 

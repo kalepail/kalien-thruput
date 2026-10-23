@@ -11,6 +11,7 @@ import {
   getBestScore,
   getCurrentSeedId,
   getKalienBalance,
+  getScoreConfig,
   getScoreSubmittedPage,
   getSubmitResult,
   getTokenMetadata,
@@ -18,6 +19,7 @@ import {
   readPlayerState,
   seedIdAt,
   submitGasLimit,
+  tapePaddingOk,
   type KalienConfig,
 } from "./kalien";
 
@@ -211,6 +213,16 @@ describe("submit results", () => {
     expect(decodeSubmitReceipt).toBeDefined();
   });
 
+  test("tape padding check matches the contract rule", () => {
+    const real = new Uint8Array(readFileSync(join(import.meta.dir, "../../kalien-contract/fixtures/test-real-game.tape")));
+    expect(tapePaddingOk(real)).toBe(true); // 6,643 frames: odd
+    const bad = real.slice();
+    bad[bad.length - 9]! |= 0x50;
+    expect(tapePaddingOk(bad)).toBe(false);
+    const even = new Uint8Array(readFileSync(join(import.meta.dir, "../../kalien-contract/fixtures/test-short.tape")));
+    expect(tapePaddingOk(even)).toBe(true);
+  });
+
   test("unknown abort data is not a ScoreError", () => {
     expect(decodeScoreErrorCode(null)).toBe(null);
     expect(decodeScoreErrorCode(new Uint8Array([1, 2, 3]))).toBe(null);
@@ -222,15 +234,21 @@ const live = process.env.KALIEN_LIVE === "1" ? describe : describe.skip;
 live("live devnet", () => {
   test("reads deployment, seeds, balances and events", async () => {
     const deployment = JSON.parse(readFileSync(join(import.meta.dir, "deployments/devnet.json"), "utf8"));
+    // Written by kalien-contract/scripts/deploy-devnet.sh for the same deployment.
+    const runs = JSON.parse(readFileSync(join(import.meta.dir, "../../kalien-contract/deployments/devnet-fixture-runs.json"), "utf8"));
+    expect(runs.scoreContract).toBe(deployment.scoreContract);
     const client = await connectKalien(deployment);
     const seedId = await getCurrentSeedId(client, deployment);
     expect(Math.abs(seedId - seedIdAt(Date.now() / 1000))).toBeLessThanOrEqual(1);
     const meta = await getTokenMetadata(client, deployment);
     expect(meta.symbol).toBe("KALIEN");
-    expect(await getBestScore(client, deployment, player, 2987989)).toBe(11190);
-    expect((await getKalienBalance(client, deployment, player)) >= 937_200n * 10_000_000n).toBe(true);
+    expect(await getBestScore(client, deployment, runs.player, runs.runs[0].seedId)).toBe(11190);
+    expect((await getKalienBalance(client, deployment, runs.player)) >= 937_200n * 10_000_000n).toBe(true);
+    const cfg = await getScoreConfig(client, deployment);
+    expect(cfg.relayOnly).toBe(true);
+    expect(cfg.seedingLocked).toBe(true);
     let rows = 0;
     for await (const page of iterateScoreSubmitted(client, deployment, { limit: 2 })) rows += page.rows.length;
-    expect(rows).toBeGreaterThanOrEqual(5);
+    expect(rows).toBeGreaterThanOrEqual(4);
   }, 60_000);
 });

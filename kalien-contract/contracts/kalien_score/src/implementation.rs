@@ -29,6 +29,7 @@ pub struct KalienScore {
     seeds: Map<u32, Value<u32>>,
     best: Map<ContractAddress, Map<u32, Value<u32>>>,
     claimed: Map<[u8; 32], Value<bool>>,
+    relays: Map<ContractAddress, Value<bool>>,
 }
 
 #[contract_type]
@@ -38,6 +39,11 @@ pub struct Config {
     pub admin: ContractAddress,
     pub token: ContractAddress,
     pub paused: bool,
+    /// Only allowed relays may call `submit_score` (stops direct-call spam that
+    /// would drain the contract's storage deposits).
+    pub relay_only: bool,
+    /// `set_seed` is disabled for good (`lock_seeding`).
+    pub seeding_locked: bool,
 }
 
 #[contract_type]
@@ -77,6 +83,8 @@ pub enum ScoreError {
     NotImproved = 10,
     SeedAlreadySet = 11,
     ZeroSeed = 12,
+    SeedingLocked = 13,
+    NotRelay = 14,
     TapeTooShort = 20,
     TapeBadMagic = 21,
     TapeBadVersion = 22,
@@ -85,6 +93,7 @@ pub enum ScoreError {
     TapeFrameCountOutOfRange = 25,
     TapeLengthMismatch = 26,
     TapeCrcMismatch = 27,
+    TapeBadPadding = 28,
     RuleViolation = 30,
     FrameCountMismatch = 31,
     ScoreMismatch = 32,
@@ -115,10 +124,20 @@ pub struct SeedCreated {
     pub seed: u32,
 }
 
-/// The contract was paused or unpaused.
+/// `paused`, `relay_only` or `seeding_locked` changed; the payload is the new state.
 #[derive(Event, Clone, Debug)]
-pub struct PausedChanged {
+pub struct SettingsChanged {
     pub paused: bool,
+    pub relay_only: bool,
+    pub seeding_locked: bool,
+}
+
+/// A relay was allowed or removed.
+#[derive(Event, Clone, Debug)]
+pub struct RelayChanged {
+    #[topic]
+    pub relay: ContractAddress,
+    pub allowed: bool,
 }
 
 /// The admin changed.
@@ -141,12 +160,24 @@ pub fn is_active(seed_id: u32, current: u32) -> bool {
     seed_id <= current && current - seed_id < ACTIVE_EPOCHS
 }
 
-/// `sha256(source_tx_hash || seed_id LE)`, first 4 bytes LE; 0 maps to
-/// `ZERO_SEED_FALLBACK`.
-pub fn derive_seed(source_tx_hash: &[u8; 32], seed_id: u32) -> u32 {
-    let mut preimage = [0u8; 36];
+/// `sha256(source_tx_hash || seed_id u32 LE || block_height i64 LE ||
+/// block_timepoint_ns u64 LE)`, first 4 bytes LE; 0 maps to `ZERO_SEED_FALLBACK`.
+///
+/// The caller picks the transaction hash, so it alone could be ground offline
+/// to choose a seed. The block height and nanosecond timepoint are fixed by
+/// the block producer when the transaction lands, so a caller cannot know the
+/// seed in advance.
+pub fn derive_seed(
+    source_tx_hash: &[u8; 32],
+    seed_id: u32,
+    block_height: i64,
+    block_timepoint_ns: u64,
+) -> u32 {
+    let mut preimage = [0u8; 52];
     preimage[..32].copy_from_slice(source_tx_hash);
-    preimage[32..].copy_from_slice(&seed_id.to_le_bytes());
+    preimage[32..36].copy_from_slice(&seed_id.to_le_bytes());
+    preimage[36..44].copy_from_slice(&block_height.to_le_bytes());
+    preimage[44..].copy_from_slice(&block_timepoint_ns.to_le_bytes());
     let hash = sha256(&preimage);
     let word = u32::from_le_bytes([hash[0], hash[1], hash[2], hash[3]]);
     if word == 0 { ZERO_SEED_FALLBACK } else { word }
@@ -176,6 +207,22 @@ impl KalienScore {
             .unwrap_or(0)
     }
 
+    fn _is_relay(&self, relay: &ContractAddress) -> bool {
+        self.relays
+            .at(relay)
+            .try_get()
+            .none_if_missing()
+            .unwrap_or(false)
+    }
+
+    fn _settings_changed(config: &Config) {
+        log_event(&SettingsChanged {
+            paused: config.paused,
+            relay_only: config.relay_only,
+            seeding_locked: config.seeding_locked,
+        });
+    }
+
     fn _is_claimed(&self, tape_hash: &[u8; 32]) -> bool {
         self.claimed
             .at(tape_hash)
@@ -188,7 +235,7 @@ impl KalienScore {
 #[contract(
     client = KalienScoreClient,
     throws = ScoreError,
-    emits(ScoreSubmitted, SeedCreated, PausedChanged, AdminChanged)
+    emits(ScoreSubmitted, SeedCreated, SettingsChanged, RelayChanged, AdminChanged)
 )]
 impl KalienScore {
     /// One-time setup. Call it atomically with deployment.
@@ -200,6 +247,8 @@ impl KalienScore {
             admin: *admin,
             token: *token,
             paused: false,
+            relay_only: false,
+            seeding_locked: false,
         });
     }
 
@@ -211,7 +260,9 @@ impl KalienScore {
             return SeedInfo { seed_id, seed };
         }
         let source: [u8; 32] = *get_source_transaction_hash();
-        let seed = derive_seed(&source, seed_id);
+        let height: i64 = *get_block_height();
+        let timepoint: u64 = *get_block_timepoint();
+        let seed = derive_seed(&source, seed_id, height, timepoint);
         self.seeds.at_mut(&seed_id).set(&seed);
         log_event(&SeedCreated { seed_id, seed });
         SeedInfo { seed_id, seed }
@@ -220,7 +271,8 @@ impl KalienScore {
     /// Admin only: fix the seed of an active epoch that has no seed yet.
     /// Devnet uses this to replay fixture tapes, whose seeds are fixed.
     pub fn set_seed(&mut self, seed_id: u32, seed: u32) {
-        self._require_admin();
+        let config = self._require_admin();
+        ensure(!config.seeding_locked, ScoreError::SeedingLocked);
         ensure(is_active(seed_id, current_seed_id()), ScoreError::SeedInactive);
         ensure(self._stored_seed(seed_id).is_none(), ScoreError::SeedAlreadySet);
         ensure(seed != 0, ScoreError::ZeroSeed);
@@ -264,6 +316,9 @@ impl KalienScore {
     ) -> ScoreReceipt {
         let config = self._config();
         ensure(!config.paused, ScoreError::Paused);
+        if config.relay_only {
+            ensure(self._is_relay(&get_caller()), ScoreError::NotRelay);
+        }
 
         let stored_seed = self._stored_seed(seed_id).unwrap_or_else(|| throw(ScoreError::UnknownSeed));
         ensure(is_active(seed_id, current_seed_id()), ScoreError::SeedInactive);
@@ -360,7 +415,39 @@ impl KalienScore {
         let mut config = self._require_admin();
         config.paused = paused;
         self.config.set(&config);
-        log_event(&PausedChanged { paused });
+        Self::_settings_changed(&config);
+    }
+
+    /// Admin: when on, only allowed relays may call `submit_score`.
+    pub fn set_relay_only(&mut self, relay_only: bool) {
+        let mut config = self._require_admin();
+        config.relay_only = relay_only;
+        self.config.set(&config);
+        Self::_settings_changed(&config);
+    }
+
+    /// Admin: allow or remove a relay address.
+    pub fn set_relay(&mut self, relay: &ContractAddress, allowed: bool) {
+        self._require_admin();
+        self.relays.at_mut(relay).set(&allowed);
+        log_event(&RelayChanged {
+            relay: *relay,
+            allowed,
+        });
+    }
+
+    /// Whether `relay` may submit while `relay_only` is on.
+    pub fn is_relay(&self, relay: &ContractAddress) -> bool {
+        self._is_relay(relay)
+    }
+
+    /// Admin: disable `set_seed` for good. After this, only `ensure_current_seed`
+    /// creates seeds, and the admin can no longer choose one.
+    pub fn lock_seeding(&mut self) {
+        let mut config = self._require_admin();
+        config.seeding_locked = true;
+        self.config.set(&config);
+        Self::_settings_changed(&config);
     }
 
     pub fn set_admin(&mut self, admin: &ContractAddress) {

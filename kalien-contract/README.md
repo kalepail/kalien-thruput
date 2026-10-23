@@ -9,7 +9,7 @@ Two Rust `no_std` contracts for the Thruput RV32 VM (SDK `=0.51.1`, CLI 0.29.2):
   score contract.
 
 The interface (methods, claim message, address rule, errors, events, gas) is in
-`docs/thruput/PORT-PLAN.md`, section "Interface v1".
+`docs/thruput/PORT-PLAN.md`, section "Interface v2".
 
 ## Setup
 
@@ -29,7 +29,8 @@ kalien-contract/scripts/build.sh        # both .rv32a artifacts + TS bindings in
 kalien-contract/scripts/test.sh         # cargo test, RV32 tests (prints gas), bun claim vectors
 ```
 
-- `cargo test --workspace`: 25 native tests (all fixtures, every rejection, mint amounts, token).
+- `cargo test --workspace`: 25 native tests (all fixtures, every rejection, mint amounts, token)
+  and 9 adversarial tests (`tests/adversarial.rs`).
 - `thruput test -p kalien_score`: the same fixtures on the real RV32 artifacts. Build
   `kalien_token` first (`thruput build -p kalien_token`).
 - Local node test (fresh keys, deploy, submit, events, balances):
@@ -48,11 +49,12 @@ kalien-contract/scripts/deploy-devnet.sh            # after a devnet wipe, too
 It creates the keys `kalien-deployer`, `kalien-relay`, `kalien-test-player` if missing (in
 `~/.config/thruput/keys`), funds them from the faucet, deploys and links both contracts,
 writes `shared/thruput/deployments/devnet.json`, creates the current seed, submits the fixture
-tapes (`deployments/devnet-fixture-runs.json`), and writes the relay secret for the Worker to
+tapes (`deployments/devnet-fixture-runs.json`), allows only `kalien-relay` to submit
+(`relay_only`), locks `set_seed` for good, and writes the relay secret for the Worker to
 `~/.config/kalien-thruput/relay.secret` (mode 600).
 
 Other commands of `scripts/kalien.ts`: `fund`, `deploy`, `ensure-seed`, `set-seed`, `submit`,
-`fixtures`, `export-secret`. Run it with no command for usage.
+`fixtures`, `harden`, `export-secret`. Run it with no command for usage.
 
 ## Files
 

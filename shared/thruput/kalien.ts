@@ -81,6 +81,8 @@ export const SCORE_ERRORS = {
   10: "NotImproved",
   11: "SeedAlreadySet",
   12: "ZeroSeed",
+  13: "SeedingLocked",
+  14: "NotRelay",
   20: "TapeTooShort",
   21: "TapeBadMagic",
   22: "TapeBadVersion",
@@ -89,6 +91,7 @@ export const SCORE_ERRORS = {
   25: "TapeFrameCountOutOfRange",
   26: "TapeLengthMismatch",
   27: "TapeCrcMismatch",
+  28: "TapeBadPadding",
   30: "RuleViolation",
   31: "FrameCountMismatch",
   32: "ScoreMismatch",
@@ -169,6 +172,46 @@ export async function isTapeClaimed(
 export async function getKalienBalance(client: KalienClient, config: KalienConfig, owner: string | ContractAddress): Promise<bigint> {
   const r = await ERC20.v0_1.getBalanceOf.view({ client, contract: token(config), args: { addr: addr(owner) } });
   return r.value;
+}
+
+export interface ScoreConfig {
+  admin: Hex;
+  token: Hex;
+  paused: boolean;
+  /** Only allowed relays may call `submit_score`. */
+  relayOnly: boolean;
+  /** `set_seed` is disabled for good. */
+  seedingLocked: boolean;
+}
+
+export async function getScoreConfig(client: KalienClient, config: KalienConfig): Promise<ScoreConfig> {
+  const r = await KalienScore.v0_1.config.view({ client, contract: score(config) });
+  const c = r.value as unknown as { admin: ContractAddress; token: ContractAddress; paused: boolean; relay_only: boolean; seeding_locked: boolean };
+  return {
+    admin: toHex0x(c.admin) as Hex,
+    token: toHex0x(c.token) as Hex,
+    paused: c.paused,
+    relayOnly: c.relay_only,
+    seedingLocked: c.seeding_locked,
+  };
+}
+
+/** Whether `relay` may call `submit_score` while relay-only mode is on. */
+export async function isRelay(client: KalienClient, config: KalienConfig, relay: string | ContractAddress): Promise<boolean> {
+  const r = await KalienScore.v0_1.isRelay.view({ client, contract: score(config), args: { relay: addr(relay) } });
+  return r.value;
+}
+
+/**
+ * The contract rejects an odd-frame tape whose unused last high nibble is not zero
+ * (`TapeBadPadding`). Check it before you spend a submission.
+ */
+export function tapePaddingOk(tape: Uint8Array): boolean {
+  if (tape.length < 24) return false;
+  const frames = new DataView(tape.buffer, tape.byteOffset, tape.byteLength).getUint32(12, true);
+  if (frames % 2 === 0) return true;
+  const lastBody = 16 + Math.ceil(frames / 2) - 1;
+  return lastBody < tape.length && tape[lastBody]! >> 4 === 0;
 }
 
 export interface TokenMetadata {

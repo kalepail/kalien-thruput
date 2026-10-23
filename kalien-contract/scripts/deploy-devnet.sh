@@ -13,6 +13,7 @@
 #    on three earlier epochs and submits the short, medium, real-game and
 #    911,140-point tapes signed by kalien-test-player, through kalien-relay.
 #    Results go to kalien-contract/deployments/devnet-fixture-runs.json.
+#    Then only kalien-relay may submit (relay-only mode), and set_seed is locked.
 # 6. Writes the relay secret for the Worker to ~/.config/kalien-thruput/relay.secret (0600).
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
@@ -43,12 +44,16 @@ cd "$KALIEN_REPO_DIR"
 "${TOOL[@]}" deploy --rpc "$RPC" --deployer-key kalien-deployer --out "$DEPLOYMENT" \
   --fund-score "${KALIEN_FUND_SCORE_HOG:-50}" --fund-token "${KALIEN_FUND_TOKEN_HOG:-50}"
 "${TOOL[@]}" ensure-seed --deployment "$DEPLOYMENT" --key kalien-relay
+# Only kalien-relay may submit (the Worker rate-limits players before it relays).
+"${TOOL[@]}" harden --deployment "$DEPLOYMENT" --admin-key kalien-deployer --relay-key kalien-relay
 
 if (( SKIP_FIXTURES == 0 )); then
   "${TOOL[@]}" fixtures --deployment "$DEPLOYMENT" --admin-key kalien-deployer \
     --relay-key kalien-relay --player-key kalien-test-player \
     --out "$KALIEN_CONTRACT_DIR/deployments/devnet-fixture-runs.json"
 fi
+# After the fixtures, nobody (not even the admin) can choose a seed again.
+"${TOOL[@]}" harden --deployment "$DEPLOYMENT" --admin-key kalien-deployer --relay-key kalien-relay --lock-seeding
 
 mkdir -p "$HOME/.config/kalien-thruput"
 ( umask 077; "${TOOL[@]}" export-secret --key kalien-relay > "$HOME/.config/kalien-thruput/relay.secret" )

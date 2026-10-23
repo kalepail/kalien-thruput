@@ -8,6 +8,7 @@ mod common;
 
 use common::*;
 use kalien_score::{ScoreError, ScoreSubmitted, UNITS_PER_POINT};
+use sdk::TransactResult;
 
 fn submit_fixture_rv32(fixture: Fixture) -> u64 {
     let world = setup_rv32();
@@ -104,3 +105,37 @@ fn rv32_rejections() {
     assert_eq!(world.balance(&other.address()), 0);
 }
 
+
+/// Gas of each rejection path with a full 18,024-byte tape: what a griefer can
+/// make the relay (or any sender) spend. Gas is not burned, but it reserves
+/// scheduling capacity.
+#[test]
+#[ignore = "requires RV32 build — run via `thruput test`"]
+fn rv32_rejection_gas() {
+    let world = setup_rv32();
+    world.set_seed(T0_SEED_ID, LONG.seed);
+    let player = Player::new(0x24);
+    let other = Player::new(0x25);
+    let tape = LONG.bytes();
+    let mut report = |name: &str, result: &TransactResult, expected: ScoreError| {
+        assert_eq!(result.assert_abort_as::<ScoreError>(), expected, "{name}");
+        println!("GAS reject {name}: gas={}", child_gas(result));
+    };
+
+    report("UnknownSeed", &world.submit(&player, T0_SEED_ID + 1, &tape), ScoreError::UnknownSeed);
+    report("SeedMismatch", &world.submit(&player, T0_SEED_ID, &MAX_GAME.bytes()), ScoreError::SeedMismatch);
+    let mut bad_crc = tape.clone();
+    bad_crc[1000] ^= 1;
+    report("TapeCrcMismatch", &world.submit(&player, T0_SEED_ID, &bad_crc), ScoreError::TapeCrcMismatch);
+    let sig = other.sign(&world.network_hash, &world.score, T0_SEED_ID, &tape);
+    report("BadSignature", &world.submit_raw(player.pubkey(), T0_SEED_ID, tape.clone(), sig), ScoreError::BadSignature);
+    let mut lie = tape.clone();
+    let footer = lie.len() - 8;
+    lie[footer..footer + 4].copy_from_slice(&(LONG.score + 20).to_le_bytes());
+    report("ScoreMismatch (full replay)", &world.submit(&player, T0_SEED_ID, &lie), ScoreError::ScoreMismatch);
+
+    let (ok, _) = world.submit_ok(&player, T0_SEED_ID, &tape);
+    println!("GAS accept test-long: gas={}", child_gas(&ok));
+    report("NotImproved", &world.submit(&player, T0_SEED_ID, &tape), ScoreError::NotImproved);
+    report("AlreadyClaimed", &world.submit(&other, T0_SEED_ID, &tape), ScoreError::AlreadyClaimed);
+}

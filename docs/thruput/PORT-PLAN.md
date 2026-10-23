@@ -77,10 +77,11 @@ Soroban contract, Stellar mainnet env, SEP-1 `stellar.toml`.
 Root `README.md` and `docs/`: the coordinator merges at the end; each agent may add
 `docs/thruput/<agent>.md`.
 
-## Interface v1 (the `contract` agent owns it and may change it; record changes here)
+## Interface v2 (the `contract` agent owns it and may change it; record changes here)
 
-v1 is built, tested on RV32, and deployed on devnet (see `docs/thruput/kt-contract.md`).
-Changes from v0 are marked **(v1)**.
+v2 is built, tested on RV32, and deployed on devnet (see `docs/thruput/kt-contract.md`).
+Changes from v0 are marked **(v1)**; changes from the adversarial review are marked **(v2)**.
+v2 replaced the v1 devnet contracts on 2026-10-23 (new addresses in `deployments/devnet.json`).
 
 ### Score contract `kalien_score`
 
@@ -91,18 +92,23 @@ Source: `kalien-contract/contracts/kalien_score/`. TS bindings: `shared/thruput/
 - Seeds. `seed_id = block_timepoint_seconds / 600`. Active window: the current epoch and the
   previous 143 (24 h).
   - **(v1)** `ensure_current_seed() -> SeedInfo { seed_id, seed }` is a transaction. It creates the
-    current epoch seed if it is missing: `sha256(source_tx_hash || seed_id u32 LE)`, first 4 bytes
-    LE, 0 maps to `0xDEADBEEF`. Anyone may call it. The Worker cron calls it every epoch, and
+    current epoch seed if it is missing: **(v2)** `sha256(source_tx_hash || seed_id u32 LE ||
+    block_height i64 LE || block_timepoint_ns u64 LE)`, first 4 bytes LE, 0 maps to `0xDEADBEEF`.
+    The block fields stop a caller from grinding its transaction hash to pick the seed. Anyone may call it. The Worker cron calls it every epoch, and
     before it serves a seed that does not exist yet.
   - **(v1)** `current_seed() -> Option<SeedInfo>` is a view. It does not create the seed.
   - **(v1)** `current_seed_id() -> u32`, `seed(seed_id) -> Option<u32>`, `is_seed_active(seed_id) -> bool`.
   - **(v1)** `set_seed(seed_id, seed)`: admin only, an active epoch that has no seed yet, seed != 0.
     Used to replay fixture tapes (their seeds are fixed).
+  - **(v2)** `lock_seeding()`: admin, one-way. After it `set_seed` throws `SeedingLocked`.
+    The devnet deploy locks seeding right after the fixture runs.
 - `submit_score(player_pubkey: [u8;32], seed_id: u32, tape: &[u8], signature: [u8;64]) -> ScoreReceipt`
   **(v1: returns `ScoreReceipt { player, seed_id, seed, frame_count, final_score, previous_best,
   minted_delta, tape_hash }`)**. Order of checks:
-  1. not paused; a seed exists for `seed_id` (`UnknownSeed`); `seed_id` is active (`SeedInactive`).
-  2. tape container (magic, version, rules tag, reserved bytes, length, frame count 1..=36,000, CRC);
+  1. not paused; **(v2)** if `relay_only`, the caller is an allowed relay (`NotRelay`);
+     a seed exists for `seed_id` (`UnknownSeed`); `seed_id` is active (`SeedInactive`).
+  2. tape container (magic, version, rules tag, reserved bytes, length, frame count 1..=36,000, CRC,
+     **(v2)** zero high nibble in the last body byte of an odd-frame tape (`TapeBadPadding`));
      tape seed == stored seed (`SeedMismatch`); claimed score > 0 (`ZeroScore`);
      claimed score > `best(player, seed_id)` (`NotImproved`); `sha256(tape)` not claimed (`AlreadyClaimed`).
   3. Ed25519 signature by `player_pubkey` over the **32-byte digest**
@@ -116,17 +122,22 @@ Source: `kalien-contract/contracts/kalien_score/`. TS bindings: `shared/thruput/
   `sha256(0x00 0x0d "PubkeyAccount" || 0x00 || pubkey || 0x00)` = `derivePubkeyAccountAddress({pubkey: Ed25519, nonce: 0n})`
   = `createPubkeyAccount({ signer }).address` (default nonce 0). View: `player_address(pubkey)`.
 - Views: `best_score(player, seed_id) -> u32`, `is_claimed(tape_hash: [u8;32]) -> bool`,
-  **(v1)** `claim_message(seed_id, tape_hash) -> [u8;32]` (the digest to sign), `config() -> Config { admin, token, paused }`.
-- Admin: `set_paused(bool)`, `set_admin(address)`, `set_seed` (above).
+  **(v1)** `claim_message(seed_id, tape_hash) -> [u8;32]` (the digest to sign),
+  `config() -> Config { admin, token, paused, relay_only (v2), seeding_locked (v2) }`,
+  **(v2)** `is_relay(address) -> bool`.
+- Admin: `set_paused(bool)`, `set_admin(address)`, `set_seed`, `lock_seeding` (above),
+  **(v2)** `set_relay(address, allowed: bool)`, `set_relay_only(bool)`. The devnet deploy allows
+  `kalien-relay` and turns relay-only on: only the Worker relay can submit.
 - Events: `ScoreSubmitted { #[topic] player, #[topic] seed_id, player_pubkey (v1), seed, frame_count,
   final_score, previous_best, new_best, minted_delta: i128, tape_hash: [u8;32] }`;
-  **(v1)** `SeedCreated { #[topic] seed_id, seed }`, `PausedChanged { paused }`,
-  `AdminChanged { #[topic] previous, #[topic] admin }`.
+  **(v1)** `SeedCreated { #[topic] seed_id, seed }`, `AdminChanged { #[topic] previous, #[topic] admin }`;
+  **(v2)** `SettingsChanged { paused, relay_only, seeding_locked }` (replaces v1 `PausedChanged`),
+  `RelayChanged { #[topic] relay, allowed }`.
 - Errors `ScoreError` (discriminant): AlreadyInitialized 1, NotAdmin 2, Paused 3, UnknownSeed 4,
   SeedInactive 5, SeedMismatch 6, BadSignature 7, AlreadyClaimed 8, ZeroScore 9, NotImproved 10,
-  SeedAlreadySet 11, ZeroSeed 12, TapeTooShort 20, TapeBadMagic 21, TapeBadVersion 22,
+  SeedAlreadySet 11, ZeroSeed 12, SeedingLocked 13 (v2), NotRelay 14 (v2), TapeTooShort 20, TapeBadMagic 21, TapeBadVersion 22,
   TapeBadRulesTag 23, TapeReservedNonZero 24, TapeFrameCountOutOfRange 25, TapeLengthMismatch 26,
-  TapeCrcMismatch 27, RuleViolation 30, FrameCountMismatch 31, ScoreMismatch 32.
+  TapeCrcMismatch 27, TapeBadPadding 28 (v2), RuleViolation 30, FrameCountMismatch 31, ScoreMismatch 32.
   A rejected submission commits as a failed transaction; the wallet root re-throws the
   `ScoreError` in `abortData` (decode with `KalienScore.v0_1.submitScore.decodeException`).
 - Gas and memory **(v1, measured)**: one transaction replays a full tape; no chunked replay.
@@ -148,6 +159,13 @@ Deploy order: token `initialize(deployer)`, then score `initialize(admin, token)
 - `deployments/devnet.json`: `{ network, networkHash, rpcUrl, explorerUrl, scoreContract,
   tokenContract, admin, deployedAt, deployTxs, artifacts }`.
 - `bindings/kalien-score.ts`, `bindings/kalien-token.ts` (from `thruput codegen ts`; do not edit).
+- **(v2)** `kalien.ts`: chain helpers for Worker, browser and CLI (fetch only). `connectKalien(config)`
+  (checks the network hash), reads (`readPlayerState`, `getBestScore`, `getCurrentSeed`, `getSeed`,
+  `getCurrentSeedId`, `isTapeClaimed`, `getKalienBalance`, `getTokenMetadata`, `getScoreConfig`,
+  `isRelay`), events (`getScoreSubmittedPage`, `iterateScoreSubmitted`: cursor, height anchor,
+  player and seed-id topic filters), relay writes (`createRelayWallet(client, RELAY_SECRET)`,
+  `submitScore` with `onSigned` persistence hook, `getSubmitResult`, `ensureCurrentSeed`),
+  `submitGasLimit`, `SCORE_ERRORS`, `tapePaddingOk`. Tests: `shared/thruput/kalien.test.ts`.
 - `claim.ts`: `claimMessage({networkHash, scoreContract, seedId, tape}) -> Uint8Array(32)`,
   `claimPreimageFromHash(...)`, `tapeHash(tape)`, `pubkeyAccountAddress(pubkey) -> 0x hex`,
   `toHex`, `fromHex`. Depends only on `@noble/hashes`. Vectors: `claim-vectors.json`, checked by

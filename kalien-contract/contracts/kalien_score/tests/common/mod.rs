@@ -119,6 +119,7 @@ pub struct World {
     pub relay: ContractAddress,
     pub token: ContractAddress,
     pub score: ContractAddress,
+    pub score_hash: SHA256Hash,
     pub network_hash: [u8; 32],
 }
 
@@ -172,6 +173,7 @@ pub fn setup_with(env: TestEnvironmentHandle, token_hash: SHA256Hash, score_hash
         relay,
         token,
         score,
+        score_hash,
         network_hash,
     }
 }
@@ -200,6 +202,16 @@ impl World {
                     .run(move || KalienScoreClient::new(&score).set_seed(seed_id, seed))
             })
             .assert_success();
+    }
+
+    /// Run `f` against the score contract client as `caller`, in its own block.
+    pub fn score_call<T: WriteXDR>(
+        &self,
+        caller: &ContractAddress,
+        f: impl FnOnce(KalienScoreClient) -> T + std::panic::UnwindSafe,
+    ) -> TransactResult {
+        let score = self.score;
+        self.transact(|tx| tx.call(caller).run(move || f(KalienScoreClient::new(&score))))
     }
 
     pub fn try_set_seed(

@@ -10,6 +10,6 @@ pub mod replay;
 
 pub use implementation::{
     ACTIVE_EPOCHS, AdminChanged, Config, EPOCH_SECONDS, KalienScore, KalienScoreClient,
-    MAX_FRAMES, PausedChanged, ScoreError, ScoreReceipt, ScoreSubmitted, SeedCreated, SeedInfo,
+    MAX_FRAMES, RelayChanged, ScoreError, SettingsChanged, ScoreReceipt, ScoreSubmitted, SeedCreated, SeedInfo,
     UNITS_PER_POINT, ZERO_SEED_FALLBACK, current_seed_id, derive_seed, is_active,
 };

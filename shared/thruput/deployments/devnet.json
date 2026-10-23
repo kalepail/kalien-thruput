@@ -3,14 +3,14 @@
   "networkHash": "0xb69ec9c688b3936b5bcbfc4eebc355d39aa9e5c6f6f072cc4a05564a07435047",
   "rpcUrl": "https://rpc.thruput.network",
   "explorerUrl": "https://explorer.thruput.network/",
-  "scoreContract": "0xed511226f0ac0d15c79d5ad85c086df105d08e93d7fa8c510b073b09e71ded81",
-  "tokenContract": "0x6782bfd91f64afe26d540127e80d4c98842bfce8e43cb4b3ebb612a9f5ce4844",
+  "scoreContract": "0x94204675c7a31180d05a494de80679ea9be84adee0ffaac1f2dcd03f4e5216bc",
+  "tokenContract": "0xddf7dd05230d877cb3635392f5fde0af3f9eb0cf406f1a05146403710f98c0d8",
   "admin": "0xa5fdc7005f99e06d3c8c869e811d08b9a2fe7145627b4d9d31e81fd58528a100",
-  "deployedAt": "2026-10-23T22:21:53.801Z",
+  "deployedAt": "2026-10-23T22:37:39.867Z",
   "deployTxs": {
-    "deployToken": "0x2577bd3d5b5aec47ec459ef522985de9da525250a84b7c0bf0e5b4b8e92a8f97",
-    "deployScore": "0x172ab2c0221a3715f72a3954a4c4ccdc1e0821d3bb678652000f273858f89d46",
-    "setTokenAdministrator": "0xc1624273afdb1d9fcdac1d02123afed781eefc683e280fa8cae5bfd47153a964"
+    "deployToken": "0xbc753fb3571a2e8576d729fc5a895f3b51a1117db7d304ef1bba5f9480db98d7",
+    "deployScore": "0x986ea82abfdb6d76834cf0e819f64eb80332485fd65102f90da8ce8c24b24a63",
+    "setTokenAdministrator": "0x05a2723ba4817deae405aa951a12cd27d153920ca305067e445a5ecec3707ee2"
   },
   "artifacts": {
     "kalien_token": {
@@ -18,8 +18,8 @@
       "bytes": 27248
     },
     "kalien_score": {
-      "sha256": "0x6f4b95acd496597acf6d45911261f763f16cf7760fe9f94dd30979fa9e212b45",
-      "bytes": 50812
+      "sha256": "0xafbff258ab0c4630651f00fc9a6dbef1b5ec0402471fac1a596771675edd517e",
+      "bytes": 54788
     }
   }
 }

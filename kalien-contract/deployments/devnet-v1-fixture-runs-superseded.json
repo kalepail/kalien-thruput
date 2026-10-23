@@ -1,0 +1,94 @@
+{
+  "network": "0xb69ec9c688b3936b5bcbfc4eebc355d39aa9e5c6f6f072cc4a05564a07435047",
+  "scoreContract": "0xed511226f0ac0d15c79d5ad85c086df105d08e93d7fa8c510b073b09e71ded81",
+  "tokenContract": "0x6782bfd91f64afe26d540127e80d4c98842bfce8e43cb4b3ebb612a9f5ce4844",
+  "player": "0xc63641b2af03f929bd6715f15b1b9b30de390c76c03e76831f3c92320cf08280",
+  "kalienBalance": "9372000000000",
+  "runs": [
+    {
+      "tape": "test-short.tape",
+      "seedId": 2987989,
+      "seed": 3735928559,
+      "setSeedTx": "0x3f44ffba0be763f8fdb75725709066fdadec97e2b28d590eae66cc2372681052",
+      "ok": true,
+      "txHash": "0x06c499c58dbce0af71bdd57417739c32ee4c88881faf6b0ab800724fd86225eb",
+      "gasLimit": "4540000",
+      "gasUsed": "1504343",
+      "receipt": {
+        "player": "0xc63641b2af03f929bd6715f15b1b9b30de390c76c03e76831f3c92320cf08280",
+        "seed_id": "2987989",
+        "seed": "3735928559",
+        "frame_count": "700",
+        "final_score": "1480",
+        "previous_best": "0",
+        "minted_delta": "14800000000",
+        "tape_hash": "0xedeb1bb0d05e69eabddf0bde5d95d635f18bb3fbb332f6b6d6f7841538dc91c4"
+      },
+      "explorer": "https://explorer.thruput.network/tx/0x06c499c58dbce0af71bdd57417739c32ee4c88881faf6b0ab800724fd86225eb"
+    },
+    {
+      "tape": "test-medium.tape",
+      "seedId": 2987989,
+      "seed": 3735928559,
+      "setSeedTx": "0x3f44ffba0be763f8fdb75725709066fdadec97e2b28d590eae66cc2372681052",
+      "ok": true,
+      "txHash": "0x603da7bef2c84585d7f289a089790fc349536856b70f526285bc7c18f5f69243",
+      "gasLimit": "14000000",
+      "gasUsed": "9750461",
+      "receipt": {
+        "player": "0xc63641b2af03f929bd6715f15b1b9b30de390c76c03e76831f3c92320cf08280",
+        "seed_id": "2987989",
+        "seed": "3735928559",
+        "frame_count": "5000",
+        "final_score": "11190",
+        "previous_best": "1480",
+        "minted_delta": "97100000000",
+        "tape_hash": "0xee4a145acc60cd12bb9f2e501cc9436d5a757d9f03fcbf3659837caf97715b6b"
+      },
+      "explorer": "https://explorer.thruput.network/tx/0x603da7bef2c84585d7f289a089790fc349536856b70f526285bc7c18f5f69243"
+    },
+    {
+      "tape": "test-real-game.tape",
+      "seedId": 2987988,
+      "seed": 1137297101,
+      "setSeedTx": "0xd1095d505ffd0a28ab0a54c86a0548226ba0f77dca7f663e04079b88d4fdb279",
+      "ok": true,
+      "txHash": "0x535dc6fd820ead1b0af3ec416b7edccfa53a790f995287606d61f04a9728ff76",
+      "gasLimit": "17614600",
+      "gasUsed": "14266307",
+      "receipt": {
+        "player": "0xc63641b2af03f929bd6715f15b1b9b30de390c76c03e76831f3c92320cf08280",
+        "seed_id": "2987988",
+        "seed": "1137297101",
+        "frame_count": "6643",
+        "final_score": "14870",
+        "previous_best": "0",
+        "minted_delta": "148700000000",
+        "tape_hash": "0xd3d4aac058d4685c0b180af805de96dbd3014856f70c62184a790e9713c460d3"
+      },
+      "explorer": "https://explorer.thruput.network/tx/0x535dc6fd820ead1b0af3ec416b7edccfa53a790f995287606d61f04a9728ff76"
+    },
+    {
+      "tape": "kalien-911140-seed1598125870.tape",
+      "seedId": 2987987,
+      "seed": 1598125870,
+      "setSeedTx": "0x94ac37156255e74e43fa206e71e762e29275dd047f9581f24a62e60c38ae757a",
+      "ok": true,
+      "txHash": "0xd1e3acc9e95a667beaac1f47e12a07fb8bdafab3f9b6ffa57cb45c4447834876",
+      "gasLimit": "82200000",
+      "gasUsed": "67385636",
+      "receipt": {
+        "player": "0xc63641b2af03f929bd6715f15b1b9b30de390c76c03e76831f3c92320cf08280",
+        "seed_id": "2987987",
+        "seed": "1598125870",
+        "frame_count": "36000",
+        "final_score": "911140",
+        "previous_best": "0",
+        "minted_delta": "9111400000000",
+        "tape_hash": "0x2f0234a86ffea4099b4011f06ef9483b53f3c6c5afcd2915870153c9ed1c58b6"
+      },
+      "explorer": "https://explorer.thruput.network/tx/0xd1e3acc9e95a667beaac1f47e12a07fb8bdafab3f9b6ffa57cb45c4447834876"
+    }
+  ],
+  "at": "2026-10-23T22:22:10.217Z"
+}
