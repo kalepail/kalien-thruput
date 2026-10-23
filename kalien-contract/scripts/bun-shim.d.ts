@@ -8,8 +8,12 @@ interface ImportMeta {
 
 declare module "bun:test" {
   type Fn = () => void | Promise<void>;
-  export function describe(name: string, fn: () => void): void;
-  export function test(name: string, fn: Fn): void;
+  interface Describe {
+    (name: string, fn: () => void): void;
+    skip: (name: string, fn: () => void) => void;
+  }
+  export const describe: Describe;
+  export function test(name: string, fn: Fn, timeoutMs?: number): void;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   export function expect(value: unknown): any;
 }
