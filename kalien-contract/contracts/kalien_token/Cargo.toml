@@ -1,0 +1,39 @@
+[package]
+name = "kalien_token"
+description = "KALIEN reward token (ERC20) for Kalien on Thruput"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["rlib"]
+doctest = false
+test = false
+
+# RV32 ELF bin wrapper. The name must stay the snake-case package name:
+# `thruput build` looks for the ELF at `release/<snake_name>`.
+[[bin]]
+name = "kalien_token"
+path = "src/main.rs"
+required-features = ["entrypoints"]
+test = false
+bench = false
+
+# Feature names are contracts with the toolchain; do not rename them.
+[features]
+entrypoints = []
+dev = ["sdk/dev", "thruput-erc20-if/dev", "thruput-erc20-metadata-if/dev"]
+thruput-integration-test = []
+
+[target.'cfg(target_arch = "riscv32")'.dependencies]
+sdk = { version = "=0.51.1", registry = "thruput" }
+
+[target.'cfg(not(target_arch = "riscv32"))'.dependencies]
+sdk = { version = "=0.51.1", registry = "thruput", features = ["std"] }
+
+[dependencies]
+thruput-erc20-if = { version = "=0.1.56", registry = "thruput" }
+thruput-erc20-metadata-if = { version = "=0.1.56", registry = "thruput" }
+
+[dev-dependencies]
+kalien_token = { path = ".", features = ["dev"] }

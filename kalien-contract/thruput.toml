@@ -1,0 +1,17 @@
+# Project-local Thruput config.
+#
+# User-level defaults live in ~/.config/thruput/config.toml.
+# Profiles here merge with global profiles of the same name, and project
+# aliases override global aliases.
+
+default_profile = "local"
+
+[profile.local]
+network = "local"
+
+[profile.local.contracts]
+
+[profile.devnet]
+network = "devnet"
+
+[profile.devnet.contracts]

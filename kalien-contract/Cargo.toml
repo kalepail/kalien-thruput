@@ -1,0 +1,14 @@
+[workspace]
+resolver = "3"
+members = [
+    "contracts/kalien_token",
+    "contracts/kalien_score",
+    
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+publish = false
+
+# Profiles live in `.cargo/config.toml` (copied from the `thruput new` scaffold).
