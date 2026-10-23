@@ -1,4 +1,4 @@
-// Read-only Thruput client for browser views (KALIEN balance).
+// Read-only Thruput client for browser views (KALIEN balance, best score).
 // Loaded lazily so the game route does not pay for the SDK up front.
 
 import {
@@ -9,7 +9,8 @@ import {
   networkHash,
   type CoreThruputClient,
 } from "@thruputchain/client";
-import { ERC20 } from "@thruputchain/client/contracts";
+import { KalienScore } from "../../shared/thruput/bindings/kalien-score";
+import { ERC20 } from "../../shared/thruput/bindings/kalien-token";
 import { getThruputConfig, type ThruputConfig } from "./config";
 
 let clientPromise: Promise<{ client: CoreThruputClient; config: ThruputConfig }> | null = null;
@@ -48,4 +49,20 @@ export async function readKalienBalance(
     signal,
   });
   return { balance: result.value, tokenContract: config.tokenContract };
+}
+
+/** The player's best score on one seed epoch, read from the score contract. */
+export async function readBestScore(
+  address: string,
+  seedId: number,
+  signal?: AbortSignal,
+): Promise<number> {
+  const { client, config } = await getThruputClient();
+  const result = await KalienScore.v0_1.bestScore.view({
+    client,
+    contract: addressFromHex(config.scoreContract),
+    args: { player: addressFromHex(address), seedId: BigInt(seedId >>> 0) },
+    signal,
+  });
+  return Number(result.value);
 }

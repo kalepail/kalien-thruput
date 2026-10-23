@@ -64,7 +64,12 @@ export function getThruputConfig(): Promise<ThruputConfig> {
       if (!response.ok) {
         throw new Error(`failed to load network config (${response.status})`);
       }
-      return parseThruputConfig(await response.json());
+      const config = parseThruputConfig(await response.json());
+      // Dev only: reach a local node through the Vite `/rpc` proxy (see vite.config.ts).
+      if (typeof __KALIEN_RPC_PROXY__ !== "undefined" && __KALIEN_RPC_PROXY__) {
+        config.rpcUrl = new URL("/rpc", window.location.origin).href;
+      }
+      return config;
     })().catch((error: unknown) => {
       // Allow a later call to retry after a transient failure.
       configPromise = null;
