@@ -1,16 +1,12 @@
-import {
-  startAuthentication,
-  type PublicKeyCredentialRequestOptionsJSON,
-} from "@simplewebauthn/browser";
-import type { ClaimStatus } from "@/proof/api";
 import { fetchWithTimeout as baseFetchWithTimeout, parseJson } from "@/lib/api";
-
-export type { ClaimStatus };
+import { parseBaseUnits } from "@/lib/format";
+import { bytesToHex } from "@/lib/hex";
+import { getThruputConfig } from "@/thruput/config";
 
 export type LeaderboardWindow = "10m" | "day" | "all";
 
 export interface PlayerProfile {
-  claimantAddress: string;
+  playerAddress: string;
   username: string | null;
   linkUrl: string | null;
   updatedAt: string;
@@ -18,80 +14,60 @@ export interface PlayerProfile {
 
 export interface LeaderboardEntry {
   rank: number;
-  jobId: string;
-  claimantAddress: string;
+  /** Run id for replay, when the Worker still has the tape. */
+  runId: string | null;
+  playerAddress: string;
   profile: PlayerProfile | null;
   score: number;
-  mintedDelta: number;
+  /** KALIEN minted by this run, in base units (7 decimals). */
+  minted: bigint | null;
   seed: number;
+  seedId: number | null;
   frameCount: number | null;
   completedAt: string;
-  claimStatus: ClaimStatus;
-  claimTxHash: string | null;
-  proofJobId: string | null;
+  txHash: string | null;
 }
 
 export interface LeaderboardPageResponse {
-  success: true;
-  source?: string;
-  provider?: string;
-  source_mode?: string;
   window: LeaderboardWindow;
-  generated_at: string;
-  window_range: {
-    start_at: string | null;
-    end_at: string | null;
-  };
+  generatedAt: string | null;
   pagination: {
     limit: number;
     offset: number;
     total: number;
-    next_offset: number | null;
+    nextOffset: number | null;
   };
   entries: LeaderboardEntry[];
   me: LeaderboardEntry | null;
-  ingestion?: {
-    last_synced_at: string | null;
-    highest_ledger: number | null;
-    total_events: number | null;
+  ingestion: {
+    lastSyncedAt: string | null;
+    highestBlock: number | null;
+    totalEvents: number | null;
+  } | null;
+}
+
+export interface LeaderboardPlayer {
+  playerAddress: string;
+  profile: PlayerProfile | null;
+  stats: {
+    totalRuns: number;
+    bestScore: number;
+    /** Total KALIEN minted, in base units. */
+    totalMinted: bigint | null;
+    lastPlayedAt: string | null;
   };
-}
-
-export interface LeaderboardPlayerResponse {
-  success: true;
-  player: {
-    claimant_address: string;
-    profile: PlayerProfile | null;
-    stats: {
-      total_runs: number;
-      best_score: number;
-      total_minted: number;
-      last_played_at: string | null;
-    };
-    ranks: {
-      ten_min: number | null;
-      day: number | null;
-      all: number | null;
-    };
-    recent_runs: Array<Omit<LeaderboardEntry, "rank" | "profile">>;
-    runs_pagination: {
-      limit: number;
-      offset: number;
-      total: number;
-      next_offset: number | null;
-    };
+  ranks: {
+    tenMin: number | null;
+    day: number | null;
+    all: number | null;
   };
-}
-
-interface LeaderboardProfileAuthOptionsResponse {
-  success: true;
-  challenge_id: string;
-  options: PublicKeyCredentialRequestOptionsJSON;
-}
-
-interface ApiErrorResponse {
-  success: false;
-  error?: string;
+  recentRuns: LeaderboardEntry[];
+  runsPagination: {
+    limit: number;
+    offset: number;
+    total: number;
+    nextOffset: number | null;
+  };
 }
 
 export class LeaderboardApiError extends Error {
@@ -102,6 +78,156 @@ export class LeaderboardApiError extends Error {
     this.name = "LeaderboardApiError";
     this.status = status;
   }
+}
+
+type Json = Record<string, unknown>;
+
+function obj(value: unknown): Json {
+  return value && typeof value === "object" ? (value as Json) : {};
+}
+
+function pick(record: Json, ...keys: string[]): unknown {
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null) {
+      return record[key];
+    }
+  }
+  return null;
+}
+
+function str(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function num(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
+  return null;
+}
+
+/**
+ * KALIEN amounts from the Worker are base-unit decimal strings. A bare JSON
+ * number is read as whole KALIEN (the old Soroban API shape).
+ */
+function kalienAmount(value: unknown): bigint | null {
+  if (typeof value === "number" && Number.isSafeInteger(value)) {
+    return BigInt(value) * 10_000_000n;
+  }
+  return parseBaseUnits(value);
+}
+
+function parseProfile(raw: unknown, fallbackAddress: string): PlayerProfile | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Json;
+  return {
+    playerAddress:
+      str(pick(record, "playerAddress", "player_address", "claimantAddress")) ?? fallbackAddress,
+    username: str(pick(record, "username")),
+    linkUrl: str(pick(record, "linkUrl", "link_url")),
+    updatedAt: str(pick(record, "updatedAt", "updated_at")) ?? new Date(0).toISOString(),
+  };
+}
+
+export function parseLeaderboardEntry(raw: unknown, index = 0): LeaderboardEntry {
+  const record = obj(raw);
+  const playerAddress =
+    str(
+      pick(
+        record,
+        "playerAddress",
+        "player_address",
+        "player",
+        "claimantAddress",
+        "claimant_address",
+      ),
+    ) ?? "";
+  return {
+    rank: num(pick(record, "rank")) ?? index + 1,
+    runId: str(pick(record, "runId", "run_id", "proofJobId", "jobId")),
+    playerAddress,
+    profile: parseProfile(pick(record, "profile"), playerAddress),
+    score: num(pick(record, "score", "finalScore", "final_score", "newBest", "new_best")) ?? 0,
+    minted: kalienAmount(pick(record, "minted", "mintedDelta", "minted_delta")),
+    seed: num(pick(record, "seed")) ?? 0,
+    seedId: num(pick(record, "seedId", "seed_id")),
+    frameCount: num(pick(record, "frameCount", "frame_count")),
+    completedAt:
+      str(pick(record, "completedAt", "completed_at", "closedAt", "closed_at", "createdAt")) ??
+      new Date(0).toISOString(),
+    txHash: str(pick(record, "txHash", "tx_hash", "claimTxHash")),
+  };
+}
+
+function parsePagination(raw: unknown, fallbackCount: number) {
+  const record = obj(raw);
+  return {
+    limit: num(pick(record, "limit")) ?? fallbackCount,
+    offset: num(pick(record, "offset")) ?? 0,
+    total: num(pick(record, "total")) ?? fallbackCount,
+    nextOffset: num(pick(record, "nextOffset", "next_offset")),
+  };
+}
+
+export function parseLeaderboardPage(
+  payload: unknown,
+  window: LeaderboardWindow,
+): LeaderboardPageResponse {
+  const record = obj(payload);
+  const rawEntries = Array.isArray(record.entries) ? record.entries : [];
+  const entries = rawEntries.map((entry, index) => parseLeaderboardEntry(entry, index));
+  const ingestion = record.ingestion ? obj(record.ingestion) : null;
+  return {
+    window: (str(record.window) as LeaderboardWindow | null) ?? window,
+    generatedAt: str(pick(record, "generatedAt", "generated_at")),
+    pagination: parsePagination(record.pagination, entries.length),
+    entries,
+    me: record.me ? parseLeaderboardEntry(record.me) : null,
+    ingestion: ingestion
+      ? {
+          lastSyncedAt: str(pick(ingestion, "lastSyncedAt", "last_synced_at")),
+          highestBlock: num(
+            pick(ingestion, "latestBlock", "latest_block", "highestBlock", "highest_ledger"),
+          ),
+          totalEvents: num(pick(ingestion, "totalEvents", "total_events")),
+        }
+      : null,
+  };
+}
+
+export function parseLeaderboardPlayer(
+  payload: unknown,
+  fallbackAddress: string,
+): LeaderboardPlayer {
+  const player = obj(obj(payload).player ?? payload);
+  const playerAddress =
+    str(pick(player, "playerAddress", "player_address", "address", "claimant_address")) ??
+    fallbackAddress;
+  const stats = obj(player.stats);
+  const ranks = obj(player.ranks);
+  const rawRuns = pick(player, "recentRuns", "recent_runs");
+  const recentRuns = (Array.isArray(rawRuns) ? rawRuns : []).map((run, index) =>
+    parseLeaderboardEntry(run, index),
+  );
+  return {
+    playerAddress,
+    profile: parseProfile(player.profile, playerAddress),
+    stats: {
+      totalRuns: num(pick(stats, "totalRuns", "total_runs")) ?? 0,
+      bestScore: num(pick(stats, "bestScore", "best_score")) ?? 0,
+      totalMinted: kalienAmount(pick(stats, "totalMinted", "total_minted")),
+      lastPlayedAt: str(pick(stats, "lastPlayedAt", "last_played_at")),
+    },
+    ranks: {
+      tenMin: num(pick(ranks, "tenMin", "ten_min")),
+      day: num(pick(ranks, "day")),
+      all: num(pick(ranks, "all")),
+    },
+    recentRuns,
+    runsPagination: parsePagination(
+      pick(player, "runsPagination", "runs_pagination"),
+      recentRuns.length,
+    ),
+  };
 }
 
 async function fetchWithTimeout(
@@ -122,9 +248,10 @@ async function fetchWithTimeout(
 async function parseError(response: Response): Promise<LeaderboardApiError> {
   let message = `request failed (${response.status})`;
   try {
-    const payload = (await response.json()) as ApiErrorResponse;
-    if (payload.error && payload.error.trim().length > 0) {
-      message = payload.error;
+    const payload = (await response.json()) as Json;
+    const error = str(payload.error);
+    if (error && error.trim().length > 0) {
+      message = error;
     }
   } catch {
     // ignored
@@ -161,13 +288,13 @@ export async function getLeaderboard({
     throw await parseError(response);
   }
 
-  return parseJson<LeaderboardPageResponse>(response);
+  return parseLeaderboardPage(await response.json(), window);
 }
 
 export async function getLeaderboardPlayer(
-  claimantAddress: string,
+  playerAddress: string,
   options?: { runsLimit?: number; runsOffset?: number },
-): Promise<LeaderboardPlayerResponse> {
+): Promise<LeaderboardPlayer> {
   const params = new URLSearchParams();
   if (options?.runsLimit != null) {
     params.set("runs_limit", `${options.runsLimit}`);
@@ -176,53 +303,71 @@ export async function getLeaderboardPlayer(
     params.set("runs_offset", `${options.runsOffset}`);
   }
   const qs = params.toString();
-  const url = `/api/leaderboard/player/${encodeURIComponent(claimantAddress)}${qs ? `?${qs}` : ""}`;
+  const url = `/api/leaderboard/player/${encodeURIComponent(playerAddress)}${qs ? `?${qs}` : ""}`;
   const response = await fetchWithTimeout(url, { method: "GET" }, 10_000);
   if (!response.ok) {
     throw await parseError(response);
   }
 
-  return parseJson<LeaderboardPlayerResponse>(response);
+  return parseLeaderboardPlayer(await response.json(), playerAddress);
+}
+
+export const PROFILE_MESSAGE_DOMAIN = "kalien-profile-v1";
+
+/**
+ * Text the player key signs to edit a profile. Must match `profileMessage` in
+ * `worker/profile.ts`: the Worker rebuilds it from the request and checks the
+ * Ed25519 signature over its UTF-8 bytes. Null fields are empty strings.
+ */
+export function profileUpdateMessage(input: {
+  networkHash: string;
+  address: string;
+  timestamp: number;
+  username: string | null;
+  linkUrl: string | null;
+}): string {
+  return [
+    PROFILE_MESSAGE_DOMAIN,
+    input.networkHash.toLowerCase(),
+    input.address.toLowerCase(),
+    String(input.timestamp),
+    input.username ?? "",
+    input.linkUrl ?? "",
+  ].join("\n");
+}
+
+export interface ProfileSigner {
+  pubkeyHex: string;
+  sign: (message: Uint8Array) => Promise<Uint8Array>;
 }
 
 export async function updateLeaderboardProfile(
-  claimantAddress: string,
+  playerAddress: string,
   updates: { username: string | null; linkUrl: string | null },
-  credentialId: string,
-): Promise<{ success: true; profile: PlayerProfile }> {
-  // Step 1: Request authentication options (15s timeout for RPC latency)
-  const optionsResponse = await fetchWithTimeout(
-    `/api/leaderboard/player/${encodeURIComponent(claimantAddress)}/profile/auth/options`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ credential_id: credentialId }),
-    },
-    15_000,
-  );
-  if (!optionsResponse.ok) {
-    throw await parseError(optionsResponse);
-  }
-  const optionsData = await parseJson<LeaderboardProfileAuthOptionsResponse>(optionsResponse);
-
-  // Step 2: Sign with passkey via browser WebAuthn API
-  const authResponse = await startAuthentication({
-    optionsJSON: optionsData.options,
+  signer: ProfileSigner,
+): Promise<{ profile: PlayerProfile }> {
+  const { networkHash } = await getThruputConfig();
+  const timestamp = Date.now();
+  const message = profileUpdateMessage({
+    networkHash,
+    address: playerAddress,
+    username: updates.username,
+    linkUrl: updates.linkUrl,
+    timestamp,
   });
+  const signature = await signer.sign(new TextEncoder().encode(message));
 
-  // Step 3: Submit profile update with WebAuthn proof
   const response = await fetchWithTimeout(
-    `/api/leaderboard/player/${encodeURIComponent(claimantAddress)}/profile`,
+    `/api/leaderboard/player/${encodeURIComponent(playerAddress)}/profile`,
     {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         username: updates.username,
-        link_url: updates.linkUrl,
-        auth: {
-          challenge_id: optionsData.challenge_id,
-          response: authResponse,
-        },
+        linkUrl: updates.linkUrl,
+        pubkey: signer.pubkeyHex,
+        timestamp,
+        signature: bytesToHex(signature),
       }),
     },
     10_000,
@@ -231,5 +376,10 @@ export async function updateLeaderboardProfile(
     throw await parseError(response);
   }
 
-  return parseJson<{ success: true; profile: PlayerProfile }>(response);
+  const payload = await parseJson<Json>(response);
+  const profile = parseProfile(payload.profile, playerAddress);
+  if (!profile) {
+    throw new LeaderboardApiError("profile response is missing the profile", response.status);
+  }
+  return { profile };
 }

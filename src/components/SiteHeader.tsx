@@ -7,7 +7,7 @@ import { HeaderWallet } from "./wallet/HeaderWallet";
 
 const NAV_LINKS = [
   { href: "/", label: "Game" },
-  { href: "/proofs", label: "Proofs" },
+  { href: "/runs", label: "My Runs" },
   { href: "/leaderboard", label: "Leaderboard" },
 ] as const;
 

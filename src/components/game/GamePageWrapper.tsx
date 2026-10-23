@@ -1,46 +1,40 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import CheckCircle2 from "lucide-react/dist/esm/icons/check-circle-2";
 import Clock from "lucide-react/dist/esm/icons/clock";
-import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import Play from "lucide-react/dist/esm/icons/play";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
 import Trophy from "lucide-react/dist/esm/icons/trophy";
 import X from "lucide-react/dist/esm/icons/x";
 import { useGameFlow, type GameFlowStep } from "@/hooks/useGameFlow";
 import { GamePanel } from "@/components/game/GamePanel";
-import { StepIndicator, type Step } from "@/components/proof/StepIndicator";
-import { WalletConnect } from "@/components/wallet/WalletConnect";
+import { StepIndicator, type Step } from "@/components/shared/StepIndicator";
 import { SubmitScore } from "@/components/submit/SubmitScore";
 import { PageShell } from "@/components/shared/PageShell";
-import { Link } from "@/components/shared/Link";
 import { useBalanceState, useWalletState } from "@/contexts/WalletContext";
-import { ProofProgress } from "@/components/proof/ProofProgress";
-import { Button } from "@/components/ui/button";
+import { RunProgress } from "@/components/runs/RunProgress";
+import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { formatFramesAsTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { HIGH_SCORE_THRESHOLD } from "@/consts";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
-import { useEndlessSeedScoreGate } from "@/hooks/useEndlessSeedScoreGate";
+import { useSeedScoreGate } from "@/hooks/useSeedScoreGate";
+import { useThruputConfig } from "@/hooks/useThruputConfig";
 import { navigate, useLocation } from "@/hooks/useLocation";
 import { useSeed } from "@/hooks/useSeed";
 import type { CompletedGameRun } from "@/game/types";
+import type { RunRecord } from "@/runs/api";
 
 const FLOW_STEPS: Step[] = [
   { key: "play", label: "Play" },
   { key: "score", label: "Score" },
-  { key: "prove", label: "Prove" },
+  { key: "submit", label: "Submit" },
   { key: "earn", label: "Earn" },
 ];
 
 function completedSteps(current: GameFlowStep): string[] {
-  const order: GameFlowStep[] = ["play", "score", "wallet", "prove", "earn"];
-  const currentIdx = order.indexOf(current);
-  const displayIdx = current === "wallet" ? 1 : currentIdx;
-  return FLOW_STEPS.filter((_, i) => i < displayIdx).map((s) => s.key);
-}
-
-function displayStepKey(step: GameFlowStep): string {
-  return step === "wallet" ? "score" : step;
+  const currentIdx = FLOW_STEPS.findIndex((step) => step.key === current);
+  // The last step is complete once reached: the score is on-chain and KALIEN is minted.
+  const doneIdx = current === "earn" ? FLOW_STEPS.length : currentIdx;
+  return FLOW_STEPS.filter((_, i) => i < doneIdx).map((s) => s.key);
 }
 
 function formatCountdown(seconds: number): string {
@@ -74,7 +68,7 @@ function getEndlessModeDetail(params: {
   replayJobId: string | null;
   walletConnected: boolean;
   isSubmitting: boolean;
-  proofError: string | null;
+  submitError: string | null;
   seed: number | null;
   seedId: number | null;
   secondsLeft: number;
@@ -91,7 +85,7 @@ function getEndlessModeDetail(params: {
   if (params.replayJobId) {
     return null;
   }
-  if (params.proofError) {
+  if (params.submitError) {
     return "Submit failed";
   }
   if (params.isSubmitting) {
@@ -122,25 +116,23 @@ function GameOverOverlay({
   flow,
   replayJobId,
   endlessModeEnabled,
+  scoreToBeat,
+  isScoreToBeatLoading,
   onRestartReplay,
   onPlayLive,
 }: {
   flow: ReturnType<typeof useGameFlow>;
   replayJobId: string | null;
   endlessModeEnabled: boolean;
+  scoreToBeat: number | null;
+  isScoreToBeatLoading: boolean;
   onRestartReplay: () => void;
   onPlayLive: () => void;
 }) {
   const isReplay = flow.latestRun?.isReplay ?? false;
   const completed = completedSteps(flow.currentStep);
-  const currentDisplayStep = displayStepKey(flow.currentStep);
-  const showWalletConnect = !isReplay && !flow.wallet.isConnected;
   const showSubmitButton = !isReplay && flow.currentStep !== "play";
-  const showProofProgress = !isReplay && (flow.proof.isBusy || flow.proof.job !== null);
-  const showSuccessBanner =
-    !isReplay &&
-    flow.proof.job?.status === "succeeded" &&
-    flow.proof.job?.claim.status === "succeeded";
+  const showRunProgress = !isReplay && (flow.submission.isBusy || flow.submission.run !== null);
 
   const score = flow.latestRun?.record.finalScore ?? 0;
   const isHighScore = score >= HIGH_SCORE_THRESHOLD;
@@ -181,85 +173,45 @@ function GameOverOverlay({
           {!isReplay && (
             <StepIndicator
               steps={FLOW_STEPS}
-              currentStepKey={currentDisplayStep}
+              currentStepKey={flow.currentStep}
               completedStepKeys={completed}
             />
           )}
 
-          {showWalletConnect && (
-            <WalletConnect
-              isConnected={flow.wallet.isConnected}
-              isBusy={flow.wallet.isBusy}
-              action={flow.wallet.action}
-              address={flow.wallet.address}
-              userName={flow.wallet.userName}
-              error={flow.wallet.error}
-              onSetUserName={flow.wallet.setUserName}
-              onConnect={flow.wallet.connect}
-              onCreate={flow.wallet.create}
-              onDisconnect={flow.wallet.disconnect}
-            />
+          {showSubmitButton && !showRunProgress && (
+            <>
+              <SubmitScore
+                onSubmit={() => void flow.submitLatestRun()}
+                canSubmit={flow.canSubmit}
+                isSubmitting={flow.submission.isSubmitting}
+                isWalletReady={flow.wallet.isConnected}
+                hasPositiveScore={flow.hasPositiveScore}
+                score={score}
+                scoreToBeat={scoreToBeat}
+                isScoreToBeatLoading={isScoreToBeatLoading}
+              />
+              <ErrorMessage message={flow.submission.error} className="text-center text-xs" />
+            </>
           )}
 
-          {showSubmitButton && !showProofProgress && (
-            <SubmitScore
-              onSubmit={flow.submitForProof}
-              canSubmit={flow.canSubmitForProof}
-              isSubmitting={flow.proof.isSubmitting}
-              isConnected={flow.wallet.isConnected}
-              hasPositiveScore={flow.hasPositiveScore}
-            />
-          )}
-
-          {showProofProgress && (
-            <ProofProgress
-              status={flow.proof.status}
-              friendlyStatus={flow.proof.friendlyStatus}
-              isBusy={flow.proof.isBusy}
-              hasResult={flow.proof.hasResult}
-              error={flow.proof.error}
-              elapsedMs={flow.proof.job?.result?.summary?.elapsedMs}
-              verifiedScore={flow.proof.job?.result?.summary?.journal.final_score}
+          {showRunProgress && (
+            <RunProgress
+              run={flow.submission.run}
+              status={flow.submission.status}
+              friendlyStatus={flow.submission.friendlyStatus}
+              isBusy={flow.submission.isBusy}
+              error={flow.submission.error}
               onPlayAgain={endlessModeEnabled ? undefined : flow.dismissOverlay}
-              claimStatus={flow.claimStatus}
-              claimTxHash={flow.claimTxHash}
-              claimError={flow.claimError}
               hintText={
                 endlessModeEnabled
-                  ? "Endless mode keeps playing while submitted runs verify in the background."
+                  ? "Endless mode keeps playing while submitted runs settle in the background."
                   : undefined
               }
             />
           )}
 
-          {showSuccessBanner && (
-            <div className="flex flex-col items-center gap-2 rounded-lg border border-secondary/30 bg-[rgba(26,108,71,0.15)] px-3 py-3 text-center">
-              <CheckCircle2 className="size-5 text-secondary" aria-hidden="true" />
-              <p className="m-0 font-display text-sm tracking-wide text-secondary">
-                Verified &amp; claimed on-chain!
-              </p>
-              <p className="m-0 text-xs text-muted-foreground">
-                Your score will appear on the leaderboard.
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <Button variant="space" size="sm" asChild>
-                  <Link href="/proofs" className="no-underline">
-                    <ExternalLink className="size-3.5" />
-                    My Proofs
-                  </Link>
-                </Button>
-                <Button variant="space" size="sm" asChild>
-                  <Link href="/leaderboard" className="no-underline">
-                    <ExternalLink className="size-3.5" />
-                    Leaderboard
-                  </Link>
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {!flow.proof.isBusy &&
-            !flow.proof.isSubmitting &&
+          {!flow.submission.isBusy &&
+            !flow.submission.isSubmitting &&
             (isReplay ? (
               <div className="flex items-center justify-center gap-3">
                 <button
@@ -297,16 +249,24 @@ function GameOverOverlay({
 }
 
 export function GamePageWrapper() {
-  useDocumentTitle("Play & Prove", {
+  useDocumentTitle("Play & Earn", {
     description:
-      "Play deterministic Asteroids and prove your score with cryptographic verification in Kalien.",
+      "Play deterministic Asteroids. The Thruput score contract replays your run on-chain and mints KALIEN.",
     path: "/",
   });
 
   const wallet = useWalletState();
   const balance = useBalanceState();
-  const flow = useGameFlow({ wallet, balance });
-  const { dismissOverlay, handleGameOver: handleFlowGameOver, submitRunForProof } = flow;
+  const { config } = useThruputConfig();
+  const networkKey = config?.scoreContract ?? "";
+  const noteSubmittedScoreRef = useRef<(seedId: number, score: number) => void>(() => {});
+  const handleRunConfirmed = useCallback((run: RunRecord) => {
+    if (run.seedId !== null && run.score !== null) {
+      noteSubmittedScoreRef.current(run.seedId, run.score);
+    }
+  }, []);
+  const flow = useGameFlow({ wallet, balance, onRunConfirmed: handleRunConfirmed });
+  const { dismissOverlay, handleGameOver: handleFlowGameOver, submitCompletedRun } = flow;
   const { seed, seedId, secondsLeft } = useSeed();
   const gameRef = useRef<import("@/game/AsteroidsGame").AsteroidsGame | null>(null);
   const [autopilotEnabled, setAutopilotEnabled] = useState(false);
@@ -322,7 +282,7 @@ export function GamePageWrapper() {
     replayJobId: null as string | null,
     walletAddress: "",
     walletConnected: false,
-    networkPassphrase: "",
+    networkKey: "",
   });
   const [recentSubmissionAtMs, setRecentSubmissionAtMs] = useState<number | null>(null);
 
@@ -339,23 +299,25 @@ export function GamePageWrapper() {
     currentSeedScoreToBeat,
     isCurrentSeedScoreLoading,
     isCurrentSeedScoreReady,
+    getKnownSeedScoreToBeat,
     refreshSeedScoreToBeat,
     noteSubmittedScore,
-  } = useEndlessSeedScoreGate({
-    enabled: endlessModeEnabled,
+  } = useSeedScoreGate({
+    enabled: !replayJobId,
     walletAddress: flow.wallet.address,
     walletConnected: flow.wallet.isConnected,
-    networkPassphrase: flow.wallet.networkPassphrase,
+    networkKey,
     currentSeedId: seedId,
   });
+  noteSubmittedScoreRef.current = noteSubmittedScore;
   const endlessModeDetail = useMemo(
     () =>
       getEndlessModeDetail({
         enabled: endlessModeEnabled,
         replayJobId,
         walletConnected: flow.wallet.isConnected,
-        isSubmitting: flow.proof.isSubmitting,
-        proofError: flow.proof.error,
+        isSubmitting: flow.submission.isSubmitting,
+        submitError: flow.submission.error,
         seed,
         seedId,
         secondsLeft,
@@ -369,8 +331,8 @@ export function GamePageWrapper() {
       endlessModeEnabled,
       replayJobId,
       flow.wallet.isConnected,
-      flow.proof.isSubmitting,
-      flow.proof.error,
+      flow.submission.isSubmitting,
+      flow.submission.error,
       isCurrentSeedScoreLoading,
       isCurrentSeedScoreReady,
       seed,
@@ -384,7 +346,7 @@ export function GamePageWrapper() {
     replayJobId,
     walletAddress: flow.wallet.address,
     walletConnected: flow.wallet.isConnected,
-    networkPassphrase: flow.wallet.networkPassphrase,
+    networkKey,
   };
 
   const recordSubmissionFeedback = useCallback((runKey: string) => {
@@ -424,7 +386,7 @@ export function GamePageWrapper() {
 
   useEffect(() => {
     pendingEndlessSubmissionScoresRef.current.clear();
-  }, [flow.wallet.address, flow.wallet.networkPassphrase]);
+  }, [flow.wallet.address, networkKey]);
 
   const handleAutopilotStateChange = useCallback((enabled: boolean) => {
     setAutopilotEnabled(enabled);
@@ -547,7 +509,7 @@ export function GamePageWrapper() {
         currentContext.replayJobId === submitContext.replayJobId &&
         currentContext.walletAddress === submitContext.walletAddress &&
         currentContext.walletConnected === submitContext.walletConnected &&
-        currentContext.networkPassphrase === submitContext.networkPassphrase
+        currentContext.networkKey === submitContext.networkKey
       );
     };
     const clearPendingScore = () => {
@@ -593,7 +555,7 @@ export function GamePageWrapper() {
         Math.max(latestPendingSeedBest, completedRunScore),
       );
 
-      const submitted = await submitRunForProof(completedRun);
+      const submitted = await submitCompletedRun(completedRun);
       if (!isSubmitContextCurrent()) {
         clearPendingScore();
         return;
@@ -618,13 +580,13 @@ export function GamePageWrapper() {
     flow.latestRun,
     flow.wallet.address,
     flow.wallet.isConnected,
-    flow.wallet.networkPassphrase,
+    networkKey,
     latestRunKey,
     noteSubmittedScore,
     recordSubmissionFeedback,
     refreshSeedScoreToBeat,
     replayJobId,
-    submitRunForProof,
+    submitCompletedRun,
   ]);
 
   useEffect(() => {
@@ -661,11 +623,23 @@ export function GamePageWrapper() {
     dismissOverlay();
   }, [dismissOverlay]);
 
+  const latestRunSeedId = flow.latestRun ? flow.latestRun.record.seedId >>> 0 : null;
+  const latestRunIsCurrentSeed = latestRunSeedId !== null && latestRunSeedId === seedId;
+  const knownScoreToBeat = latestRunSeedId !== null ? getKnownSeedScoreToBeat(latestRunSeedId) : 0;
+  const scoreToBeat =
+    latestRunIsCurrentSeed && isCurrentSeedScoreReady
+      ? Math.max(currentSeedScoreToBeat, knownScoreToBeat)
+      : knownScoreToBeat > 0
+        ? knownScoreToBeat
+        : null;
+
   const overlay = flow.latestRun ? (
     <GameOverOverlay
       flow={flow}
       replayJobId={replayJobId}
       endlessModeEnabled={endlessModeEnabled}
+      scoreToBeat={scoreToBeat}
+      isScoreToBeatLoading={latestRunIsCurrentSeed && isCurrentSeedScoreLoading}
       onRestartReplay={handleRestartReplay}
       onPlayLive={handlePlayLive}
     />
@@ -673,7 +647,7 @@ export function GamePageWrapper() {
 
   return (
     <PageShell className="grid-rows-[auto_1fr] content-start">
-      <h1 className="sr-only">Kalien: Play and prove your Asteroids score</h1>
+      <h1 className="sr-only">Kalien: Play Asteroids and earn KALIEN on Thruput</h1>
       <GamePanel
         onGameOver={handleGameOver}
         onGameInstance={handleGameInstance}

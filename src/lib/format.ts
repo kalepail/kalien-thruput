@@ -50,12 +50,6 @@ export function formatMetric(value: number | null | undefined): string {
   return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "n/a";
 }
 
-export function formatCycles(cycles: number): string {
-  if (cycles >= 1_000_000_000) return `${(cycles / 1_000_000_000).toFixed(1)}B`;
-  if (cycles >= 1_000_000) return `${(cycles / 1_000_000).toFixed(1)}M`;
-  return cycles.toLocaleString();
-}
-
 export function formatFramesAsTime(frameCount: number, fps = 60): string {
   const totalSeconds = Math.round(frameCount / fps);
   if (totalSeconds < 60) {
@@ -66,7 +60,25 @@ export function formatFramesAsTime(frameCount: number, fps = 60): string {
   return `${minutes}m ${seconds}s`;
 }
 
+export const KALIEN_DECIMALS = 7;
 export const KALIEN_SCALE = 10_000_000n;
 export function toDisplayKalien(rawBalance: bigint): bigint {
   return rawBalance / KALIEN_SCALE;
+}
+
+/** Format KALIEN base units (7 decimals) with grouping and trimmed fraction digits. */
+export function formatKalien(rawAmount: bigint): string {
+  const negative = rawAmount < 0n;
+  const abs = negative ? -rawAmount : rawAmount;
+  const whole = formatWholeNumber(abs / KALIEN_SCALE);
+  const frac = (abs % KALIEN_SCALE).toString().padStart(KALIEN_DECIMALS, "0").replace(/0+$/, "");
+  return `${negative ? "-" : ""}${whole}${frac ? `.${frac}` : ""}`;
+}
+
+/** Parse an API amount (decimal string, number, or bigint) as KALIEN base units. */
+export function parseBaseUnits(value: unknown): bigint | null {
+  if (typeof value === "bigint") return value;
+  if (typeof value === "number" && Number.isSafeInteger(value)) return BigInt(value);
+  if (typeof value === "string" && /^-?\d+$/.test(value.trim())) return BigInt(value.trim());
+  return null;
 }

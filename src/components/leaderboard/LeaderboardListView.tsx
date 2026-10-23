@@ -25,7 +25,7 @@ import { AUTO_REFRESH_LEADERBOARD_MS } from "@/consts";
 export function LeaderboardListView() {
   useDocumentTitle("Leaderboard", {
     description:
-      "Explore rolling and all-time Kalien leaderboard rankings from proved, on-chain verified runs.",
+      "Explore rolling and all-time Kalien leaderboard rankings. The Thruput score contract replays every run on-chain.",
     path: "/leaderboard",
   });
   const wallet = useWalletState();
@@ -126,30 +126,30 @@ export function LeaderboardListView() {
   const hasHistoricalData =
     (leaderboard?.window !== "all" &&
       leaderboard?.entries.length === 0 &&
-      (leaderboard?.ingestion?.total_events ?? 0) > 0) ||
+      (leaderboard?.ingestion?.totalEvents ?? 0) > 0) ||
     false;
   const isEmptyAllTime =
     leaderboard?.window === "all" &&
     leaderboard.entries.length === 0 &&
-    (leaderboard.ingestion?.total_events ?? 0) === 0;
+    (leaderboard.ingestion?.totalEvents ?? 0) === 0;
 
   return (
     <>
       <PageHero
         title="Leaderboard"
-        subtitle="Rolling 10m, 24h, and all-time rankings from proved runs."
+        subtitle="Rolling 10m, 24h, and all-time rankings from on-chain runs."
       >
         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          {leaderboard?.ingestion?.last_synced_at ? (
+          {leaderboard?.ingestion?.lastSyncedAt ? (
             <StatusBadge
               variant={
-                Date.now() - new Date(leaderboard.ingestion.last_synced_at).getTime() < 30 * 60_000
+                Date.now() - new Date(leaderboard.ingestion.lastSyncedAt).getTime() < 30 * 60_000
                   ? "success"
                   : "muted"
               }
-              title={formatUtcDateTime(leaderboard.ingestion.last_synced_at)}
+              title={formatUtcDateTime(leaderboard.ingestion.lastSyncedAt)}
             >
-              Synced <RelativeTime value={leaderboard.ingestion.last_synced_at} />
+              Synced <RelativeTime value={leaderboard.ingestion.lastSyncedAt} />
             </StatusBadge>
           ) : (
             <StatusBadge variant="muted">Sync in progress</StatusBadge>
@@ -209,7 +209,7 @@ export function LeaderboardListView() {
         {hasHistoricalData ? (
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed border-[rgba(120,181,248,0.35)] bg-[rgba(8,19,34,0.62)] px-3 py-2">
             <p className="m-0 text-sm text-text-soft">
-              No proved runs landed in this short window. Historical rankings still exist.
+              No runs landed in this short window. Historical rankings still exist.
             </p>
             <Button
               size="sm"
@@ -228,8 +228,10 @@ export function LeaderboardListView() {
           <RankingsTable entries={[]} isLoading />
         ) : isEmptyAllTime ? (
           <div className="grid justify-items-center gap-2 rounded-lg border border-dashed border-[rgba(120,181,248,0.35)] bg-[rgba(8,19,34,0.62)] p-6 text-center">
-            <p className="m-0 text-text-soft">No proved runs yet.</p>
-            <p className="m-0 text-text-soft">Play the game and prove your score to appear here.</p>
+            <p className="m-0 text-text-soft">No confirmed runs yet.</p>
+            <p className="m-0 text-text-soft">
+              Play the game and submit your score to appear here.
+            </p>
             <Button variant="active" asChild>
               <Link href="/" className="no-underline">
                 Play Now
@@ -237,11 +239,11 @@ export function LeaderboardListView() {
             </Button>
           </div>
         ) : leaderboard && leaderboard.entries.length === 0 ? (
-          <p className="m-0 text-text-soft">No proved runs in this window yet.</p>
+          <p className="m-0 text-text-soft">No confirmed runs in this window yet.</p>
         ) : leaderboard ? (
           <RankingsTable
             entries={leaderboard.entries}
-            highlightAddress={leaderboard.me?.claimantAddress}
+            highlightAddress={leaderboard.me?.playerAddress}
           />
         ) : null}
 
@@ -251,7 +253,7 @@ export function LeaderboardListView() {
             offset={leaderboard.pagination.offset}
             limit={limit}
             total={leaderboard.pagination.total}
-            nextOffset={leaderboard.pagination.next_offset}
+            nextOffset={leaderboard.pagination.nextOffset}
             onOffsetChange={setOffset}
             disabled={loading}
           />

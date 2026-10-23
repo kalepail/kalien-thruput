@@ -3,7 +3,6 @@ import { useSyncExternalStore } from "react";
 const SEED_PERIOD_MS = 600_000; // 10 minutes
 const NULL_SEED_RETRY_MS = 3_000;
 const MAX_NULL_SEED_RETRY_MS = 12_000;
-const SERVER_REFRESH_COOLDOWN_MS = 2_500;
 
 function currentSeedId(nowMs = Date.now()): number {
   return Math.floor(nowMs / SEED_PERIOD_MS);
@@ -21,15 +20,27 @@ interface SeedState {
 }
 
 interface SeedCurrentResponse {
-  success?: boolean;
+  seedId?: number;
   seed_id?: number;
-  seconds_left?: number;
   seed?: number | null;
+  secondsLeft?: number;
+  seconds_left?: number;
 }
 
-interface SeedRefreshResponse extends SeedCurrentResponse {
-  error?: string;
-  retry_after_seconds?: number | null;
+function readSeedResponse(
+  data: SeedCurrentResponse | null,
+): { seedId: number; seed: number; secondsLeft: number | null } | null {
+  if (!data) return null;
+  const seedId = typeof data.seedId === "number" ? data.seedId : data.seed_id;
+  if (typeof seedId !== "number" || typeof data.seed !== "number") return null;
+  const secondsLeft =
+    typeof data.secondsLeft === "number" ? data.secondsLeft : (data.seconds_left ?? null);
+  return {
+    seedId: seedId >>> 0,
+    seed: data.seed >>> 0,
+    secondsLeft:
+      typeof secondsLeft === "number" && Number.isFinite(secondsLeft) ? secondsLeft : null,
+  };
 }
 
 // Seed-id-aligned cache so the same seed is returned within one 10-minute interval.
@@ -44,8 +55,6 @@ const listeners = new Set<() => void>();
 let countdownIntervalId: ReturnType<typeof setInterval> | null = null;
 let nullRetryTimerId: ReturnType<typeof setTimeout> | null = null;
 let fetchPending = false;
-let refreshPending = false;
-let lastServerRefreshAt = 0;
 let observedSeedId = currentSeedId();
 let missingSeedRetryMs = NULL_SEED_RETRY_MS;
 
@@ -67,59 +76,6 @@ function scheduleMissingSeedRetry(): void {
     void refreshSeed();
   }, missingSeedRetryMs);
   missingSeedRetryMs = Math.min(MAX_NULL_SEED_RETRY_MS, missingSeedRetryMs + 1_000);
-}
-
-async function triggerSeedRefresh(seedId: number): Promise<void> {
-  if (refreshPending) return;
-  const now = Date.now();
-  if (now - lastServerRefreshAt < SERVER_REFRESH_COOLDOWN_MS) return;
-
-  refreshPending = true;
-  lastServerRefreshAt = now;
-  try {
-    const response = await fetch("/api/seed/refresh", {
-      method: "POST",
-      cache: "no-store",
-    });
-    const data = (await response.json().catch(() => null)) as SeedRefreshResponse | null;
-    if (!response.ok || !data) {
-      if (
-        typeof data?.retry_after_seconds === "number" &&
-        Number.isFinite(data.retry_after_seconds)
-      ) {
-        missingSeedRetryMs = Math.max(
-          missingSeedRetryMs,
-          Math.ceil(data.retry_after_seconds * 1000),
-        );
-      }
-      scheduleMissingSeedRetry();
-      return;
-    }
-
-    const refreshedSeedId = typeof data.seed_id === "number" ? data.seed_id >>> 0 : null;
-
-    if (data.success === true && typeof data.seed === "number" && refreshedSeedId === seedId) {
-      seedCache = {
-        seedId,
-        seed: data.seed >>> 0,
-      };
-      state = {
-        seed: data.seed >>> 0,
-        seedId,
-        secondsLeft: getSecondsUntilNext(),
-      };
-      missingSeedRetryMs = NULL_SEED_RETRY_MS;
-      notify();
-      return;
-    }
-
-    if (typeof data.retry_after_seconds === "number" && Number.isFinite(data.retry_after_seconds)) {
-      missingSeedRetryMs = Math.max(missingSeedRetryMs, Math.ceil(data.retry_after_seconds * 1000));
-    }
-    scheduleMissingSeedRetry();
-  } finally {
-    refreshPending = false;
-  }
 }
 
 async function refreshSeed(): Promise<void> {
@@ -148,31 +104,26 @@ async function refreshSeed(): Promise<void> {
     });
 
     const data = (await response.json().catch(() => null)) as SeedCurrentResponse | null;
-    if (
-      response.ok &&
-      data?.success === true &&
-      typeof data.seed_id === "number" &&
-      typeof data.seed === "number"
-    ) {
-      const chainSeedId = data.seed_id >>> 0;
-      if (chainSeedId !== seedId) {
+    const current = response.ok ? readSeedResponse(data) : null;
+    if (current) {
+      if (current.seedId !== seedId) {
+        // The chain clock has not reached this epoch yet (or our clock is off).
+        // The Worker cron creates each seed; retry until it matches.
         state = {
           seed: null,
           seedId: null,
           secondsLeft: getSecondsUntilNext(),
         };
         notify();
-        void triggerSeedRefresh(seedId);
         scheduleMissingSeedRetry();
         return;
       }
-      const seed = data.seed >>> 0;
-      seedCache = { seedId, seed };
+      seedCache = { seedId, seed: current.seed };
       const secondsLeft =
-        typeof data.seconds_left === "number" && Number.isFinite(data.seconds_left)
-          ? Math.max(0, Math.ceil(data.seconds_left))
+        current.secondsLeft !== null
+          ? Math.max(0, Math.ceil(current.secondsLeft))
           : getSecondsUntilNext();
-      state = { seed, seedId, secondsLeft };
+      state = { seed: current.seed, seedId, secondsLeft };
       missingSeedRetryMs = NULL_SEED_RETRY_MS;
       notify();
     } else {
@@ -181,7 +132,6 @@ async function refreshSeed(): Promise<void> {
         state = { ...state, secondsLeft: getSecondsUntilNext() };
       } else {
         state = { seed: null, seedId: null, secondsLeft: getSecondsUntilNext() };
-        void triggerSeedRefresh(seedId);
       }
       notify();
       scheduleMissingSeedRetry();
@@ -209,8 +159,8 @@ function tick(): void {
   observedSeedId = seedId;
 
   if (seedIdChanged) {
-    // New 10-minute seed_id started — invalidate cache and immediately call
-    // the backend refresh endpoint so the next game can start quickly.
+    // New 10-minute seed_id started — invalidate cache and fetch the new seed
+    // right away so the next game can start quickly.
     seedCache = null;
     clearNullRetry();
     missingSeedRetryMs = NULL_SEED_RETRY_MS;

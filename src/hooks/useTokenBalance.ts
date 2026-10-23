@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { formatWholeNumber, toDisplayKalien } from "../lib/format";
+import { BALANCE_REFRESH_MS } from "../consts";
+import { formatKalien } from "../lib/format";
 
 export interface UseTokenBalanceReturn {
   balance: bigint | null;
@@ -10,33 +11,15 @@ export interface UseTokenBalanceReturn {
   refresh: () => Promise<void>;
 }
 
-type TokenModule = typeof import("../chain/token");
+type ClientModule = typeof import("../thruput/client");
 
-let tokenModulePromise: Promise<TokenModule> | null = null;
+let clientModulePromise: Promise<ClientModule> | null = null;
 
-function nonEmptyEnv(value: string | undefined): string | null {
-  if (typeof value !== "string") {
-    return null;
+function loadClientModule(): Promise<ClientModule> {
+  if (!clientModulePromise) {
+    clientModulePromise = import("../thruput/client");
   }
-
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function getScoreContractIdFromEnv(): string | null {
-  return nonEmptyEnv(import.meta.env.VITE_SCORE_CONTRACT_ID);
-}
-
-function getTokenContractIdFromEnv(): string | null {
-  return nonEmptyEnv(import.meta.env.VITE_TOKEN_CONTRACT_ID);
-}
-
-function loadTokenModule(): Promise<TokenModule> {
-  if (!tokenModulePromise) {
-    tokenModulePromise = import("../chain/token");
-  }
-
-  return tokenModulePromise;
+  return clientModulePromise;
 }
 
 export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
@@ -45,9 +28,6 @@ export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshRequestIdRef = useRef(0);
-
-  const scoreContractId = getScoreContractIdFromEnv();
-  const tokenContractOverride = getTokenContractIdFromEnv();
 
   const refresh = useCallback(async () => {
     const requestId = ++refreshRequestIdRef.current;
@@ -59,29 +39,15 @@ export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
       return;
     }
 
-    if (!scoreContractId && !tokenContractOverride) {
-      setBalance(null);
-      setTokenContractId(null);
-      setError(
-        "set VITE_SCORE_CONTRACT_ID (or VITE_TOKEN_CONTRACT_ID) to show on-chain token balance",
-      );
-      setIsRefreshing(false);
-      return;
-    }
-
     setIsRefreshing(true);
     try {
-      const tokenModule = await loadTokenModule();
-      const next = await tokenModule.readTokenBalance({
-        walletAddress,
-        scoreContractId,
-        tokenContractId: tokenContractOverride,
-      });
+      const clientModule = await loadClientModule();
+      const next = await clientModule.readKalienBalance(walletAddress);
       if (requestId !== refreshRequestIdRef.current) {
         return;
       }
       setBalance(next.balance);
-      setTokenContractId(next.tokenContractId);
+      setTokenContractId(next.tokenContract);
       setError(null);
     } catch (err) {
       if (requestId !== refreshRequestIdRef.current) {
@@ -94,9 +60,9 @@ export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
         setIsRefreshing(false);
       }
     }
-  }, [walletAddress, scoreContractId, tokenContractOverride]);
+  }, [walletAddress]);
 
-  // Auto-refresh when wallet address changes
+  // Refresh when the address changes, then poll while the tab is visible.
   useEffect(() => {
     if (walletAddress.trim().length === 0) {
       refreshRequestIdRef.current += 1;
@@ -108,10 +74,15 @@ export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
     }
 
     void refresh();
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    }, BALANCE_REFRESH_MS);
+    return () => window.clearInterval(interval);
   }, [walletAddress, refresh]);
 
-  const formattedBalance =
-    balance === null ? "\u2014" : `${formatWholeNumber(toDisplayKalien(balance))} KALIEN`;
+  const formattedBalance = balance === null ? "—" : `${formatKalien(balance)} KALIEN`;
 
   return {
     balance,

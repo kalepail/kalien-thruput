@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchBestScoreForSeed } from "@/chain/seed";
-import { getScoreContractIdFromEnv } from "@/chain/token";
+import { fetchBestScoreForSeed } from "@/runs/best";
 
-const STORAGE_KEY_PREFIX = "kalien:endless-seed-best:v1";
+const STORAGE_KEY_PREFIX = "kalien:seed-best:v2";
 
 function nonEmpty(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
@@ -12,16 +11,13 @@ function nonEmpty(value: string | null | undefined): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function getRpcUrlFromEnv(): string | null {
-  return nonEmpty(import.meta.env.VITE_RPC_URL);
-}
-
-function getStorageKey(walletAddress: string, networkPassphrase: string): string | null {
+function getStorageKey(walletAddress: string, networkKey: string): string | null {
   const address = nonEmpty(walletAddress);
   if (!address) {
     return null;
   }
-  const network = nonEmpty(networkPassphrase) ?? "unknown-network";
+  // Devnet resets change the score contract, so scope the cache to it.
+  const network = nonEmpty(networkKey) ?? "unknown-network";
   return `${STORAGE_KEY_PREFIX}:${network}:${address}`;
 }
 
@@ -63,7 +59,7 @@ function writeStoredSeedScore(storageKey: string | null, seedId: number, score: 
   try {
     window.sessionStorage.setItem(storageKey, JSON.stringify(next));
   } catch {
-    // Ignore sessionStorage quota/security failures; endless mode can still use in-memory state.
+    // Ignore sessionStorage quota/security failures; the gate can still use in-memory state.
   }
 }
 
@@ -92,15 +88,16 @@ export function commitFetchedSeedScore(
   return normalizedBestScore;
 }
 
-export interface UseEndlessSeedScoreGateOptions {
+export interface UseSeedScoreGateOptions {
   enabled: boolean;
   walletAddress: string;
   walletConnected: boolean;
-  networkPassphrase: string;
+  /** Identifies the deployment (score contract address); resets the cache on change. */
+  networkKey: string;
   currentSeedId: number | null;
 }
 
-export interface UseEndlessSeedScoreGateReturn {
+export interface UseSeedScoreGateReturn {
   currentSeedScoreToBeat: number;
   isCurrentSeedScoreLoading: boolean;
   isCurrentSeedScoreReady: boolean;
@@ -109,14 +106,18 @@ export interface UseEndlessSeedScoreGateReturn {
   noteSubmittedScore: (seedId: number, score: number) => void;
 }
 
-export function useEndlessSeedScoreGate({
+/**
+ * Tracks the player's best score per seed epoch, so the browser only submits a
+ * run that beats it. The contract rejects a run that does not improve the best.
+ */
+export function useSeedScoreGate({
   enabled,
   walletAddress,
   walletConnected,
-  networkPassphrase,
+  networkKey,
   currentSeedId,
-}: UseEndlessSeedScoreGateOptions): UseEndlessSeedScoreGateReturn {
-  const storageKey = getStorageKey(walletAddress, networkPassphrase);
+}: UseSeedScoreGateOptions): UseSeedScoreGateReturn {
+  const storageKey = getStorageKey(walletAddress, networkKey);
   const cacheRef = useRef(new Map<number, number>());
   const readySeedIdsRef = useRef(new Set<number>());
   const inFlightRef = useRef(new Map<number, Promise<number | null>>());
@@ -191,28 +192,14 @@ export function useEndlessSeedScoreGate({
       const requestVersion = contextVersionRef.current;
       const request = (async () => {
         let bestScore = 0;
-        let onChainBest: number | null = null;
-        const scoreContractId = getScoreContractIdFromEnv();
-        const rpcUrl = getRpcUrlFromEnv();
         const isStale = () => contextVersionRef.current !== requestVersion;
 
-        if (scoreContractId && rpcUrl) {
-          onChainBest = await fetchBestScoreForSeed(
-            scoreContractId,
-            rpcUrl,
-            walletAddress,
-            normalizedSeedId,
-          );
-          if (isStale()) {
-            return null;
-          }
-          if (typeof onChainBest === "number") {
-            bestScore = Math.max(bestScore, onChainBest >>> 0);
-          }
-        }
-
+        const onChainBest = await fetchBestScoreForSeed(walletAddress, normalizedSeedId);
         if (isStale()) {
           return null;
+        }
+        if (typeof onChainBest === "number") {
+          bestScore = Math.max(bestScore, onChainBest >>> 0);
         }
 
         return commitFetchedSeedScore(

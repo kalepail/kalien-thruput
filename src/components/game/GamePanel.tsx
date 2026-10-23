@@ -9,7 +9,7 @@ import { AsteroidsCanvas } from "../AsteroidsCanvas";
 import type { AsteroidsGame, ReplaySessionState } from "@/game/AsteroidsGame";
 import type { CompletedGameRun } from "@/game/types";
 import { getSeedSnapshot, subscribeToSeed } from "@/hooks/useSeed";
-import { fetchProofTape } from "@/proof/api";
+import { fetchRunTape } from "@/runs/api";
 import { navigate } from "@/hooks/useLocation";
 import { ControlsHint } from "./ControlsHint";
 import { MobileAutopilotButton } from "./MobileAutopilotButton";
@@ -174,7 +174,7 @@ export function GamePanel({
     game.setReplayPending(true);
 
     const controller = new AbortController();
-    fetchProofTape(replayJobId)
+    fetchRunTape(replayJobId)
       .then(({ bytes }) => {
         if (controller.signal.aborted) {
           return undefined;

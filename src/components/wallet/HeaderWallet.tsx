@@ -4,15 +4,13 @@ import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import Coins from "lucide-react/dist/esm/icons/coins";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Loader2 from "lucide-react/dist/esm/icons/loader-2";
-import LogOut from "lucide-react/dist/esm/icons/log-out";
+import KeyRound from "lucide-react/dist/esm/icons/key-round";
 import User from "lucide-react/dist/esm/icons/user";
-import UserPlus from "lucide-react/dist/esm/icons/user-plus";
 import { cn } from "@/lib/utils";
 import { useBalanceState, useWalletState } from "@/contexts/WalletContext";
 import { abbreviateAddress } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ErrorMessage } from "@/components/shared/ErrorMessage";
+import { AddressExplorerLink } from "@/components/runs/TxLink";
 import { navigate } from "@/hooks/useLocation";
 
 export function HeaderWallet() {
@@ -67,77 +65,9 @@ export function HeaderWallet() {
 
   if (!wallet.isConnected) {
     return (
-      <div ref={ref} className="relative">
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className={cn(
-            "flex max-w-full min-h-10 cursor-pointer items-center gap-1.5 rounded-lg border border-border/40 bg-surface-dim px-2.5 py-2 text-left transition-colors hover:border-border/60 hover:bg-[rgba(8,16,29,0.8)] sm:gap-2 sm:px-3",
-            open && "border-primary/40",
-          )}
-          aria-expanded={open}
-          aria-haspopup="true"
-        >
-          <UserPlus className="size-3.5 text-primary" aria-hidden="true" />
-          <span className="font-display text-xs tracking-wide text-card-foreground">Sign In</span>
-          <ChevronDown
-            className={cn(
-              "size-3 text-muted-foreground transition-transform",
-              open && "rotate-180",
-            )}
-            aria-hidden="true"
-          />
-        </button>
-
-        {open && (
-          <div className="absolute left-0 top-full z-50 mt-1.5 w-[min(92vw,20rem)] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border/50 bg-[rgba(8,16,29,0.95)] shadow-[0_12px_40px_rgba(0,0,0,0.5)] sm:left-1/2 sm:max-w-none sm:-translate-x-1/2">
-            <div className="grid max-h-[min(75vh,30rem)] gap-3 overflow-y-auto p-3">
-              <Input
-                type="text"
-                placeholder="Choose a username"
-                value={wallet.userName}
-                onChange={(e) => wallet.setUserName(e.target.value)}
-                disabled={wallet.isBusy}
-                aria-label="Username"
-              />
-              <Button
-                variant="active"
-                size="sm"
-                onClick={() => {
-                  void wallet.create();
-                }}
-                disabled={wallet.isBusy}
-                className="w-full"
-              >
-                {wallet.action === "creating" ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                    Creating...
-                  </>
-                ) : (
-                  "Create Account"
-                )}
-              </Button>
-              <div className="flex flex-wrap items-center justify-center gap-1 text-center">
-                <span className="text-xs text-muted-foreground">Already have an account?</span>
-                <Button
-                  variant="link"
-                  size="sm"
-                  onClick={() => {
-                    void wallet.connect();
-                  }}
-                  disabled={wallet.isBusy}
-                  className="h-auto p-0 text-xs"
-                >
-                  {wallet.action === "connecting" ? "Connecting..." : "Sign In"}
-                </Button>
-              </div>
-              <ErrorMessage
-                message={wallet.error}
-                className="text-xs leading-relaxed [overflow-wrap:anywhere]"
-              />
-            </div>
-          </div>
-        )}
+      <div className="flex items-center gap-1.5 text-muted-foreground">
+        <KeyRound className="size-3.5 text-destructive" aria-hidden="true" />
+        <span className="text-xs">{wallet.error ?? "Player key unavailable"}</span>
       </div>
     );
   }
@@ -190,6 +120,7 @@ export function HeaderWallet() {
               onClick={copyAddress}
               className="mt-0.5 flex w-full cursor-pointer items-center gap-1.5 rounded bg-transparent p-0 text-left transition-colors hover:text-primary"
               title="Copy address"
+              data-testid="header-copy-address"
             >
               <span className="min-w-0 flex-1 text-xs text-card-foreground">
                 {abbreviateAddress(wallet.address)}
@@ -200,6 +131,9 @@ export function HeaderWallet() {
                 <Copy className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
               )}
             </button>
+            <AddressExplorerLink address={wallet.address} className="mt-1 text-[0.7rem]">
+              View on explorer
+            </AddressExplorerLink>
           </div>
 
           {/* Balance */}
@@ -220,25 +154,25 @@ export function HeaderWallet() {
             </p>
           </button>
 
-          {/* Sign out */}
-          <div className="px-2 py-1.5">
+          {/* Key backup */}
+          <div className="grid gap-1 px-2 py-1.5">
             <Button
               variant="ghost"
               size="sm"
               className="w-full justify-start text-xs"
               onClick={() => {
                 setOpen(false);
-                void wallet.disconnect();
+                navigate("/wallet");
               }}
-              disabled={wallet.isBusy}
             >
-              {wallet.action === "disconnecting" ? (
-                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-              ) : (
-                <LogOut className="size-3.5" aria-hidden="true" />
-              )}
-              Sign Out
+              <KeyRound className="size-3.5" aria-hidden="true" />
+              Back Up or Import Key
             </Button>
+            {wallet.isEphemeral && (
+              <p className="m-0 px-2 text-[0.65rem] text-warning">
+                Storage is blocked. Back up this key before you close the tab.
+              </p>
+            )}
           </div>
         </div>
       )}

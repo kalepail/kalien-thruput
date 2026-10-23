@@ -2,10 +2,9 @@ import Medal from "lucide-react/dist/esm/icons/medal";
 import Play from "lucide-react/dist/esm/icons/play";
 import Trophy from "lucide-react/dist/esm/icons/trophy";
 import type { LeaderboardEntry } from "@/leaderboard/api";
-import { abbreviateAddress, formatHex32, formatMetric } from "@/lib/format";
+import { abbreviateAddress, formatHex32, formatKalien, formatMetric } from "@/lib/format";
 import { isSafeUrl } from "@/lib/validation";
 import { cn } from "@/lib/utils";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -18,7 +17,7 @@ import {
 import { SkeletonRows } from "@/components/shared/Skeleton";
 import { Link } from "@/components/shared/Link";
 import { RelativeTime } from "./RelativeTime";
-import { claimStatusBadgeVariant } from "./helpers";
+import { TxLink } from "@/components/runs/TxLink";
 import { navigate } from "@/hooks/useLocation";
 
 export interface RankingsTableProps {
@@ -28,7 +27,7 @@ export interface RankingsTableProps {
 }
 
 function displayName(entry: LeaderboardEntry): string {
-  return entry.profile?.username?.trim() || abbreviateAddress(entry.claimantAddress);
+  return entry.profile?.username?.trim() || abbreviateAddress(entry.playerAddress);
 }
 
 function RankBadge({ rank }: { rank: number }) {
@@ -56,14 +55,8 @@ function RankBadge({ rank }: { rank: number }) {
   return <span className="font-display tracking-wider">#{rank}</span>;
 }
 
-function ReplayRunButton({
-  proofJobId,
-  className,
-}: {
-  proofJobId: string | null;
-  className?: string;
-}) {
-  if (!proofJobId) {
+function ReplayRunButton({ runId, className }: { runId: string | null; className?: string }) {
+  if (!runId) {
     return null;
   }
 
@@ -76,7 +69,7 @@ function ReplayRunButton({
         "justify-center px-2.5 text-primary hover:bg-primary/10 hover:text-primary sm:px-3",
         className,
       )}
-      onClick={() => navigate(`/replay/${proofJobId}`)}
+      onClick={() => navigate(`/replay/${runId}`)}
       title="Replay this run"
     >
       <Play className="size-3.5" />
@@ -104,7 +97,7 @@ export function RankingsTable({ entries, highlightAddress, isLoading }: Rankings
             </TableHead>
             <TableHead scope="col">Seed</TableHead>
             <TableHead scope="col">Completed</TableHead>
-            <TableHead scope="col">Claim</TableHead>
+            <TableHead scope="col">Transaction</TableHead>
             <TableHead scope="col">
               <span className="sr-only">Replay</span>
             </TableHead>
@@ -134,7 +127,7 @@ export function RankingsTable({ entries, highlightAddress, isLoading }: Rankings
           </TableHead>
           <TableHead scope="col">Seed</TableHead>
           <TableHead scope="col">Completed</TableHead>
-          <TableHead scope="col">Claim</TableHead>
+          <TableHead scope="col">Transaction</TableHead>
           <TableHead scope="col">
             <span className="sr-only">Replay</span>
           </TableHead>
@@ -143,10 +136,9 @@ export function RankingsTable({ entries, highlightAddress, isLoading }: Rankings
       <TableBody>
         {entries.map((entry) => (
           <TableRow
-            key={entry.jobId}
-            className={cn(
-              highlightAddress === entry.claimantAddress && "!bg-[rgba(16,67,84,0.34)]",
-            )}
+            key={`${entry.playerAddress}:${entry.runId ?? entry.txHash ?? entry.rank}`}
+            className={cn(highlightAddress === entry.playerAddress && "!bg-[rgba(16,67,84,0.34)]")}
+            data-testid="leaderboard-row"
           >
             <TableCell>
               <RankBadge rank={entry.rank} />
@@ -154,12 +146,12 @@ export function RankingsTable({ entries, highlightAddress, isLoading }: Rankings
             <TableCell>
               <div className="grid gap-1">
                 <Link
-                  href={`/leaderboard/${entry.claimantAddress}`}
+                  href={`/leaderboard/${entry.playerAddress}`}
                   className="text-link no-underline hover:underline"
                 >
                   {displayName(entry)}
                 </Link>
-                <code className="text-text-soft">{abbreviateAddress(entry.claimantAddress)}</code>
+                <code className="text-text-soft">{abbreviateAddress(entry.playerAddress)}</code>
                 {entry.profile?.linkUrl && isSafeUrl(entry.profile.linkUrl) ? (
                   <a
                     href={entry.profile.linkUrl}
@@ -179,7 +171,7 @@ export function RankingsTable({ entries, highlightAddress, isLoading }: Rankings
               {formatMetric(entry.frameCount)}
             </TableCell>
             <TableCell className="text-right tabular-nums">
-              {formatMetric(entry.mintedDelta)}
+              {entry.minted !== null ? formatKalien(entry.minted) : "n/a"}
             </TableCell>
             <TableCell className="font-display tracking-[0.04em]">
               {formatHex32(entry.seed)}
@@ -187,13 +179,9 @@ export function RankingsTable({ entries, highlightAddress, isLoading }: Rankings
             <TableCell>
               <RelativeTime value={entry.completedAt} />
             </TableCell>
+            <TableCell>{entry.txHash ? <TxLink txHash={entry.txHash} /> : "n/a"}</TableCell>
             <TableCell>
-              <StatusBadge variant={claimStatusBadgeVariant(entry.claimStatus)}>
-                {entry.claimStatus}
-              </StatusBadge>
-            </TableCell>
-            <TableCell>
-              <ReplayRunButton proofJobId={entry.proofJobId} className="px-2" />
+              <ReplayRunButton runId={entry.runId} className="px-2" />
             </TableCell>
           </TableRow>
         ))}

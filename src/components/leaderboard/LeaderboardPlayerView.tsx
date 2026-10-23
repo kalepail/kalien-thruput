@@ -5,7 +5,7 @@ import { toNullableTrimmed } from "@/lib/validation";
 import {
   getLeaderboardPlayer,
   LeaderboardApiError,
-  type LeaderboardPlayerResponse,
+  type LeaderboardPlayer,
   updateLeaderboardProfile,
 } from "@/leaderboard/api";
 import { Card } from "@/components/ui/card";
@@ -19,25 +19,20 @@ import { RecentRunsTable } from "./RecentRunsTable";
 import { PageHero } from "@/components/shared/PageHero";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useWalletState } from "@/contexts/WalletContext";
-import { resolveSmartWalletSessionForClaimant } from "@/wallet/smartAccount";
 
 export interface LeaderboardPlayerViewProps {
   playerAddress: string;
 }
 
-function isSmartAccountContractAddress(address: string): boolean {
-  return address.trim().startsWith("C");
-}
-
 export function LeaderboardPlayerView({ playerAddress }: LeaderboardPlayerViewProps) {
   useDocumentTitle(`Player ${abbreviateAddress(playerAddress)}`, {
-    description: `View player profile, ranking history, and recent proved runs for ${abbreviateAddress(playerAddress)} on Kalien.`,
+    description: `View player profile, ranking history, and recent confirmed runs for ${abbreviateAddress(playerAddress)} on Kalien.`,
     path: `/leaderboard/${playerAddress}`,
   });
   const wallet = useWalletState();
   const [playerLoading, setPlayerLoading] = useState(false);
   const [playerError, setPlayerError] = useState<string | null>(null);
-  const [playerData, setPlayerData] = useState<LeaderboardPlayerResponse | null>(null);
+  const [playerData, setPlayerData] = useState<LeaderboardPlayer | null>(null);
   const [profileUsername, setProfileUsername] = useState("");
   const [profileLinkUrl, setProfileLinkUrl] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -69,8 +64,8 @@ export function LeaderboardPlayerView({ playerAddress }: LeaderboardPlayerViewPr
         if (cancelled) return;
         setPlayerData(response);
         if (!isPageChange) {
-          setProfileUsername(response.player.profile?.username ?? "");
-          setProfileLinkUrl(response.player.profile?.linkUrl ?? "");
+          setProfileUsername(response.profile?.username ?? "");
+          setProfileLinkUrl(response.profile?.linkUrl ?? "");
         }
       } catch (reason) {
         if (cancelled) return;
@@ -96,12 +91,10 @@ export function LeaderboardPlayerView({ playerAddress }: LeaderboardPlayerViewPr
   const saveProfile = useCallback(async () => {
     if (!playerData) return;
 
-    const claimantAddress = playerData.player.claimant_address;
-    if (!isSmartAccountContractAddress(claimantAddress)) {
+    const profileAddress = playerData.playerAddress;
+    if (wallet.address !== profileAddress) {
       setProfileSavedAt(null);
-      setProfileSaveError(
-        "profile edits are only supported for smart-account claimant contract addresses",
-      );
+      setProfileSaveError("only the player key for this address can edit the profile");
       return;
     }
 
@@ -110,25 +103,18 @@ export function LeaderboardPlayerView({ playerAddress }: LeaderboardPlayerViewPr
     setProfileSavedAt(null);
 
     try {
-      const walletSession = await resolveSmartWalletSessionForClaimant(claimantAddress);
       const updated = await updateLeaderboardProfile(
-        claimantAddress,
+        profileAddress,
         {
           username: toNullableTrimmed(profileUsername),
           linkUrl: toNullableTrimmed(profileLinkUrl),
         },
-        walletSession.credentialId,
+        { pubkeyHex: wallet.pubkeyHex, sign: wallet.sign },
       );
 
       setPlayerData((current) => {
         if (!current) return current;
-        return {
-          ...current,
-          player: {
-            ...current.player,
-            profile: updated.profile,
-          },
-        };
+        return { ...current, profile: updated.profile };
       });
       setProfileSavedAt(updated.profile.updatedAt);
     } catch (reason: unknown) {
@@ -140,16 +126,13 @@ export function LeaderboardPlayerView({ playerAddress }: LeaderboardPlayerViewPr
     } finally {
       setSavingProfile(false);
     }
-  }, [playerData, profileLinkUrl, profileUsername]);
-
-  const supportsProfileAuth =
-    playerData !== null && isSmartAccountContractAddress(playerData.player.claimant_address);
+  }, [playerData, profileLinkUrl, profileUsername, wallet.address, wallet.pubkeyHex, wallet.sign]);
 
   return (
     <>
       <PageHero
-        title={playerData?.player.profile?.username?.trim() || abbreviateAddress(playerAddress)}
-        subtitle="Profile, rankings, and recent proved runs."
+        title={playerData?.profile?.username?.trim() || abbreviateAddress(playerAddress)}
+        subtitle="Profile, rankings, and recent confirmed runs."
       >
         <Link
           className="inline-flex items-center gap-1.5 font-display text-sm uppercase tracking-wider text-link no-underline hover:underline"
@@ -175,11 +158,10 @@ export function LeaderboardPlayerView({ playerAddress }: LeaderboardPlayerViewPr
 
       {playerData ? (
         <>
-          <PlayerCard player={playerData.player} />
+          <PlayerCard player={playerData} />
 
-          {wallet.address === playerData.player.claimant_address && (
+          {wallet.address === playerData.playerAddress && (
             <EditProfile
-              claimantAddress={playerData.player.claimant_address}
               username={profileUsername}
               linkUrl={profileLinkUrl}
               onUsernameChange={setProfileUsername}
@@ -188,13 +170,12 @@ export function LeaderboardPlayerView({ playerAddress }: LeaderboardPlayerViewPr
               isSaving={savingProfile}
               saveError={profileSaveError}
               savedAt={profileSavedAt}
-              supported={supportsProfileAuth}
             />
           )}
 
           <RecentRunsTable
-            runs={playerData.player.recent_runs}
-            pagination={playerData.player.runs_pagination}
+            runs={playerData.recentRuns}
+            pagination={playerData.runsPagination}
             offset={runsOffset}
             onOffsetChange={setRunsOffset}
             isLoading={runsLoading}

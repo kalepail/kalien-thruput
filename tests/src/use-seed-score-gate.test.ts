@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { commitFetchedSeedScore } from "../../src/hooks/useEndlessSeedScoreGate";
+import { commitFetchedSeedScore } from "../../src/hooks/useSeedScoreGate";
 
 type SessionStorageLike = {
   getItem(key: string): string | null;
@@ -34,7 +34,7 @@ afterEach(() => {
 
 describe("commitFetchedSeedScore", () => {
   it("preserves cached seed best when the contract read fails", () => {
-    const storageKey = "kalien:endless-seed-best:test";
+    const storageKey = "kalien:seed-best:test";
     (globalThis as Record<string, unknown>).window = makeWindow({
       [storageKey]: JSON.stringify({ "7": 120 }),
     });
@@ -51,7 +51,7 @@ describe("commitFetchedSeedScore", () => {
   });
 
   it("stores the refreshed on-chain best when the read succeeds", () => {
-    const storageKey = "kalien:endless-seed-best:test";
+    const storageKey = "kalien:seed-best:test";
     (globalThis as Record<string, unknown>).window = makeWindow();
 
     const cache = new Map<number, number>();

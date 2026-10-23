@@ -28,9 +28,13 @@ export function useLocation(): string {
   return useSyncExternalStore(subscribe, getSnapshot);
 }
 
-export function navigate(to: string) {
+export function navigate(to: string, options?: { replace?: boolean }) {
   if (to !== window.location.pathname + window.location.search) {
-    window.history.pushState(null, "", to);
+    if (options?.replace) {
+      window.history.replaceState(null, "", to);
+    } else {
+      window.history.pushState(null, "", to);
+    }
     window.dispatchEvent(new PopStateEvent("popstate"));
   }
 }

@@ -1,320 +1,297 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Loader2 from "lucide-react/dist/esm/icons/loader-2";
-import Send from "lucide-react/dist/esm/icons/send";
-import ArrowDownUp from "lucide-react/dist/esm/icons/arrow-down-up";
-import Coins from "lucide-react/dist/esm/icons/coins";
+import { useCallback, useEffect, useRef, useState } from "react";
+import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle";
 import Check from "lucide-react/dist/esm/icons/check";
+import Coins from "lucide-react/dist/esm/icons/coins";
 import Copy from "lucide-react/dist/esm/icons/copy";
+import Download from "lucide-react/dist/esm/icons/download";
+import Eye from "lucide-react/dist/esm/icons/eye";
+import EyeOff from "lucide-react/dist/esm/icons/eye-off";
+import KeyRound from "lucide-react/dist/esm/icons/key-round";
+import Loader2 from "lucide-react/dist/esm/icons/loader-2";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Upload from "lucide-react/dist/esm/icons/upload";
 import { useBalanceState, useWalletState } from "@/contexts/WalletContext";
 import { PageShell } from "@/components/shared/PageShell";
 import { PageHero } from "@/components/shared/PageHero";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { Link } from "@/components/shared/Link";
+import { AddressExplorerLink } from "@/components/runs/TxLink";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
-import { abbreviateAddress, KALIEN_SCALE, formatWholeNumber } from "@/lib/format";
-import { getSmartAccountKit } from "@/wallet/smartAccount";
-import { readTokenBalance } from "@/chain/token";
-import { getSwapConfig, getSwapQuote, executeSwap, type SwapQuote } from "@/chain/swap";
 
-const KALE_SCALE = 10_000_000n;
+const sectionTitle =
+  "m-0 font-display text-sm tracking-[0.08em] uppercase text-[rgba(176,219,255,0.95)]";
+const fieldLabel = "font-display text-[0.7rem] uppercase tracking-[0.06em] text-muted-foreground";
 
-function formatKaleAmount(raw: bigint): string {
-  const whole = raw / KALE_SCALE;
-  const frac = raw % KALE_SCALE;
-  if (frac === 0n) return formatWholeNumber(whole);
-  const fracStr = (frac < 0n ? -frac : frac).toString().padStart(7, "0").replace(/0+$/, "");
-  return `${formatWholeNumber(whole)}.${fracStr}`;
+function useCopied(): [boolean, (text: string) => void] {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+  const copy = useCallback((text: string) => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => setCopied(false), 2000);
+      return undefined;
+    });
+  }, []);
+  return [copied, copy];
+}
+
+function Warning({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex gap-2 rounded-lg border border-warning/40 bg-[rgba(42,22,15,0.42)] px-3 py-2 text-sm text-warning">
+      <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <div className="grid gap-1">{children}</div>
+    </div>
+  );
+}
+
+function BackupCard() {
+  const wallet = useWalletState();
+  const [revealed, setRevealed] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, copy] = useCopied();
+
+  // Hide the secret again when the key changes.
+  useEffect(() => {
+    setRevealed(null);
+  }, [wallet.address]);
+
+  const reveal = useCallback(async () => {
+    setError(null);
+    try {
+      setRevealed(await wallet.exportBackupString());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "failed to export key");
+    }
+  }, [wallet]);
+
+  const download = useCallback(async () => {
+    setError(null);
+    try {
+      const file = await wallet.exportBackupFile();
+      const blob = new Blob([`${JSON.stringify(file, null, 2)}\n`], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `kalien-key-${wallet.address.slice(2, 10)}.json`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "failed to export key");
+    }
+  }, [wallet]);
+
+  return (
+    <Card className="animate-rise">
+      <div className="grid gap-4 p-4">
+        <h2 className={sectionTitle}>Back Up Your Key</h2>
+        <p className="m-0 text-sm text-text-soft">
+          Your player key lives only in this browser. Back it up to keep your scores and KALIEN if
+          you clear browser data or switch devices.
+        </p>
+        <Warning>
+          <p className="m-0">
+            The backup is your secret key. Anyone who has it can submit runs as you.
+          </p>
+          <p className="m-0">Do not share it. Store it somewhere safe.</p>
+        </Warning>
+
+        {revealed ? (
+          <div className="grid gap-2">
+            <label htmlFor="backup-string" className={fieldLabel}>
+              Backup string
+            </label>
+            <textarea
+              id="backup-string"
+              readOnly
+              value={revealed}
+              rows={3}
+              data-testid="backup-string"
+              className="w-full resize-none rounded-md border border-border/40 bg-surface-dim px-3 py-2 font-mono text-xs break-all text-card-foreground focus:border-primary/60 focus:outline-none"
+              onFocus={(event) => event.currentTarget.select()}
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button variant="active" size="sm" onClick={() => copy(revealed)}>
+                {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                {copied ? "Copied" : "Copy Backup"}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setRevealed(null)}>
+                <EyeOff className="size-3.5" />
+                Hide
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="active" size="sm" onClick={() => void reveal()}>
+              <Eye className="size-3.5" />
+              Show Backup String
+            </Button>
+            <Button variant="space" size="sm" onClick={() => void download()}>
+              <Download className="size-3.5" />
+              Download Backup File
+            </Button>
+          </div>
+        )}
+        <ErrorMessage message={error} />
+      </div>
+    </Card>
+  );
+}
+
+function ImportCard() {
+  const wallet = useWalletState();
+  const [input, setInput] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [imported, setImported] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onFile = useCallback(async (file: File | undefined) => {
+    if (!file) return;
+    setInput((await file.text()).trim());
+    setImported(false);
+  }, []);
+
+  const onImport = useCallback(async () => {
+    setImported(false);
+    const ok = await wallet.importBackup(input);
+    if (ok) {
+      setImported(true);
+      setInput("");
+      setConfirmed(false);
+    }
+  }, [input, wallet]);
+
+  const busy = wallet.action === "importing";
+
+  return (
+    <Card className="animate-rise">
+      <form
+        className="grid gap-4 p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void onImport();
+        }}
+      >
+        <h2 className={sectionTitle}>Import a Key</h2>
+        <p className="m-0 text-sm text-text-soft">
+          Paste a backup string or choose a backup file from another browser.
+        </p>
+        <Warning>
+          <p className="m-0">
+            Importing replaces the key in this browser. Back up the current key first if it has
+            scores or KALIEN you want to keep.
+          </p>
+        </Warning>
+        <div className="grid gap-1.5">
+          <label htmlFor="import-backup" className={fieldLabel}>
+            Backup
+          </label>
+          <textarea
+            id="import-backup"
+            value={input}
+            rows={3}
+            placeholder="kalien-key-v1:..."
+            data-testid="import-backup"
+            onChange={(event) => {
+              setInput(event.target.value);
+              setImported(false);
+            }}
+            disabled={busy}
+            className="w-full resize-none rounded-md border border-border/40 bg-surface-dim px-3 py-2 font-mono text-xs break-all text-card-foreground focus:border-primary/60 focus:outline-none disabled:opacity-50"
+          />
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json,.txt,application/json,text/plain"
+            className="hidden"
+            data-testid="import-file"
+            onChange={(event) => void onFile(event.target.files?.[0])}
+          />
+        </div>
+        <label className="flex items-start gap-2 text-sm text-text-soft">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(event) => setConfirmed(event.target.checked)}
+            className="mt-1"
+            data-testid="import-confirm"
+          />
+          I backed up my current key, or I do not need it.
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="submit"
+            variant="active"
+            size="sm"
+            disabled={busy || !confirmed || input.trim().length === 0}
+          >
+            {busy ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <KeyRound className="size-3.5" />
+            )}
+            Import Key
+          </Button>
+          <Button
+            type="button"
+            variant="space"
+            size="sm"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+          >
+            <Upload className="size-3.5" />
+            Choose File
+          </Button>
+        </div>
+        {imported && <p className="m-0 text-sm text-secondary">Key imported.</p>}
+        <ErrorMessage message={wallet.action === "idle" ? wallet.error : null} />
+      </form>
+    </Card>
+  );
 }
 
 export function WalletPage() {
   useDocumentTitle("Wallet", {
-    description: "Transfer and swap KALIEN tokens.",
+    description: "Your Kalien player key, KALIEN balance, and key backup.",
     path: "/wallet",
   });
 
   const wallet = useWalletState();
   const balance = useBalanceState();
-
-  // ── Transfer state ──
-  const [transferToken, setTransferToken] = useState<"KALIEN" | "KALE">("KALIEN");
-  const [recipient, setRecipient] = useState("");
-  const [amount, setAmount] = useState("");
-  const [transferring, setTransferring] = useState(false);
-  const [transferError, setTransferError] = useState<string | null>(null);
-  const [transferSuccess, setTransferSuccess] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  // ── Swap config (null when network/token not ready) ──
-  const swapCfg = useMemo(() => getSwapConfig(balance.tokenContractId), [balance.tokenContractId]);
-
-  // ── KALE balance (only when swap config is available) ──
-  const [kaleBalance, setKaleBalance] = useState<bigint | null>(null);
-  const kaleBalanceRequestId = useRef(0);
-
-  const refreshKaleBalance = useCallback(async () => {
-    const requestId = ++kaleBalanceRequestId.current;
-    if (!swapCfg || !wallet.address) {
-      setKaleBalance(null);
-      return;
-    }
-    try {
-      const result = await readTokenBalance({
-        walletAddress: wallet.address,
-        tokenContractId: swapCfg.kaleSac,
-      });
-      if (requestId === kaleBalanceRequestId.current) {
-        setKaleBalance(result.balance);
-      }
-    } catch {
-      if (requestId === kaleBalanceRequestId.current) {
-        setKaleBalance(null);
-      }
-    }
-  }, [swapCfg, wallet.address]);
-
-  useEffect(() => {
-    void refreshKaleBalance();
-  }, [refreshKaleBalance]);
-
-  // ── Swap state ──
-  const [swapAmount, setSwapAmount] = useState("");
-  const [quote, setQuote] = useState<SwapQuote | null>(null);
-  const [quoteLoading, setQuoteLoading] = useState(false);
-  const [quoteError, setQuoteError] = useState<string | null>(null);
-  const [swapping, setSwapping] = useState(false);
-  const [swapError, setSwapError] = useState<string | null>(null);
-  const [swapSuccess, setSwapSuccess] = useState(false);
-  const quoteRequestId = useRef(0);
-
-  // ── Debounced quote fetch ──
-  const fetchQuote = useCallback(
-    (rawAmount: string) => {
-      const requestId = ++quoteRequestId.current;
-      setQuote(null);
-      setQuoteError(null);
-
-      if (!swapCfg) {
-        setQuoteLoading(false);
-        return;
-      }
-
-      const parsed = Number(rawAmount);
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        setQuoteLoading(false);
-        return;
-      }
-
-      const amountIn = BigInt(Math.floor(parsed * Number(KALIEN_SCALE)));
-      if (amountIn <= 0n) {
-        setQuoteLoading(false);
-        return;
-      }
-
-      setQuoteLoading(true);
-
-      const cfg = swapCfg;
-      void (async () => {
-        try {
-          const result = await getSwapQuote(cfg, amountIn);
-          if (requestId !== quoteRequestId.current) return;
-          setQuote(result);
-          setQuoteError(null);
-        } catch (err) {
-          if (requestId !== quoteRequestId.current) return;
-          setQuoteError(err instanceof Error ? err.message : "Failed to get quote");
-        } finally {
-          if (requestId === quoteRequestId.current) {
-            setQuoteLoading(false);
-          }
-        }
-      })();
-    },
-    [swapCfg],
-  );
-
-  const debounceRef = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    clearTimeout(debounceRef.current);
-    if (!swapAmount.trim()) {
-      quoteRequestId.current += 1;
-      setQuote(null);
-      setQuoteError(null);
-      setQuoteLoading(false);
-      return;
-    }
-    setQuoteLoading(true);
-    debounceRef.current = window.setTimeout(() => fetchQuote(swapAmount), 600);
-    return () => clearTimeout(debounceRef.current);
-  }, [swapAmount, fetchQuote]);
-
-  // ── Transfer handler ──
-  async function handleTransfer(e: React.FormEvent) {
-    e.preventDefault();
-    if (!wallet.session) return;
-
-    const isKale = transferToken === "KALE";
-    const tokenId = isKale ? swapCfg?.kaleSac : balance.tokenContractId;
-    if (!tokenId) return;
-
-    const trimmedRecipient = recipient.trim();
-    if (!trimmedRecipient) {
-      setTransferError("Enter a recipient address");
-      return;
-    }
-    if (!trimmedRecipient.startsWith("G") && !trimmedRecipient.startsWith("C")) {
-      setTransferError("Address must start with G (account) or C (contract)");
-      return;
-    }
-    if (trimmedRecipient.length !== 56) {
-      setTransferError("Address must be 56 characters");
-      return;
-    }
-
-    const parsedAmount = Number(amount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setTransferError("Enter a valid amount");
-      return;
-    }
-
-    const currentBalance = isKale ? kaleBalance : balance.balance;
-    if (
-      currentBalance !== null &&
-      BigInt(Math.floor(parsedAmount * Number(KALE_SCALE))) > currentBalance
-    ) {
-      setTransferError(`Insufficient ${transferToken} balance`);
-      return;
-    }
-
-    setTransferring(true);
-    setTransferError(null);
-    setTransferSuccess(false);
-
-    try {
-      const kit = getSmartAccountKit();
-
-      const result = await kit.transfer(tokenId, trimmedRecipient, parsedAmount, {
-        credentialId: wallet.session.credentialId,
-        forceMethod: "relayer",
-      });
-
-      if (!result.success) {
-        throw new Error(result.error ?? "Transfer failed");
-      }
-
-      setTransferSuccess(true);
-      setAmount("");
-      setRecipient("");
-      void balance.refresh();
-      void refreshKaleBalance();
-    } catch (err) {
-      setTransferError(err instanceof Error ? err.message : "Transfer failed");
-    } finally {
-      setTransferring(false);
-    }
-  }
-
-  // ── Swap handler ──
-  async function handleSwap(e: React.FormEvent) {
-    e.preventDefault();
-    if (!wallet.session || !quote) return;
-
-    const parsedAmount = Number(swapAmount);
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setSwapError("Enter a valid amount");
-      return;
-    }
-
-    if (
-      balance.balance !== null &&
-      BigInt(Math.floor(parsedAmount * Number(KALIEN_SCALE))) > balance.balance
-    ) {
-      setSwapError("Insufficient KALIEN balance");
-      return;
-    }
-
-    setSwapping(true);
-    setSwapError(null);
-    setSwapSuccess(false);
-
-    try {
-      const activeSwapCfg = swapCfg;
-      if (!activeSwapCfg) {
-        throw new Error("Swap is not configured");
-      }
-
-      await executeSwap(
-        activeSwapCfg,
-        quote.amountIn,
-        quote.minAmountOut,
-        wallet.address,
-        wallet.session.credentialId,
-      );
-
-      setSwapSuccess(true);
-      setSwapAmount("");
-      setQuote(null);
-      void balance.refresh();
-      void refreshKaleBalance();
-    } catch (err) {
-      setSwapError(err instanceof Error ? err.message : "Swap failed");
-    } finally {
-      setSwapping(false);
-    }
-  }
-
-  function copyAddress() {
-    void navigator.clipboard.writeText(wallet.address).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-      return undefined;
-    });
-  }
+  const [copied, copy] = useCopied();
 
   return (
     <PageShell glow className="content-start">
-      <PageHero title="Wallet" subtitle="Manage and swap your KALIEN tokens." />
+      <PageHero title="Wallet" subtitle="Your player key and KALIEN on the Thruput devnet." />
 
-      {/* Not connected */}
-      {!wallet.isConnected && !wallet.isBusy && (
+      {!wallet.isConnected && (
         <Card className="animate-rise">
-          <div className="grid justify-items-center gap-3 py-8 text-center">
-            <p className="m-0 text-text-soft">Connect your wallet to manage your tokens.</p>
-            <Button variant="active" asChild>
-              <Link href="/" className="no-underline">
-                Go Play
-              </Link>
-            </Button>
-          </div>
+          <p className="m-0 text-center text-muted-foreground">
+            {wallet.action === "restoring" ? "Loading your player key…" : wallet.error}
+          </p>
         </Card>
       )}
 
-      {/* Restoring */}
-      {wallet.isBusy && (
-        <Card className="animate-rise">
-          <p className="m-0 text-center text-muted-foreground">Restoring wallet session…</p>
-        </Card>
-      )}
-
-      {/* Connected */}
       {wallet.isConnected && (
         <div className="grid gap-4">
-          {/* Account overview */}
           <Card className="animate-rise">
             <div className="grid gap-3 p-4">
               <div>
-                <p className="m-0 font-display text-[0.65rem] uppercase tracking-[0.06em] text-muted-foreground">
-                  Account
-                </p>
+                <p className={fieldLabel}>Address</p>
                 <button
-                  onClick={copyAddress}
+                  onClick={() => copy(wallet.address)}
                   className="mt-0.5 flex w-full cursor-pointer items-center gap-1.5 rounded bg-transparent p-0 text-left transition-colors hover:text-primary"
                   title="Copy address"
                 >
-                  <span className="min-w-0 flex-1 font-mono text-sm text-card-foreground break-all">
-                    {abbreviateAddress(wallet.address)}
+                  <span
+                    className="min-w-0 flex-1 font-mono text-sm break-all text-card-foreground"
+                    data-testid="wallet-address"
+                  >
+                    {wallet.address}
                   </span>
                   {copied ? (
                     <Check className="size-3.5 shrink-0 text-secondary" aria-hidden="true" />
@@ -322,211 +299,49 @@ export function WalletPage() {
                     <Copy className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
                   )}
                 </button>
+                <div className="mt-1 flex flex-wrap gap-3 text-xs">
+                  <AddressExplorerLink address={wallet.address}>
+                    View on explorer
+                  </AddressExplorerLink>
+                  <Link href={`/leaderboard/${wallet.address}`} className="text-link">
+                    Player page
+                  </Link>
+                </div>
               </div>
-              <div className="grid gap-2">
-                <p className="m-0 font-display text-[0.65rem] uppercase tracking-[0.06em] text-muted-foreground">
-                  Balances
-                </p>
-                <p className="m-0 flex items-center gap-1.5 text-lg font-display tracking-wide text-card-foreground">
-                  <Coins className="size-4 text-secondary" aria-hidden="true" />
-                  {balance.formattedBalance}
-                </p>
-                {swapCfg && (
-                  <p className="m-0 flex items-center gap-1.5 text-lg font-display tracking-wide text-card-foreground">
-                    <Coins className="size-4 text-primary" aria-hidden="true" />
-                    {kaleBalance === null ? "—" : `${formatKaleAmount(kaleBalance)} KALE`}
+              <div className="grid gap-1">
+                <p className={fieldLabel}>Balance</p>
+                <div className="flex items-center gap-2">
+                  <p
+                    className="m-0 flex items-center gap-1.5 font-display text-lg tracking-wide text-card-foreground"
+                    data-testid="wallet-balance"
+                  >
+                    <Coins className="size-4 text-secondary" aria-hidden="true" />
+                    {balance.formattedBalance}
                   </p>
-                )}
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => void balance.refresh()}
+                    disabled={balance.isRefreshing}
+                    aria-label="Refresh balance"
+                  >
+                    <RefreshCw
+                      className={balance.isRefreshing ? "size-3 animate-spin" : "size-3"}
+                    />
+                  </Button>
+                </div>
+                <ErrorMessage message={balance.error} severity="warning" className="text-xs" />
               </div>
+              <p className="m-0 text-xs text-text-soft">
+                You earn KALIEN when you beat your best score on a seed. A relay pays the network
+                costs, so you never need HOG.
+              </p>
             </div>
           </Card>
 
-          {/* Swap + Transfer side-by-side on large screens */}
           <div className="grid gap-4 lg:grid-cols-2">
-            {/* Swap form (only when swap config is available) */}
-            {swapCfg && (
-              <Card className="animate-rise">
-                <form onSubmit={handleSwap} className="grid gap-4 p-4">
-                  <h2 className="m-0 font-display text-sm tracking-[0.08em] uppercase text-[rgba(176,219,255,0.95)]">
-                    Swap KALIEN → KALE
-                  </h2>
-
-                  <div className="grid gap-1.5">
-                    <label
-                      htmlFor="swap-amount"
-                      className="font-display text-[0.7rem] uppercase tracking-[0.06em] text-muted-foreground"
-                    >
-                      KALIEN to swap
-                    </label>
-                    <Input
-                      id="swap-amount"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={swapAmount}
-                      onChange={(e) => {
-                        setSwapAmount(e.target.value);
-                        setSwapError(null);
-                        setSwapSuccess(false);
-                      }}
-                      disabled={swapping}
-                    />
-                  </div>
-
-                  {/* Quote display */}
-                  {quoteLoading && (
-                    <p className="m-0 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Loader2 className="size-3 animate-spin" aria-hidden="true" />
-                      Getting quote…
-                    </p>
-                  )}
-
-                  {quote && !quoteLoading && (
-                    <div className="rounded-md border border-border/30 bg-[rgba(13,22,40,0.4)] px-3 py-2.5 text-sm">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-muted-foreground">You receive</span>
-                        <span className="font-display tracking-wide text-card-foreground">
-                          ~{formatKaleAmount(quote.amountOut)} KALE
-                        </span>
-                      </div>
-                      <div className="mt-1 flex items-baseline justify-between gap-2 text-xs">
-                        <span className="text-muted-foreground">Minimum (3% slippage)</span>
-                        <span className="text-muted-foreground">
-                          {formatKaleAmount(quote.minAmountOut)} KALE
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <ErrorMessage message={quoteError} />
-                  <ErrorMessage message={swapError} />
-
-                  {swapSuccess && <p className="m-0 text-sm text-secondary">Swap successful!</p>}
-
-                  <Button
-                    type="submit"
-                    variant="active"
-                    disabled={swapping || !quote || quoteLoading}
-                  >
-                    {swapping ? (
-                      <>
-                        <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                        Swapping...
-                      </>
-                    ) : (
-                      <>
-                        <ArrowDownUp className="size-3.5" aria-hidden="true" />
-                        Swap
-                      </>
-                    )}
-                  </Button>
-                </form>
-              </Card>
-            )}
-
-            {/* Transfer form */}
-            <Card className="animate-rise">
-              <form onSubmit={handleTransfer} className="grid gap-4 p-4">
-                <h2 className="m-0 font-display text-sm tracking-[0.08em] uppercase text-[rgba(176,219,255,0.95)]">
-                  Transfer
-                </h2>
-
-                {/* Token selector */}
-                <div className="grid gap-1.5">
-                  <label
-                    htmlFor="transfer-token"
-                    className="font-display text-[0.7rem] uppercase tracking-[0.06em] text-muted-foreground"
-                  >
-                    Token
-                  </label>
-                  <select
-                    id="transfer-token"
-                    value={transferToken}
-                    onChange={(e) => {
-                      setTransferToken(e.target.value as "KALIEN" | "KALE");
-                      setTransferError(null);
-                      setTransferSuccess(false);
-                    }}
-                    disabled={transferring}
-                    className="h-10 rounded-md border border-border/40 bg-surface-dim px-3 font-display text-sm tracking-wide text-card-foreground transition-colors focus:border-primary/60 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="KALIEN">KALIEN</option>
-                    {swapCfg && <option value="KALE">KALE</option>}
-                  </select>
-                </div>
-
-                <div className="grid gap-1.5">
-                  <label
-                    htmlFor="recipient"
-                    className="font-display text-[0.7rem] uppercase tracking-[0.06em] text-muted-foreground"
-                  >
-                    Recipient Address
-                  </label>
-                  <Input
-                    id="recipient"
-                    type="text"
-                    placeholder="G... or C..."
-                    value={recipient}
-                    onChange={(e) => {
-                      setRecipient(e.target.value);
-                      setTransferError(null);
-                      setTransferSuccess(false);
-                    }}
-                    disabled={transferring}
-                    className="font-mono text-xs"
-                  />
-                </div>
-
-                <div className="grid gap-1.5">
-                  <label
-                    htmlFor="transfer-amount"
-                    className="font-display text-[0.7rem] uppercase tracking-[0.06em] text-muted-foreground"
-                  >
-                    Amount
-                  </label>
-                  <Input
-                    id="transfer-amount"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="0"
-                    value={amount}
-                    onChange={(e) => {
-                      setAmount(e.target.value);
-                      setTransferError(null);
-                      setTransferSuccess(false);
-                    }}
-                    disabled={transferring}
-                  />
-                </div>
-
-                <ErrorMessage message={transferError} />
-
-                {transferSuccess && (
-                  <p className="m-0 text-sm text-secondary">Transfer successful!</p>
-                )}
-
-                <Button
-                  type="submit"
-                  variant="active"
-                  disabled={
-                    transferring ||
-                    (transferToken === "KALIEN" ? !balance.tokenContractId : !swapCfg?.kaleSac)
-                  }
-                >
-                  {transferring ? (
-                    <>
-                      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
-                      Sending...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="size-3.5" aria-hidden="true" />
-                      Send {transferToken}
-                    </>
-                  )}
-                </Button>
-              </form>
-            </Card>
+            <BackupCard />
+            <ImportCard />
           </div>
         </div>
       )}

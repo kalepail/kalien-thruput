@@ -1,205 +1,165 @@
-import { useCallback, useEffect, useState } from "react";
-import type { SmartAccountConfig, SmartWalletSession } from "../wallet/smartAccount";
-import { TESTNET_NETWORK_PASSPHRASE } from "../consts";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  WALLET_STORAGE_KEY,
+  clearStoredWallet,
+  encodeBackupFile,
+  encodeBackupString,
+  generateStoredWallet,
+  loadOrCreateStoredWallet,
+  parseBackup,
+  readStoredWallet,
+  walletFromSecret,
+  writeStoredWallet,
+  type KeyWallet,
+  type StoredWallet,
+  type WalletBackupFile,
+} from "../wallet/keyWallet";
 
-export type WalletAction = "idle" | "restoring" | "connecting" | "creating" | "disconnecting";
+export type WalletAction = "idle" | "restoring" | "importing" | "resetting";
 
 export interface UseWalletReturn {
-  session: SmartWalletSession | null;
+  /** The active key, or null while it loads. */
+  wallet: KeyWallet | null;
   isConnected: boolean;
   isBusy: boolean;
   action: WalletAction;
   error: string | null;
+  /** True when the key lives only in memory because storage is blocked. */
+  isEphemeral: boolean;
   address: string;
-  networkPassphrase: string;
-  userName: string;
-  setUserName: (name: string) => void;
-  connect: () => Promise<void>;
-  create: () => Promise<void>;
-  disconnect: () => Promise<void>;
+  pubkeyHex: string;
+  sign: (message: Uint8Array) => Promise<Uint8Array>;
+  exportBackupString: () => Promise<string>;
+  exportBackupFile: () => Promise<WalletBackupFile>;
+  importBackup: (input: string) => Promise<boolean>;
+  resetKey: () => Promise<boolean>;
   clearError: () => void;
 }
 
-interface CachedWalletState {
-  networkPassphrase: string;
-  session: SmartWalletSession | null;
+interface WalletState {
+  stored: StoredWallet | null;
+  ephemeral: boolean;
 }
 
-type SmartWalletModule = typeof import("../wallet/smartAccount");
-
-let cachedWalletState: CachedWalletState | null = null;
-let restoreWalletStatePromise: Promise<CachedWalletState> | null = null;
-let smartWalletModulePromise: Promise<SmartWalletModule> | null = null;
-
-function loadSmartWalletModule(): Promise<SmartWalletModule> {
-  if (!smartWalletModulePromise) {
-    smartWalletModulePromise = import("../wallet/smartAccount");
+function initialState(): WalletState {
+  try {
+    return { stored: loadOrCreateStoredWallet(), ephemeral: false };
+  } catch {
+    // Storage is blocked (private mode, disabled cookies). Keep a key for this tab only.
+    return { stored: generateStoredWallet(), ephemeral: true };
   }
-
-  return smartWalletModulePromise;
-}
-
-function setCachedWalletState(nextState: CachedWalletState): void {
-  cachedWalletState = nextState;
-  restoreWalletStatePromise = Promise.resolve(nextState);
-}
-
-async function restoreWalletState(): Promise<CachedWalletState> {
-  if (cachedWalletState) {
-    return cachedWalletState;
-  }
-
-  if (!restoreWalletStatePromise) {
-    restoreWalletStatePromise = (async () => {
-      const walletModule = await loadSmartWalletModule();
-      const nextConfig = walletModule.getSmartAccountConfig();
-      const session = await walletModule.restoreSmartWalletSession();
-      const restoredState = {
-        networkPassphrase: nextConfig.networkPassphrase,
-        session,
-      };
-      cachedWalletState = restoredState;
-      return restoredState;
-    })().catch((error) => {
-      restoreWalletStatePromise = null;
-      throw error;
-    });
-  }
-
-  return restoreWalletStatePromise;
 }
 
 export function useWallet(): UseWalletReturn {
-  const [session, setSession] = useState<SmartWalletSession | null>(null);
-  const [action, setAction] = useState<WalletAction>("idle");
-  const [userName, setUserName] = useState("");
+  const [state, setState] = useState<WalletState>({ stored: null, ephemeral: false });
+  const [action, setAction] = useState<WalletAction>("restoring");
   const [error, setError] = useState<string | null>(null);
-  const [config, setConfig] = useState<Pick<SmartAccountConfig, "networkPassphrase">>({
-    networkPassphrase: TESTNET_NETWORK_PASSPHRASE,
-  });
 
-  const address = session?.contractId ?? "";
-  const isConnected = address.trim().length > 0;
-  const isBusy = action !== "idle";
+  // Load or make the key on first visit. One tap later is enough to play and submit.
+  useEffect(() => {
+    const next = initialState();
+    setState(next);
+    if (next.ephemeral) {
+      setError("browser storage is blocked; this key will be lost when the tab closes");
+    }
+    setAction("idle");
+  }, []);
 
-  const withWalletAction = useCallback(
-    async (
-      actionName: Exclude<WalletAction, "idle" | "restoring">,
-      fallbackMsg: string,
-      perform: (walletModule: SmartWalletModule) => Promise<void>,
-    ) => {
-      setAction(actionName);
-      setError(null);
-
-      try {
-        const walletModule = await loadSmartWalletModule();
-        const nextConfig = walletModule.getSmartAccountConfig();
-        setConfig({ networkPassphrase: nextConfig.networkPassphrase });
-        await perform(walletModule);
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : fallbackMsg;
-        setError(detail);
-      } finally {
-        setAction("idle");
+  // Follow key changes made in another tab.
+  useEffect(() => {
+    const handler = (event: StorageEvent) => {
+      if (event.key !== WALLET_STORAGE_KEY) {
+        return;
       }
+      const stored = readStoredWallet();
+      if (stored) {
+        setState({ stored, ephemeral: false });
+      }
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+
+  const wallet = useMemo(
+    () => (state.stored ? walletFromSecret(state.stored.secretKey, state.stored.createdAt) : null),
+    [state.stored],
+  );
+
+  const sign = useCallback(
+    async (message: Uint8Array) => {
+      if (!wallet) {
+        throw new Error("the player key is not ready yet");
+      }
+      return wallet.sign(message);
     },
-    [],
+    [wallet],
   );
 
-  const connect = useCallback(
-    () =>
-      withWalletAction("connecting", "failed to connect wallet", async (walletModule) => {
-        const nextSession = await walletModule.connectSmartWallet();
-        const nextConfig = walletModule.getSmartAccountConfig();
-        setCachedWalletState({
-          networkPassphrase: nextConfig.networkPassphrase,
-          session: nextSession,
-        });
-        setSession(nextSession);
-      }),
-    [withWalletAction],
-  );
+  const exportBackupString = useCallback(async () => {
+    if (!state.stored) {
+      throw new Error("the player key is not ready yet");
+    }
+    return encodeBackupString(state.stored);
+  }, [state.stored]);
 
-  const create = useCallback(
-    () =>
-      withWalletAction("creating", "failed to create wallet", async (walletModule) => {
-        const nextSession = await walletModule.createSmartWallet(userName);
-        const nextConfig = walletModule.getSmartAccountConfig();
-        setCachedWalletState({
-          networkPassphrase: nextConfig.networkPassphrase,
-          session: nextSession,
-        });
-        setSession(nextSession);
-      }),
-    [withWalletAction, userName],
-  );
+  const exportBackupFile = useCallback(async () => {
+    if (!state.stored) {
+      throw new Error("the player key is not ready yet");
+    }
+    return encodeBackupFile(state.stored);
+  }, [state.stored]);
 
-  const disconnect = useCallback(
-    () =>
-      withWalletAction("disconnecting", "failed to disconnect wallet", async (walletModule) => {
-        await walletModule.disconnectSmartWallet();
-        const nextConfig = walletModule.getSmartAccountConfig();
-        setCachedWalletState({
-          networkPassphrase: nextConfig.networkPassphrase,
-          session: null,
-        });
-        setSession(null);
-      }),
-    [withWalletAction],
-  );
+  const importBackup = useCallback(async (input: string) => {
+    setAction("importing");
+    setError(null);
+    try {
+      const stored = await parseBackup(input);
+      writeStoredWallet(stored);
+      setState({ stored, ephemeral: false });
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "failed to import key");
+      return false;
+    } finally {
+      setAction("idle");
+    }
+  }, []);
+
+  const resetKey = useCallback(async () => {
+    setAction("resetting");
+    setError(null);
+    try {
+      clearStoredWallet();
+      const stored = generateStoredWallet();
+      writeStoredWallet(stored);
+      setState({ stored, ephemeral: false });
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "failed to make a new key");
+      return false;
+    } finally {
+      setAction("idle");
+    }
+  }, []);
 
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  // Restore session on mount
-  useEffect(() => {
-    let cancelled = false;
-
-    const restore = async () => {
-      setAction("restoring");
-      setError(null);
-
-      try {
-        const restoredState = await restoreWalletState();
-        if (cancelled) {
-          return;
-        }
-        setConfig({ networkPassphrase: restoredState.networkPassphrase });
-        setSession(restoredState.session);
-      } catch (err) {
-        if (cancelled) {
-          return;
-        }
-        const detail = err instanceof Error ? err.message : "failed to restore wallet session";
-        setError(detail);
-      } finally {
-        if (!cancelled) {
-          setAction("idle");
-        }
-      }
-    };
-
-    void restore();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   return {
-    session,
-    isConnected,
-    isBusy,
+    wallet,
+    isConnected: wallet !== null,
+    isBusy: action !== "idle",
     action,
     error,
-    address,
-    networkPassphrase: config.networkPassphrase,
-    userName,
-    setUserName,
-    connect,
-    create,
-    disconnect,
+    isEphemeral: state.ephemeral,
+    address: wallet?.address ?? "",
+    pubkeyHex: wallet?.pubkeyHex ?? "",
+    sign,
+    exportBackupString,
+    exportBackupFile,
+    importBackup,
+    resetKey,
     clearError,
   };
 }

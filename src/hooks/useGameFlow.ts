@@ -1,44 +1,46 @@
 import { useCallback, useState } from "react";
 import type { CompletedGameRun } from "../game/types";
 import { deserializeTape } from "../game/tape";
+import type { RunRecord } from "../runs/api";
 import type { UseWalletReturn } from "./useWallet";
-import { useProofJob, type UseProofJobReturn } from "./useProofJob";
+import { useRunSubmission, type UseRunSubmissionReturn } from "./useRunSubmission";
 import type { UseTokenBalanceReturn } from "./useTokenBalance";
 
-export type GameFlowStep = "play" | "score" | "wallet" | "prove" | "earn";
+export type GameFlowStep = "play" | "score" | "submit" | "earn";
 
 export interface UseGameFlowReturn {
   currentStep: GameFlowStep;
   wallet: UseWalletReturn;
-  proof: UseProofJobReturn;
+  submission: UseRunSubmissionReturn;
   balance: UseTokenBalanceReturn;
   latestRun: CompletedGameRun | null;
   hasPositiveScore: boolean;
   handleGameOver: (run: CompletedGameRun) => void;
   dismissOverlay: () => void;
-  submitRunForProof: (run: CompletedGameRun) => Promise<boolean>;
-  submitForProof: () => Promise<boolean>;
+  submitCompletedRun: (run: CompletedGameRun) => Promise<RunRecord | null>;
+  submitLatestRun: () => Promise<RunRecord | null>;
   loadTapeFile: () => void;
-  claimStatus: "idle" | "submitting" | "succeeded" | "failed";
-  claimTxHash: string | null;
-  claimError: string | null;
-  canSubmitForProof: boolean;
+  canSubmit: boolean;
 }
 
 export interface UseGameFlowDeps {
   wallet: UseWalletReturn;
   balance: UseTokenBalanceReturn;
+  onRunConfirmed?: (run: RunRecord) => void;
 }
 
 export function useGameFlow(deps: UseGameFlowDeps): UseGameFlowReturn {
   const [latestRun, setLatestRun] = useState<CompletedGameRun | null>(null);
 
-  const { wallet, balance } = deps;
+  const { wallet, balance, onRunConfirmed } = deps;
 
-  const proof = useProofJob({
-    onClaimSucceeded: balance.refresh,
+  const submission = useRunSubmission({
+    onConfirmed: (run) => {
+      void balance.refresh();
+      onRunConfirmed?.(run);
+    },
   });
-  const { clear, clearError, setError, submitRun } = proof;
+  const { clear, clearError, setError, submit } = submission;
 
   const hasPositiveScore = (latestRun?.record.finalScore ?? 0) > 0;
 
@@ -67,9 +69,9 @@ export function useGameFlow(deps: UseGameFlowDeps): UseGameFlowReturn {
           const buf = await file.arrayBuffer();
           const bytes = new Uint8Array(buf);
           const tape = deserializeTape(bytes);
-          // Tape v4 format does not carry seed_id — set to 0 so the proof
-          // submission guard rejects with a clear message rather than submitting
-          // an unprovable job.
+          // Tape v4 format does not carry seed_id — set to 0 so the submit
+          // guard rejects with a clear message rather than sending a run the
+          // contract cannot match to a seed.
           setLatestRun({
             record: {
               seed: tape.header.seed,
@@ -91,51 +93,34 @@ export function useGameFlow(deps: UseGameFlowDeps): UseGameFlowReturn {
     input.click();
   }, [clear, clearError, setError]);
 
-  const submitRunForProof = useCallback(
+  const submitCompletedRun = useCallback(
     async (run: CompletedGameRun) => {
-      return submitRun(run, wallet.address);
+      return submit(run, { pubkeyHex: wallet.pubkeyHex, sign: wallet.sign });
     },
-    [submitRun, wallet.address],
+    [submit, wallet.pubkeyHex, wallet.sign],
   );
 
-  const submitForProof = useCallback(async () => {
+  const submitLatestRun = useCallback(async () => {
     if (!latestRun) {
-      return false;
+      return null;
     }
-    return submitRunForProof(latestRun);
-  }, [latestRun, submitRunForProof]);
+    return submitCompletedRun(latestRun);
+  }, [latestRun, submitCompletedRun]);
 
-  const canSubmitForProof =
+  const canSubmit =
     Boolean(latestRun) &&
     hasPositiveScore &&
-    !proof.isSubmitting &&
-    !proof.isBusy &&
+    !submission.isSubmitting &&
+    !submission.isBusy &&
+    submission.run === null &&
     wallet.isConnected &&
     !wallet.isBusy;
 
-  const proofStatus = proof.job?.status;
-  const jobClaimStatus = proof.job?.claim.status;
-  let claimStatus: "idle" | "submitting" | "succeeded" | "failed" = "idle";
-  if (proofStatus === "succeeded" && jobClaimStatus) {
-    if (jobClaimStatus === "succeeded") {
-      claimStatus = "succeeded";
-    } else if (jobClaimStatus === "failed") {
-      claimStatus = "failed";
-    } else {
-      // queued | submitting | retrying all map to "submitting" in this UI.
-      claimStatus = "submitting";
-    }
-  }
-  const claimTxHash = proof.job?.claim.txHash ?? null;
-  const claimError = claimStatus === "failed" ? (proof.job?.claim.lastError ?? null) : null;
-
   let currentStep: GameFlowStep = "play";
-  if (proof.job?.status === "succeeded") {
+  if (submission.run?.status === "confirmed") {
     currentStep = "earn";
-  } else if (proof.isBusy) {
-    currentStep = "prove";
-  } else if (latestRun && !wallet.isConnected) {
-    currentStep = "wallet";
+  } else if (submission.isBusy || submission.isSubmitting) {
+    currentStep = "submit";
   } else if (latestRun) {
     currentStep = "score";
   }
@@ -143,18 +128,15 @@ export function useGameFlow(deps: UseGameFlowDeps): UseGameFlowReturn {
   return {
     currentStep,
     wallet,
-    proof,
+    submission,
     balance,
     latestRun,
     hasPositiveScore,
     handleGameOver,
     dismissOverlay,
-    submitRunForProof,
-    submitForProof,
+    submitCompletedRun,
+    submitLatestRun,
     loadTapeFile,
-    claimStatus,
-    claimTxHash,
-    claimError,
-    canSubmitForProof,
+    canSubmit,
   };
 }

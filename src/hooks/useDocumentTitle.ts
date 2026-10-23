@@ -2,10 +2,10 @@ import { useEffect } from "react";
 
 const BASE_TITLE = "Kalien";
 const DEFAULT_DESCRIPTION =
-  "Play deterministic Asteroids, prove your runs, and climb a verifiable on-chain leaderboard with Kalien.";
-const DEFAULT_IMAGE = "https://kalien.xyz/kalien-meta-2.jpg";
+  "Play deterministic Asteroids. A Thruput devnet contract replays every run on-chain, ranks it, and mints KALIEN.";
+const DEFAULT_IMAGE = "https://kalien-thruput.sdf-ecosystem.workers.dev/kalien-meta-2.jpg";
 const DEFAULT_TYPE = "website";
-const FALLBACK_SITE_URL = "https://kalien.xyz";
+const FALLBACK_SITE_URL = "https://kalien-thruput.sdf-ecosystem.workers.dev";
 
 interface DocumentMetaOptions {
   description?: string;

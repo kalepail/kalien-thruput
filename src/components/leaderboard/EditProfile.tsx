@@ -6,7 +6,6 @@ import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { RelativeTime } from "./RelativeTime";
 
 export interface EditProfileProps {
-  claimantAddress: string;
   username: string;
   linkUrl: string;
   onUsernameChange: (v: string) => void;
@@ -15,7 +14,6 @@ export interface EditProfileProps {
   isSaving: boolean;
   saveError: string | null;
   savedAt: string | null;
-  supported: boolean;
 }
 
 export function EditProfile({
@@ -27,22 +25,7 @@ export function EditProfile({
   isSaving,
   saveError,
   savedAt,
-  supported,
 }: EditProfileProps) {
-  if (!supported) {
-    return (
-      <Card>
-        <h3 className="m-0 flex items-center gap-2 font-display tracking-[0.055em] uppercase">
-          <Edit3 className="size-4 text-muted-foreground" />
-          Edit Profile
-        </h3>
-        <p className="m-0 text-text-soft">
-          Profile edits are available only for smart-account claimant contract addresses.
-        </p>
-      </Card>
-    );
-  }
-
   return (
     <Card>
       <h3 className="m-0 flex items-center gap-2 font-display tracking-[0.055em] uppercase">
@@ -50,7 +33,7 @@ export function EditProfile({
         Edit Profile
       </h3>
       <p className="m-0 text-sm text-text-soft">
-        Saving requires a passkey prompt for the claimant wallet tied to this address.
+        Your player key in this browser signs the change. No prompt is needed.
       </p>
       <div className="grid gap-2.5">
         <label className="grid gap-1.5 text-xs uppercase tracking-[0.04em]">

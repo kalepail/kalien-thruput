@@ -1,15 +1,16 @@
 import Link from "lucide-react/dist/esm/icons/link";
 import Trophy from "lucide-react/dist/esm/icons/trophy";
 import User from "lucide-react/dist/esm/icons/user";
-import type { LeaderboardPlayerResponse } from "@/leaderboard/api";
-import { abbreviateAddress, formatMetric } from "@/lib/format";
+import type { LeaderboardPlayer } from "@/leaderboard/api";
+import { abbreviateAddress, formatKalien } from "@/lib/format";
 import { isSafeUrl } from "@/lib/validation";
 import { Card } from "@/components/ui/card";
 import { StatCard, StatGrid } from "@/components/shared/StatCard";
 import { RelativeTime } from "./RelativeTime";
+import { AddressExplorerLink } from "@/components/runs/TxLink";
 
 export interface PlayerCardProps {
-  player: LeaderboardPlayerResponse["player"];
+  player: LeaderboardPlayer;
 }
 
 function RankValue({ rank }: { rank: number | null }) {
@@ -27,7 +28,7 @@ function RankValue({ rank }: { rank: number | null }) {
 }
 
 export function PlayerCard({ player }: PlayerCardProps) {
-  const name = player.profile?.username?.trim() || abbreviateAddress(player.claimant_address);
+  const name = player.profile?.username?.trim() || abbreviateAddress(player.playerAddress);
 
   return (
     <Card>
@@ -39,7 +40,8 @@ export function PlayerCard({ player }: PlayerCardProps) {
         </h2>
         <p className="m-0">
           <strong className="text-xs uppercase tracking-[0.04em] text-text-dim">Address:</strong>{" "}
-          <code className="break-all text-text-soft">{player.claimant_address}</code>
+          <code className="break-all text-text-soft">{player.playerAddress}</code>{" "}
+          <AddressExplorerLink address={player.playerAddress} className="text-xs" />
         </p>
         {player.profile?.linkUrl && isSafeUrl(player.profile.linkUrl) ? (
           <p className="m-0 flex items-center gap-1.5">
@@ -58,23 +60,23 @@ export function PlayerCard({ player }: PlayerCardProps) {
 
       {/* Performance stats */}
       <StatGrid columns={4}>
-        <StatCard label="Total Runs" value={player.stats.total_runs.toLocaleString()} />
-        <StatCard label="Best Score" value={player.stats.best_score.toLocaleString()} />
-        <StatCard label="Total KALIEN" value={formatMetric(player.stats.total_minted)} />
+        <StatCard label="Total Runs" value={player.stats.totalRuns.toLocaleString()} />
+        <StatCard label="Best Score" value={player.stats.bestScore.toLocaleString()} />
         <StatCard
-          label="Last Played"
-          value={<RelativeTime value={player.stats.last_played_at} />}
+          label="Total KALIEN"
+          value={player.stats.totalMinted !== null ? formatKalien(player.stats.totalMinted) : "n/a"}
         />
+        <StatCard label="Last Played" value={<RelativeTime value={player.stats.lastPlayedAt} />} />
       </StatGrid>
 
       <p className="m-0 text-sm text-text-soft">
-        Leaderboard rank uses each claimant's single best proved run in the selected window; this
-        page also shows your full recent run history and total minted.
+        Leaderboard rank uses each player's single best confirmed run in the selected window. This
+        page also shows the recent run history and total KALIEN minted.
       </p>
 
       {/* Rank badges */}
       <StatGrid columns={3}>
-        <StatCard label="10m Rank" value={<RankValue rank={player.ranks.ten_min} />} />
+        <StatCard label="10m Rank" value={<RankValue rank={player.ranks.tenMin} />} />
         <StatCard label="24h Rank" value={<RankValue rank={player.ranks.day} />} />
         <StatCard label="All-Time Rank" value={<RankValue rank={player.ranks.all} />} />
       </StatGrid>

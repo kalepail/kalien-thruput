@@ -1,5 +1,5 @@
 import Loader2 from "lucide-react/dist/esm/icons/loader-2";
-import Shield from "lucide-react/dist/esm/icons/shield";
+import Send from "lucide-react/dist/esm/icons/send";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -7,8 +7,12 @@ export interface SubmitScoreProps {
   onSubmit: () => void;
   canSubmit: boolean;
   isSubmitting: boolean;
-  isConnected: boolean;
+  isWalletReady: boolean;
   hasPositiveScore: boolean;
+  score: number;
+  /** Best confirmed score on this seed, or null while unknown. */
+  scoreToBeat: number | null;
+  isScoreToBeatLoading: boolean;
   className?: string;
 }
 
@@ -16,35 +20,49 @@ export function SubmitScore({
   onSubmit,
   canSubmit,
   isSubmitting,
-  isConnected,
+  isWalletReady,
   hasPositiveScore,
+  score,
+  scoreToBeat,
+  isScoreToBeatLoading,
   className,
 }: SubmitScoreProps) {
-  const helperText = !isConnected
-    ? "Connect your account first"
+  const beatsBest = scoreToBeat === null || score > scoreToBeat;
+  const enabled = canSubmit && beatsBest;
+
+  const helperText = !isWalletReady
+    ? "Preparing your player key..."
     : !hasPositiveScore
-      ? "Play a game to get started"
-      : null;
+      ? "Score points to earn KALIEN"
+      : !beatsBest
+        ? `Your best on this seed is ${scoreToBeat?.toLocaleString()}. Beat it to earn more KALIEN.`
+        : scoreToBeat && scoreToBeat > 0
+          ? `Beats your best of ${scoreToBeat.toLocaleString()} on this seed.`
+          : isScoreToBeatLoading
+            ? "Checking your best score on this seed..."
+            : null;
 
   return (
     <div data-slot="submit-score" className={cn("grid gap-2 text-center", className)}>
       <Button
-        variant={canSubmit ? "active" : "space"}
+        variant={enabled ? "active" : "space"}
         size="lg"
         onClick={onSubmit}
-        disabled={!canSubmit}
+        disabled={!enabled}
         className="w-full"
-        aria-label="Submit score for proof"
+        aria-label="Submit score on-chain"
       >
         {isSubmitting ? (
           <>
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            Proving...
+            Submitting...
           </>
+        ) : !beatsBest ? (
+          "Not a new best"
         ) : (
           <>
-            <Shield className="size-4" aria-hidden="true" />
-            Prove My Score
+            <Send className="size-4" aria-hidden="true" />
+            Submit Score
           </>
         )}
       </Button>
@@ -54,7 +72,7 @@ export function SubmitScore({
       )}
 
       {isSubmitting && (
-        <p className="m-0 text-xs text-primary">Submitting your game tape for verification...</p>
+        <p className="m-0 text-xs text-primary">Signing and sending your game tape...</p>
       )}
     </div>
   );

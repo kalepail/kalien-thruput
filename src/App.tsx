@@ -1,8 +1,8 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import Loader2 from "lucide-react/dist/esm/icons/loader-2";
 import { SiteFooter } from "./components/SiteFooter";
 import { SiteHeader } from "./components/SiteHeader";
-import { useLocation } from "./hooks/useLocation";
+import { navigate, useLocation } from "./hooks/useLocation";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 import { WalletProvider } from "./contexts/WalletContext";
 
@@ -12,15 +12,9 @@ const LazyLeaderboardPage = lazy(() =>
   })),
 );
 
-const LazyProofsPage = lazy(() =>
-  import("./components/proofs/ProofsPage").then((mod) => ({
-    default: mod.ProofsPage,
-  })),
-);
-
-const LazyPublicProofsPage = lazy(() =>
-  import("./components/proofs/PublicProofsPage").then((mod) => ({
-    default: mod.PublicProofsPage,
+const LazyRunsPage = lazy(() =>
+  import("./components/runs/RunsPage").then((mod) => ({
+    default: mod.RunsPage,
   })),
 );
 
@@ -44,15 +38,22 @@ const routeFallback = (
 
 function App() {
   const pathname = useLocation();
+  const isLegacyProofsPath = pathname === "/proofs" || pathname.startsWith("/proofs/");
+
+  // Old proof pages became the run history.
+  useEffect(() => {
+    if (isLegacyProofsPath) {
+      navigate("/runs", { replace: true });
+    }
+  }, [isLegacyProofsPath]);
+
   const RoutePage = pathname.startsWith("/leaderboard")
     ? LazyLeaderboardPage
-    : pathname === "/proofs"
-      ? LazyProofsPage
-      : pathname.startsWith("/proofs/")
-        ? LazyPublicProofsPage
-        : pathname === "/wallet"
-          ? LazyWalletPage
-          : LazyGamePage;
+    : pathname === "/runs" || isLegacyProofsPath
+      ? LazyRunsPage
+      : pathname === "/wallet"
+        ? LazyWalletPage
+        : LazyGamePage;
 
   return (
     <WalletProvider>
