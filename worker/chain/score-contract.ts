@@ -9,8 +9,7 @@ import {
   type TransactionReceipt,
 } from "@thruputchain/client";
 import { hexToBytes } from "../hex";
-// TODO(kt-contract): import from shared/thruput/ once the generated bindings land there.
-import { KalienScore, kalien_score } from "./bindings/kalien_score";
+import { KalienScore, kalien_score } from "../../shared/thruput/bindings/kalien-score";
 import type { ChainClient } from "./network";
 
 export interface SubmitScoreArgs {

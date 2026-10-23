@@ -16,6 +16,7 @@ import {
 } from "@thruputchain/client";
 import type { BroadcastResult, RelayChain } from "../relay/engine";
 import { safeErrorMessage } from "../utils";
+import { blockTimeReader } from "./block-time";
 import type { ChainClient } from "./network";
 
 /** Parses RELAY_SECRET: a 32-byte Ed25519 seed as hex, with or without 0x. */
@@ -36,10 +37,7 @@ export function createRelayWallet(client: ChainClient, secret: Uint8Array) {
 
 export type RelayWallet = ReturnType<typeof createRelayWallet>;
 
-const NANOS_PER_MS = 1_000_000n;
-
 export function relayChain(client: ChainClient, wallet: RelayWallet): RelayChain {
-  const blockTimes = new Map<bigint, number>();
   return {
     address: toHex0x(wallet.account.address),
     async tip() {
@@ -79,21 +77,6 @@ export function relayChain(client: ChainClient, wallet: RelayWallet): RelayChain
     status(txHash) {
       return client.getTransactionStatus(hashFromHex(txHash));
     },
-    async blockTimeMs(height) {
-      const cached = blockTimes.get(height);
-      if (cached !== undefined) {
-        return cached;
-      }
-      const block = await client.getBlockByNumber(height);
-      if (!block) {
-        throw new Error(`block ${height} not found`);
-      }
-      const ms = Number(block.blockTimepoint / NANOS_PER_MS);
-      if (blockTimes.size > 256) {
-        blockTimes.clear();
-      }
-      blockTimes.set(height, ms);
-      return ms;
-    },
+    blockTimeMs: blockTimeReader(client),
   };
 }

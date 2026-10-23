@@ -1,4 +1,5 @@
 import type { WorkerEnv } from "../env";
+import { blockTimeReader } from "./block-time";
 import {
   chainClient,
   chainSettings,
@@ -18,8 +19,6 @@ export interface ChainContext {
 
 type ChainContextFactory = (env: WorkerEnv) => Promise<ChainContext>;
 
-const NANOS_PER_MS = 1_000_000n;
-
 const defaultFactory: ChainContextFactory = async (env) => {
   const settings = chainSettings(env);
   if (!settings.scoreContract) {
@@ -31,13 +30,7 @@ const defaultFactory: ChainContextFactory = async (env) => {
     client,
     networkHash: clientNetworkHash(client),
     score: createScoreContract(client, settings.scoreContract),
-    async blockTimeMs(height) {
-      const block = await client.getBlockByNumber(height);
-      if (!block) {
-        throw new Error(`block ${height} not found`);
-      }
-      return Number(block.blockTimepoint / NANOS_PER_MS);
-    },
+    blockTimeMs: blockTimeReader(client),
   };
 };
 

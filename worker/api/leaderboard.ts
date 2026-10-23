@@ -211,7 +211,7 @@ export function createLeaderboardRouter(): Hono<AppEnv> {
       signedAt: timestamp,
     });
     if (!written) {
-      return jsonError(c, 409, "a newer profile update exists");
+      return jsonError(c, 409, "this profile update or a newer one was already applied");
     }
     return c.json({ success: true, profile: await getProfile(c.env, address) });
   });

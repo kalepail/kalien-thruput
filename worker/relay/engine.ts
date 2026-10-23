@@ -47,14 +47,16 @@ export interface RelayPolicy {
 }
 
 export const DEFAULT_RELAY_POLICY: RelayPolicy = {
-  gasBase: 5_000_000n,
-  gasPerFrame: 20_000n,
-  gasMax: 1_000_000_000n,
-  walletGasOverhead: 1_000_000n,
-  seedTouchGas: 2_000_000n,
+  // kt-core measured up to 2,101 gas per frame and 74M for a 36,000-frame
+  // tape (docs/thruput/kt-core.md). Base covers signature, storage, and mint.
+  gasBase: 3_000_000n,
+  gasPerFrame: 2_300n,
+  gasMax: 90_000_000n,
+  walletGasOverhead: 100_000n,
+  seedTouchGas: 1_000_000n,
   expiryBlocks: 120n,
   expiryMarginBlocks: 10n,
-  maxInFlight: 2,
+  maxInFlight: 1,
   maxAttempts: 5,
   rebroadcastAfterMs: 15_000,
   retryDelayMs: 5_000,

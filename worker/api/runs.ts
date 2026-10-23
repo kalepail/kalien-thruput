@@ -27,6 +27,12 @@ import {
 } from "./http";
 
 const RUN_ID_PATTERN = /^[0-9a-f]{64}$/u;
+
+/** Run ids are the tape hash: 64 hex chars, with or without 0x. */
+function parseRunId(raw: string): string | null {
+  const id = raw.trim().toLowerCase().replace(/^0x/u, "");
+  return RUN_ID_PATTERN.test(id) ? id : null;
+}
 const SUBMIT_LIMIT_PER_WINDOW = 30;
 const SUBMIT_WINDOW_MS = 10 * 60_000;
 const READ_LIMIT_PER_MINUTE = 240;
@@ -120,8 +126,15 @@ export function createRunsRouter(): Hono<AppEnv> {
     }
 
     const runId = bytesToHex(await sha256(tape));
+    const playerAddress = pubkeyAccountAddress(pubkey);
     const relay = relayStub(c.env);
     const existing = await relay.getRun(runId);
+    if (existing && existing.playerAddress !== playerAddress) {
+      return jsonError(c, 409, "this tape was already submitted by another player", {
+        code: "already_claimed",
+        runId,
+      });
+    }
     if (existing && existing.status !== "failed") {
       return runResponse(c, existing);
     }
@@ -158,7 +171,6 @@ export function createRunsRouter(): Hono<AppEnv> {
       );
     }
 
-    const playerAddress = pubkeyAccountAddress(pubkey);
     try {
       const seed = await lookupSeed(c.env, chain, seedId);
       if (seed === null) {
@@ -232,8 +244,8 @@ export function createRunsRouter(): Hono<AppEnv> {
     if (retry > 0) {
       return rateLimited(c, retry);
     }
-    const runId = c.req.param("id").toLowerCase();
-    if (!RUN_ID_PATTERN.test(runId)) {
+    const runId = parseRunId(c.req.param("id"));
+    if (!runId) {
       return jsonError(c, 400, "run id must be 32 bytes of hex", { code: "bad_run_id" });
     }
     const run = (await relayStub(c.env).getRun(runId)) ?? (await indexedRun(c, runId));
@@ -245,8 +257,8 @@ export function createRunsRouter(): Hono<AppEnv> {
 
   // GET /api/runs/:id/tape — only for confirmed runs, so a pending tape cannot be front-run.
   router.get("/:id/tape", async (c) => {
-    const runId = c.req.param("id").toLowerCase();
-    if (!RUN_ID_PATTERN.test(runId)) {
+    const runId = parseRunId(c.req.param("id"));
+    if (!runId) {
       return jsonError(c, 400, "run id must be 32 bytes of hex", { code: "bad_run_id" });
     }
     const run = (await relayStub(c.env).getRun(runId)) ?? (await indexedRun(c, runId));

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { WorkerEnv } from "../../worker/env";
-import { scoreEventRow, syncScoreEvents } from "../../worker/leaderboard/indexer";
+import {
+  estimateEventTimeMs,
+  scoreEventRow,
+  syncScoreEvents,
+} from "../../worker/leaderboard/indexer";
 import {
   countScoreEvents,
   getIndexerState,
@@ -105,5 +109,42 @@ describe("syncScoreEvents", () => {
     const result = await syncScoreEvents(env, other, blockTimes, { maxPages: 10, pageLimit: 10 });
     expect(result).toMatchObject({ inserted: 1, lastHeight: "3" });
     expect((await getIndexerState(env))?.contractAddress).toBe(other.address);
+  });
+});
+
+describe("estimateEventTimeMs", () => {
+  const now = Date.UTC(2026, 9, 23, 12, 5, 0);
+  const seedId = Math.floor(now / 600_000);
+
+  it("counts back 2 s per block from the head", () => {
+    expect(estimateEventTimeMs({ blockHeight: 90n, seedId }, 100n, now)).toBe(now - 20_000);
+  });
+
+  it("stays inside the seed's active window", () => {
+    expect(estimateEventTimeMs({ blockHeight: 0n, seedId }, 1_000_000n, now)).toBe(
+      seedId * 600_000,
+    );
+    expect(estimateEventTimeMs({ blockHeight: 100n, seedId: seedId - 200 }, 100n, now)).toBe(
+      (seedId - 200 + 144) * 600_000,
+    );
+  });
+
+  it("is used when the RPC has no block times", async () => {
+    const chain = new FakeChain();
+    const env = { LEADERBOARD_DB: d1() } as unknown as WorkerEnv;
+    event(chain, 1, chain.height);
+    const before = Date.now();
+    await syncScoreEvents(
+      env,
+      chain.scoreContract(),
+      { blockTimeMs: async () => Promise.reject(new Error("not implemented")) },
+      { maxPages: 1, pageLimit: 10 },
+    );
+    const row = await env.LEADERBOARD_DB.prepare("SELECT closed_at FROM score_events").first<{
+      closed_at: string;
+    }>();
+    // seedId 100 is far in the past, so the time clamps to its window end.
+    expect(new Date(row?.closed_at ?? 0).getTime()).toBe((100 + 144) * 600_000);
+    expect(before).toBeGreaterThan(0);
   });
 });

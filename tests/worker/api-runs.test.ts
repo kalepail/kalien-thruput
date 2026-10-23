@@ -95,6 +95,15 @@ describe("POST /api/runs", () => {
     expect(again.body.status).toBe("queued");
   });
 
+  it("refuses a tape that another player already submitted", async () => {
+    const t = testApp();
+    t.chain.seeds.set(currentSeedId(), seedOf(shortTape));
+    await submit(t, shortTape, { playerByte: 1 });
+    const other = await submit(t, shortTape, { playerByte: 2 });
+    expect(other.response.status).toBe(409);
+    expect(other.body.code).toBe("already_claimed");
+  });
+
   it("rejects a bad signature", async () => {
     const t = testApp();
     t.chain.seeds.set(currentSeedId(), seedOf(shortTape));

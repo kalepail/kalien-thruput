@@ -20,19 +20,20 @@
     // Thruput devnet. Copy network/contract values from
     // shared/thruput/deployments/devnet.json after each deploy or devnet reset.
     "THRUPUT_RPC_URL": "https://rpc.thruput.network",
-    // Optional pin; when empty the Worker accepts the RPC's network identity.
-    "THRUPUT_NETWORK_HASH": "",
-    "SCORE_CONTRACT": "",
-    "TOKEN_CONTRACT": "",
+    // Pin; the client refuses an RPC with another identity (devnet reset). Empty = accept any.
+    "THRUPUT_NETWORK_HASH": "0xb69ec9c688b3936b5bcbfc4eebc355d39aa9e5c6f6f072cc4a05564a07435047",
+    "SCORE_CONTRACT": "0xed511226f0ac0d15c79d5ad85c086df105d08e93d7fa8c510b073b09e71ded81",
+    "TOKEN_CONTRACT": "0x6782bfd91f64afe26d540127e80d4c98842bfce8e43cb4b3ebb612a9f5ce4844",
     "EXPLORER_URL": "https://explorer.thruput.network",
-    // Relay gas (see docs/thruput/kt-worker.md). Child gas = base + per_frame * frames.
-    "RELAY_GAS_BASE": "5000000",
-    "RELAY_GAS_PER_FRAME": "20000",
-    "RELAY_GAS_MAX": "1000000000",
-    "RELAY_WALLET_GAS_OVERHEAD": "1000000",
-    "RELAY_SEED_GAS": "2000000",
+    // Relay gas (see docs/thruput/kt-worker.md). Child gas = base + per_frame * frames,
+    // capped at max. Each in-flight run reserves its gas limit in free HOG.
+    "RELAY_GAS_BASE": "3000000",
+    "RELAY_GAS_PER_FRAME": "2300",
+    "RELAY_GAS_MAX": "90000000",
+    "RELAY_WALLET_GAS_OVERHEAD": "100000",
+    "RELAY_SEED_GAS": "1000000",
     "RELAY_EXPIRY_BLOCKS": "120",
-    "RELAY_MAX_IN_FLIGHT": "2",
+    "RELAY_MAX_IN_FLIGHT": "1",
     // Leaderboard indexer (ScoreSubmitted events → D1), every minute.
     "LEADERBOARD_SYNC_ENABLED": "1",
     "LEADERBOARD_SYNC_MAX_PAGES": "10",
