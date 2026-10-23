@@ -1,342 +1,59 @@
-import { beforeEach, describe, expect, it, mock } from "bun:test";
-import * as actualStellarSdk from "@stellar/stellar-sdk";
+import { describe, expect, test } from "bun:test";
+import type { ApiConfig, CurrentSeed, KalienApi } from "../../cli/src/api/client";
+import { currentSeedId } from "../../cli/src/constants";
+import { runCliPreflight } from "../../cli/src/preflight";
 
-const SAMPLE_G = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEGWF";
-const SAMPLE_C = "CDPAHIOTDASW6WULHAJ5UL4H6YH7OJ2T72LKVT75SCFDZ4YZTOVDFEQX";
-const TESTNET_PASSPHRASE = "Test SDF Network ; September 2015";
-const TESTNET_CONTRACT = "CAKVUHDKKEG6SYUAVMQMDRMUGCNQJS74BP45NNYS7Y2TTYUMYFSLA7EU";
-const TESTNET_TOKEN_CONTRACT = "CBUCDXT6BY3WWP764AMW66QJA6ZRWL2TRV6VTYCWPZF4FUZRAXK2S253";
-const TESTNET_RPC = "https://soroban-testnet.stellar.org";
-const TESTNET_API = "https://testnet.kalien.xyz";
-const KALIEN_ISSUER = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+const CONFIG: ApiConfig = {
+  networkHash: `0x${"11".repeat(32)}`,
+  rpcUrl: "https://rpc.thruput.network",
+  scoreContract: `0x${"22".repeat(32)}`,
+  tokenContract: `0x${"33".repeat(32)}`,
+  explorerUrl: "https://explorer.thruput.network/",
+};
 
-type GetAccountFn = (address: string) => Promise<unknown>;
-type GetContractDataFn = (contractId: string, key: unknown) => Promise<unknown>;
-type GetAssetBalanceFn = (
-  address: string,
-  asset: { getCode(): string; getIssuer(): string },
-  networkPassphrase: string,
-) => Promise<{ balanceEntry?: unknown }>;
-type BestScoreFn = (args: { claimant: string; seed_id: number }) => Promise<{ result: number }>;
-type TokenIdFn = () => Promise<{ result: string }>;
-type FetchSeedByIdFn = (
-  contractId: string,
-  rpcUrl: string,
-  seedId: number,
-) => Promise<number | null>;
-
-let getAccountImpl: GetAccountFn = async () => undefined;
-let getContractDataImpl: GetContractDataFn = async () => ({
-  val: {
-    contractData: () => ({
-      val: () => ({
-        instance: () => ({
-          executable: () => ({
-            switch: () => ({ name: "contractExecutableStellarAsset" }),
-          }),
-          storage: () => [
-            {
-              key: () => ({ __native: "METADATA" }),
-              val: () => ({ __native: { name: `KALIEN:${KALIEN_ISSUER}` } }),
-            },
-          ],
-        }),
-      }),
-    }),
-  },
-});
-let getAssetBalanceImpl: GetAssetBalanceFn = async () => ({ balanceEntry: {} });
-let bestScoreImpl: BestScoreFn = async () => ({ result: 0 });
-let tokenIdImpl: TokenIdFn = async () => ({ result: TESTNET_TOKEN_CONTRACT });
-let fetchSeedByIdImpl: FetchSeedByIdFn = async () => 1234;
-
-mock.module("@stellar/stellar-sdk", () => ({
-  ...actualStellarSdk,
-  rpc: {
-    ...actualStellarSdk.rpc,
-    Server: class MockRpcServer {
-      getAccount(address: string): Promise<unknown> {
-        return getAccountImpl(address);
-      }
-
-      getContractData(contractId: string, key: unknown): Promise<unknown> {
-        return getContractDataImpl(contractId, key);
-      }
-
-      getAssetBalance(
-        address: string,
-        asset: { getCode(): string; getIssuer(): string },
-        networkPassphrase: string,
-      ): Promise<{ balanceEntry?: unknown }> {
-        return getAssetBalanceImpl(address, asset, networkPassphrase);
-      }
-    },
-  },
-  scValToNative: (value: unknown): unknown => {
-    if (value && typeof value === "object" && "__native" in value) {
-      return (value as { __native: unknown }).__native;
-    }
-    return actualStellarSdk.scValToNative(value as Parameters<typeof actualStellarSdk.scValToNative>[0]);
-  },
-  xdr: {
-    ...actualStellarSdk.xdr,
-    ScVal: {
-      ...actualStellarSdk.xdr.ScVal,
-      scvLedgerKeyContractInstance: (): { __ledger_key_contract_instance: true } => ({
-        __ledger_key_contract_instance: true,
-      }),
-    },
-  },
-}));
-
-mock.module("../../shared/stellar/strkey", () => ({
-  parseClaimantStrKeyFromUserInput: (
-    value: string,
-  ): { normalized: string; type: "account" | "contract" } => {
-    const normalized = value.trim().toUpperCase();
-    if (normalized.startsWith("G")) {
-      return { normalized, type: "account" };
-    }
-    if (normalized.startsWith("C")) {
-      return { normalized, type: "contract" };
-    }
-    throw new Error("claimant address must be a valid Stellar G... or C... address");
-  },
-}));
-
-mock.module("asteroids-score", () => ({
-  Client: class MockScoreClient {
-    best_score(args: { claimant: string; seed_id: number }): Promise<{ result: number }> {
-      return bestScoreImpl(args);
-    }
-
-    token_id(): Promise<{ result: string }> {
-      return tokenIdImpl();
-    }
-  },
-}));
-
-mock.module("@/chain/seed", () => ({
-  SEED_INTERVAL_SECONDS: 600,
-  fetchSeedById: (contractId: string, rpcUrl: string, seedId: number): Promise<number | null> =>
-    fetchSeedByIdImpl(contractId, rpcUrl, seedId),
-}));
-
-const { runCliPreflight } = await import("../../cli/src/preflight.ts?test=preflight");
-mock.restore();
-const originalFetch = globalThis.fetch;
-
-beforeEach(() => {
-  getAccountImpl = async () => undefined;
-  getContractDataImpl = async (contractId: string) => {
-    if (
-      contractId === TESTNET_CONTRACT ||
-      contractId === TESTNET_TOKEN_CONTRACT ||
-      contractId === SAMPLE_C
-    ) {
-      return {
-        val: {
-          contractData: () => ({
-            val: () => ({
-              instance: () => ({
-                executable: () => ({
-                  switch: () => ({ name: "contractExecutableStellarAsset" }),
-                }),
-                storage: () => [
-                  {
-                    key: () => ({ __native: "METADATA" }),
-                    val: () => ({ __native: { name: `KALIEN:${KALIEN_ISSUER}` } }),
-                  },
-                ],
-              }),
-            }),
-          }),
-        },
-      };
-    }
-    throw new Error("404 entry not found");
-  };
-  getAssetBalanceImpl = async () => ({ balanceEntry: {} });
-  bestScoreImpl = async () => ({ result: 0 });
-  tokenIdImpl = async () => ({ result: TESTNET_TOKEN_CONTRACT });
-  fetchSeedByIdImpl = async () => 1234;
-  globalThis.fetch = originalFetch;
-});
+function fakeApi(opts: {
+  config?: () => Promise<ApiConfig>;
+  seed?: () => Promise<CurrentSeed>;
+}): KalienApi {
+  return {
+    baseUrl: "http://kalien.test",
+    config: opts.config ?? (async () => CONFIG),
+    currentSeed: opts.seed ?? (async () => ({ seedId: currentSeedId(), seed: 0xdeadbeef })),
+  } as unknown as KalienApi;
+}
 
 describe("runCliPreflight", () => {
-  it("passes for aligned network, API, RPC, and contract settings", async () => {
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.endsWith("/api/seed/current")) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            seed_id: 200,
-            seed: 1234,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-      throw new Error(`unexpected fetch url: ${url}`);
-    }) as typeof fetch;
+  test("passes with no warnings when config and seed are served", async () => {
+    const result = await runCliPreflight(fakeApi({}));
+    expect(result.config).toEqual(CONFIG);
+    expect(result.warnings).toEqual([]);
+  });
 
-    const result = await runCliPreflight({
-      network: "testnet",
-      networkPassphrase: TESTNET_PASSPHRASE,
-      address: SAMPLE_G,
-      apiUrl: TESTNET_API,
-      rpcUrl: TESTNET_RPC,
-      contractId: TESTNET_CONTRACT,
-      tokenContractId: TESTNET_TOKEN_CONTRACT,
+  test("throws a clear error when the API is not reachable", async () => {
+    const api = fakeApi({
+      config: async () => {
+        throw new Error("connect ECONNREFUSED");
+      },
     });
-
-    expect(result).toEqual({ warnings: [] });
+    await expect(runCliPreflight(api)).rejects.toThrow(
+      /API http:\/\/kalien\.test is not reachable: connect ECONNREFUSED/,
+    );
   });
 
-  it("throws a clear error when a G-address account is missing on the selected network", async () => {
-    getAccountImpl = async () => {
-      throw new Error("404 account not found");
-    };
-
-    await expect(
-      runCliPreflight({
-        network: "testnet",
-        networkPassphrase: TESTNET_PASSPHRASE,
-        address: SAMPLE_G,
-        apiUrl: TESTNET_API,
-        rpcUrl: TESTNET_RPC,
-        contractId: TESTNET_CONTRACT,
-        tokenContractId: TESTNET_TOKEN_CONTRACT,
-      }),
-    ).rejects.toThrow("does not exist on testnet");
-  });
-
-  it("throws a clear error when the score contract is not readable on the selected network", async () => {
-    bestScoreImpl = async () => {
-      throw new Error("simulation failed");
-    };
-
-    await expect(
-      runCliPreflight({
-        network: "testnet",
-        networkPassphrase: TESTNET_PASSPHRASE,
-        address: SAMPLE_G,
-        apiUrl: TESTNET_API,
-        rpcUrl: TESTNET_RPC,
-        contractId: TESTNET_CONTRACT,
-        tokenContractId: TESTNET_TOKEN_CONTRACT,
-      }),
-    ).rejects.toThrow("cannot read score contract");
-  });
-
-  it("throws before run when API seed does not match RPC seed for the same seed_id", async () => {
-    fetchSeedByIdImpl = async () => 777;
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.endsWith("/api/seed/current")) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            seed_id: 201,
-            seed: 888,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-      throw new Error(`unexpected fetch url: ${url}`);
-    }) as typeof fetch;
-
-    await expect(
-      runCliPreflight({
-        network: "testnet",
-        networkPassphrase: TESTNET_PASSPHRASE,
-        address: SAMPLE_G,
-        apiUrl: TESTNET_API,
-        rpcUrl: TESTNET_RPC,
-        contractId: TESTNET_CONTRACT,
-        tokenContractId: TESTNET_TOKEN_CONTRACT,
-      }),
-    ).rejects.toThrow("network mismatch detected before run");
-  });
-
-  it("returns a warning for suspicious network/api pairing while still passing if data aligns", async () => {
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.url;
-      if (url.endsWith("/api/seed/current")) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            seed_id: 202,
-            seed: 1234,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-      throw new Error(`unexpected fetch url: ${url}`);
-    }) as typeof fetch;
-
-    const result = await runCliPreflight({
-      network: "testnet",
-      networkPassphrase: TESTNET_PASSPHRASE,
-      address: SAMPLE_G,
-      apiUrl: "https://kalien.xyz",
-      rpcUrl: TESTNET_RPC,
-      contractId: TESTNET_CONTRACT,
-      tokenContractId: TESTNET_TOKEN_CONTRACT,
+  test("warns but passes when the seed is not available yet", async () => {
+    const api = fakeApi({
+      seed: async () => {
+        throw new Error("seed not available yet");
+      },
     });
-
-    expect(result.warnings.length).toBe(1);
-    expect(result.warnings[0]).toContain("--network testnet");
+    const result = await runCliPreflight(api);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain("will keep polling");
   });
 
-  it("throws a clear error when a C-address claimant contract is missing on the selected network", async () => {
-    await expect(
-      runCliPreflight({
-        network: "testnet",
-        networkPassphrase: TESTNET_PASSPHRASE,
-        address: "CC5HARVVAA7QWAIYOZHWV57KO2Z7XJ6TRXZECNUCDYH53TSUZAXK36DS",
-        apiUrl: TESTNET_API,
-        rpcUrl: TESTNET_RPC,
-        contractId: TESTNET_CONTRACT,
-        tokenContractId: TESTNET_TOKEN_CONTRACT,
-      }),
-    ).rejects.toThrow("claimant contract");
-  });
-
-  it("throws a clear error when the claimant account is missing the KALIEN trustline", async () => {
-    getAssetBalanceImpl = async () => {
-      throw new Error("trustline not found for asset");
-    };
-
-    await expect(
-      runCliPreflight({
-        network: "testnet",
-        networkPassphrase: TESTNET_PASSPHRASE,
-        address: SAMPLE_G,
-        apiUrl: TESTNET_API,
-        rpcUrl: TESTNET_RPC,
-        contractId: TESTNET_CONTRACT,
-        tokenContractId: TESTNET_TOKEN_CONTRACT,
-      }),
-    ).rejects.toThrow("does not have the required trustline");
-  });
-
-  it("throws a clear error when on-chain token contract does not exist on selected network", async () => {
-    tokenIdImpl = async () => ({
-      // valid contract StrKey, but not deployed on testnet
-      result: "CC5HARVVAA7QWAIYOZHWV57KO2Z7XJ6TRXZECNUCDYH53TSUZAXK36DS",
-    });
-
-    await expect(
-      runCliPreflight({
-        network: "testnet",
-        networkPassphrase: TESTNET_PASSPHRASE,
-        address: SAMPLE_G,
-        apiUrl: TESTNET_API,
-        rpcUrl: TESTNET_RPC,
-        contractId: TESTNET_CONTRACT,
-        tokenContractId: TESTNET_TOKEN_CONTRACT,
-      }),
-    ).rejects.toThrow("token contract");
+  test("warns when the API seed_id is far from the local clock", async () => {
+    const api = fakeApi({ seed: async () => ({ seedId: currentSeedId() + 5, seed: 1 }) });
+    const result = await runCliPreflight(api);
+    expect(result.warnings[0]).toContain("check the system clock");
   });
 });
