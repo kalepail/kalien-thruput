@@ -3,8 +3,9 @@ import { createPublicKey, verify } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { bytesToHex, claimMessage, hexToBytes } from "./claim";
+import { bytesToHex, claimMessage, claimMessageFromTapeHash, hexToBytes, sha256 } from "./claim";
 import {
+  addressFromPublicKey,
   exportSecretHex,
   identityFromSecret,
   importIdentity,
@@ -95,6 +96,20 @@ describe("identity", () => {
     const id = identityFromSecret(hexToBytes(RFC_SECRET));
     expect(id.publicKeyHex).toBe(RFC_PUBLIC);
     expect(id.address).toBe(RFC_ADDRESS);
+    expect(addressFromPublicKey(RFC_PUBLIC)).toBe(RFC_ADDRESS);
+  });
+
+  test("address matches the contract's byte layout (kalien_score claim.rs)", () => {
+    // sha256(CXS DomainSeparator "PubkeyAccount" || scheme 0x00 || pubkey || nonce 0x00)
+    const preimage = new Uint8Array([
+      0x00,
+      0x0d,
+      ...new TextEncoder().encode("PubkeyAccount"),
+      0x00,
+      ...hexToBytes(RFC_PUBLIC),
+      0x00,
+    ]);
+    expect(`0x${bytesToHex(sha256(preimage))}`).toBe(RFC_ADDRESS);
   });
 
   test("signs raw messages per RFC 8032", async () => {
@@ -121,6 +136,63 @@ describe("identity", () => {
     expect(verify(null, msg, key, sig)).toBe(true);
     msg[0] ^= 1;
     expect(verify(null, msg, key, sig)).toBe(false);
+  });
+});
+
+// Vectors published by the contract agent; they pin the TS and Rust layouts together.
+const vectorsPath = join(repoRoot, "shared/thruput/claim-vectors.json");
+describe.skipIf(!existsSync(vectorsPath))("shared/thruput/claim-vectors.json", () => {
+  type Vector = Record<string, unknown>;
+  const raw = existsSync(vectorsPath)
+    ? (JSON.parse(readFileSync(vectorsPath, "utf-8")) as Vector[] | Record<string, unknown>)
+    : [];
+  const list: Vector[] = Array.isArray(raw)
+    ? raw
+    : ((Object.values(raw).find((v) => Array.isArray(v)) as Vector[] | undefined) ?? []);
+  const hex = (v: Vector, ...keys: string[]): string | undefined => {
+    for (const k of keys) if (typeof v[k] === "string") return v[k] as string;
+    return undefined;
+  };
+
+  test("has vectors", () => {
+    expect(list.length).toBeGreaterThan(0);
+  });
+
+  test("claim digests match", () => {
+    let checked = 0;
+    for (const v of list) {
+      const expected = hex(v, "digest", "message", "claimMessage", "claimDigest");
+      const networkHash = hex(v, "networkHash", "network_hash");
+      const scoreContract = hex(v, "scoreContract", "score_contract");
+      const seedId = Number(v.seedId ?? v.seed_id);
+      if (!expected || !networkHash || !scoreContract || !Number.isFinite(seedId)) continue;
+      const tapeHex = hex(v, "tape", "tapeHex");
+      const tapeFile = hex(v, "tapeFile", "tapePath", "fixture");
+      const tapeHash = hex(v, "tapeHash", "tape_hash");
+      const tapeBytes = tapeHex
+        ? hexToBytes(tapeHex)
+        : tapeFile
+          ? new Uint8Array(readFileSync(resolve(repoRoot, tapeFile)))
+          : null;
+      const got = tapeBytes
+        ? claimMessage({ networkHash, scoreContract, seedId, tape: tapeBytes })
+        : tapeHash
+          ? claimMessageFromTapeHash({ networkHash, scoreContract, seedId, tapeHash })
+          : null;
+      if (!got) continue;
+      expect(bytesToHex(got)).toBe(expected.replace(/^0x/, "").toLowerCase());
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  test("pubkey account addresses match", () => {
+    for (const v of list) {
+      const pubkey = hex(v, "pubkey", "publicKey", "player_pubkey", "playerPubkey");
+      const address = hex(v, "address", "playerAddress", "player_address");
+      if (!pubkey || !address) continue;
+      expect(addressFromPublicKey(pubkey)).toBe(address.toLowerCase());
+    }
   });
 });
 

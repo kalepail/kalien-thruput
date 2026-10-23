@@ -53,6 +53,13 @@ export function sha256(...parts: Uint8Array[]): Uint8Array {
 }
 
 export function claimMessage(input: ClaimMessageInput): Uint8Array {
+  return claimMessageFromTapeHash({ ...input, tapeHash: sha256(input.tape) });
+}
+
+/** Same digest as `claimMessage`, from a precomputed `sha256(tape)`. */
+export function claimMessageFromTapeHash(
+  input: Omit<ClaimMessageInput, "tape"> & { tapeHash: Uint8Array | string },
+): Uint8Array {
   if (!Number.isInteger(input.seedId) || input.seedId < 0 || input.seedId > 0xffffffff) {
     throw new Error(`seedId must be a u32, got ${input.seedId}`);
   }
@@ -63,6 +70,6 @@ export function claimMessage(input: ClaimMessageInput): Uint8Array {
     bytes32(input.networkHash, "networkHash"),
     bytes32(input.scoreContract, "scoreContract"),
     seedId,
-    sha256(input.tape),
+    bytes32(input.tapeHash, "tapeHash"),
   );
 }

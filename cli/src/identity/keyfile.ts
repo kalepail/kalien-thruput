@@ -2,7 +2,12 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { PrivateKeySigner, createPubkeyAccount, toHex0x } from "@thruputchain/client";
+import {
+  PrivateKeySigner,
+  createPubkeyAccount,
+  derivePubkeyAccountAddress,
+  toHex0x,
+} from "@thruputchain/client";
 import { bytesToHex, hexToBytes } from "./claim";
 
 // Local Ed25519 identity for the CLI. The key file holds a 32-byte seed; the
@@ -51,6 +56,20 @@ export function identityFromSecret(secret: Uint8Array, path = ""): Identity {
     publicKeyHex: bytesToHex(publicKey),
     address: toHex0x(account.address),
   };
+}
+
+/** Thruput pubkey account address (nonce 0) for a 32-byte Ed25519 public key. */
+export function addressFromPublicKey(publicKey: Uint8Array | string): string {
+  const bytes = typeof publicKey === "string" ? hexToBytes(publicKey) : publicKey;
+  if (bytes.length !== 32) {
+    throw new Error(`public key must be 32 bytes, got ${bytes.length}`);
+  }
+  type Preimage = Parameters<typeof derivePubkeyAccountAddress>[0];
+  const preimage = {
+    pubkey: { scheme: 0, ed25519: new Uint8Array(bytes) }, // CryptographicScheme.Ed25519
+    nonce: 0n,
+  } as unknown as Preimage;
+  return toHex0x(derivePubkeyAccountAddress(preimage));
 }
 
 export function parseSecretKey(input: string): Uint8Array {

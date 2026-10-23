@@ -16,7 +16,7 @@ export interface SubmitOptions {
   json: boolean;
 }
 
-function printRun(run: RunRecord): void {
+function printRun(run: RunRecord, explorerUrl = ""): void {
   const color =
     run.status === "confirmed"
       ? ansi.green
@@ -34,7 +34,14 @@ function printRun(run: RunRecord): void {
   if (run.minted !== null && run.minted !== undefined) {
     console.log(`  ${ansi.color(ansi.gray, "Minted:")}   ${run.minted}`);
   }
-  if (run.txHash) console.log(`  ${ansi.color(ansi.gray, "Tx:")}       ${run.txHash}`);
+  if (run.txHash) {
+    console.log(`  ${ansi.color(ansi.gray, "Tx:")}       ${run.txHash}`);
+    if (explorerUrl) {
+      console.log(
+        `  ${ansi.color(ansi.gray, "Explorer:")} ${explorerUrl.replace(/\/+$/, "")}/tx/${run.txHash}`,
+      );
+    }
+  }
   if (run.error)
     console.log(`  ${ansi.color(ansi.gray, "Error:")}    ${ansi.color(ansi.red, run.error)}`);
 }
@@ -91,7 +98,7 @@ export async function submitCommand(opts: SubmitOptions): Promise<void> {
   if (opts.json) {
     console.log(JSON.stringify({ ok: true, ...run }));
   } else {
-    printRun(run);
+    printRun(run, (await api.config().catch(() => null))?.explorerUrl);
   }
   if (run.status === "rejected" || run.status === "failed") process.exit(2);
 }
@@ -99,5 +106,5 @@ export async function submitCommand(opts: SubmitOptions): Promise<void> {
 export async function statusCommand(apiUrl: string, runId: string, wait: boolean): Promise<void> {
   const api = new KalienApi(apiUrl);
   const run = wait ? await api.waitForRun(runId) : await api.getRun(runId);
-  printRun(run);
+  printRun(run, (await api.config().catch(() => null))?.explorerUrl);
 }
