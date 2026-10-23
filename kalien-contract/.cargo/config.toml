@@ -6,6 +6,10 @@ rustflags = [
     # `jal` (smaller code and one fewer executed instruction per relaxed
     # call). Output stays pure RV32IM.
     "-C", "target-feature=+unaligned-scalar-mem,+relax",
+    # Kalien: 16 KiB guest stack (default 30 KiB). The replay needs 4-8 KiB;
+    # the rest goes to the heap, which holds the 18,024-byte calldata of a
+    # 36,000-frame tape. Must precede -T: lld ignores a --defsym after it.
+    "-C", "link-arg=--defsym=__stack_size=16384",
     "-C", "link-arg=-Tgroundhog-rv32.ld",
     "-C", "link-arg=-static",
     "-C", "link-arg=--no-dynamic-linker",

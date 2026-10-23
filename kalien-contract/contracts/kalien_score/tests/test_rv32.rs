@@ -1,8 +1,8 @@
 //! RV32 artifact tests: the real `kalien_token.rv32a` and `kalien_score.rv32a`
 //! in the test executor (64 KiB guest memory, RV32 gas schedule).
-//! Run via `kalien-contract/scripts/test.sh`. It builds both artifacts with
-//! the 16 KiB stack the long tapes need (`thruput test` rebuilds with the
-//! default 30 KiB stack, which leaves too little heap for an 18 KB tape).
+//! Run via `thruput test -p kalien_score` after `thruput build -p kalien_token`
+//! (or `kalien-contract/scripts/test.sh`). Full 36,000-frame tapes need the
+//! 16 KiB guest stack set in `.cargo/config.toml`.
 
 mod common;
 
