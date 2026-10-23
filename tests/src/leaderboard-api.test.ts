@@ -32,18 +32,6 @@ describe("leaderboard parsing", () => {
     });
   });
 
-  it("reads the old shape (claimantAddress, proofJobId, whole-KALIEN mintedDelta)", () => {
-    const entry = parseLeaderboardEntry({
-      claimantAddress: "0xold",
-      proofJobId: "j1",
-      mintedDelta: 5,
-      score: 5,
-    });
-    expect(entry.playerAddress).toBe("0xold");
-    expect(entry.runId).toBe("j1");
-    expect(entry.minted).toBe(50_000_000n);
-  });
-
   it("reads a page and a player", () => {
     const page = parseLeaderboardPage(
       {

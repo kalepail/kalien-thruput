@@ -41,7 +41,7 @@ export interface LeaderboardPageResponse {
   me: LeaderboardEntry | null;
   ingestion: {
     lastSyncedAt: string | null;
-    highestBlock: number | null;
+    latestBlock: number | null;
     totalEvents: number | null;
   } | null;
 }
@@ -105,14 +105,8 @@ function num(value: unknown): number | null {
   return null;
 }
 
-/**
- * KALIEN amounts from the Worker are base-unit decimal strings. A bare JSON
- * number is read as whole KALIEN (the old Soroban API shape).
- */
+/** KALIEN amounts from the Worker are base-unit decimal strings. */
 function kalienAmount(value: unknown): bigint | null {
-  if (typeof value === "number" && Number.isSafeInteger(value)) {
-    return BigInt(value) * 10_000_000n;
-  }
   return parseBaseUnits(value);
 }
 
@@ -120,8 +114,7 @@ function parseProfile(raw: unknown, fallbackAddress: string): PlayerProfile | nu
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Json;
   return {
-    playerAddress:
-      str(pick(record, "playerAddress", "player_address", "claimantAddress")) ?? fallbackAddress,
+    playerAddress: str(pick(record, "playerAddress", "player_address")) ?? fallbackAddress,
     username: str(pick(record, "username")),
     linkUrl: str(pick(record, "linkUrl", "link_url")),
     updatedAt: str(pick(record, "updatedAt", "updated_at")) ?? new Date(0).toISOString(),
@@ -130,20 +123,10 @@ function parseProfile(raw: unknown, fallbackAddress: string): PlayerProfile | nu
 
 export function parseLeaderboardEntry(raw: unknown, index = 0): LeaderboardEntry {
   const record = obj(raw);
-  const playerAddress =
-    str(
-      pick(
-        record,
-        "playerAddress",
-        "player_address",
-        "player",
-        "claimantAddress",
-        "claimant_address",
-      ),
-    ) ?? "";
+  const playerAddress = str(pick(record, "playerAddress", "player_address", "player")) ?? "";
   return {
     rank: num(pick(record, "rank")) ?? index + 1,
-    runId: str(pick(record, "runId", "run_id", "proofJobId", "jobId")),
+    runId: str(pick(record, "runId", "run_id")),
     playerAddress,
     profile: parseProfile(pick(record, "profile"), playerAddress),
     score: num(pick(record, "score", "finalScore", "final_score", "newBest", "new_best")) ?? 0,
@@ -154,7 +137,7 @@ export function parseLeaderboardEntry(raw: unknown, index = 0): LeaderboardEntry
     completedAt:
       str(pick(record, "completedAt", "completed_at", "closedAt", "closed_at", "createdAt")) ??
       new Date(0).toISOString(),
-    txHash: str(pick(record, "txHash", "tx_hash", "claimTxHash")),
+    txHash: str(pick(record, "txHash", "tx_hash")),
   };
 }
 
@@ -185,9 +168,7 @@ export function parseLeaderboardPage(
     ingestion: ingestion
       ? {
           lastSyncedAt: str(pick(ingestion, "lastSyncedAt", "last_synced_at")),
-          highestBlock: num(
-            pick(ingestion, "latestBlock", "latest_block", "highestBlock", "highest_ledger"),
-          ),
+          latestBlock: num(pick(ingestion, "latestBlock", "latest_block")),
           totalEvents: num(pick(ingestion, "totalEvents", "total_events")),
         }
       : null,
@@ -200,8 +181,7 @@ export function parseLeaderboardPlayer(
 ): LeaderboardPlayer {
   const player = obj(obj(payload).player ?? payload);
   const playerAddress =
-    str(pick(player, "playerAddress", "player_address", "address", "claimant_address")) ??
-    fallbackAddress;
+    str(pick(player, "playerAddress", "player_address", "address")) ?? fallbackAddress;
   const stats = obj(player.stats);
   const ranks = obj(player.ranks);
   const rawRuns = pick(player, "recentRuns", "recent_runs");

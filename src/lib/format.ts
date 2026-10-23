@@ -2,11 +2,6 @@ export function formatHex32(value: number): string {
   return `0x${(value >>> 0).toString(16).toUpperCase().padStart(8, "0")}`;
 }
 
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  return `${(bytes / 1024).toFixed(1)} KB`;
-}
-
 export function abbreviateHex(value: string, keep = 8): string {
   if (value.length <= keep * 2) {
     return value;
@@ -19,25 +14,6 @@ export function abbreviateAddress(value: string): string {
     return value;
   }
   return `${value.slice(0, 8)}...${value.slice(-8)}`;
-}
-
-export function formatDuration(ms: number): string {
-  if (!Number.isFinite(ms) || ms <= 0) {
-    return "0 ms";
-  }
-
-  if (ms < 1000) {
-    return `${ms} ms`;
-  }
-
-  const seconds = ms / 1000;
-  if (seconds < 60) {
-    return `${seconds.toFixed(1)} s`;
-  }
-
-  const minutes = Math.floor(seconds / 60);
-  const leftoverSeconds = Math.round(seconds % 60);
-  return `${minutes}m ${leftoverSeconds}s`;
 }
 
 export function formatWholeNumber(value: bigint): string {
@@ -62,10 +38,6 @@ export function formatFramesAsTime(frameCount: number, fps = 60): string {
 
 export const KALIEN_DECIMALS = 7;
 export const KALIEN_SCALE = 10_000_000n;
-export function toDisplayKalien(rawBalance: bigint): bigint {
-  return rawBalance / KALIEN_SCALE;
-}
-
 /** Format KALIEN base units (7 decimals) with grouping and trimmed fraction digits. */
 export function formatKalien(rawAmount: bigint): string {
   const negative = rawAmount < 0n;
