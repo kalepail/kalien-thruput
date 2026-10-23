@@ -8,11 +8,16 @@ import {
   type ConnectedThruputClient,
   type Cluster,
 } from "@thruputchain/client";
+// The devnet deployment record from kt-contract. A redeploy updates this file;
+// a Worker build then picks it up. Non-empty env vars override each field.
+import deployment from "../../shared/thruput/deployments/devnet.json";
 import type { WorkerEnv } from "../env";
 import { hexToBytes } from "../hex";
 
-export const DEFAULT_RPC_URL = "https://rpc.thruput.network";
-export const DEFAULT_EXPLORER_URL = "https://explorer.thruput.network";
+export const DEFAULT_RPC_URL = deployment.rpcUrl || "https://rpc.thruput.network";
+export const DEFAULT_EXPLORER_URL = (
+  deployment.explorerUrl || "https://explorer.thruput.network"
+).replace(/\/+$/u, "");
 const RPC_TIMEOUT_MS = 15_000;
 
 export interface ChainSettings {
@@ -37,11 +42,26 @@ function optionalHex32(raw: string | undefined, name: string): string | null {
 }
 
 export function chainSettings(env: WorkerEnv): ChainSettings {
+  // An RPC override (for example a local node) drops the devnet defaults, so
+  // devnet addresses are never used against another chain.
+  const rpcOverride = env.THRUPUT_RPC_URL?.trim();
+  const useDeployment = !rpcOverride || rpcOverride === deployment.rpcUrl;
+  const pick = (value: string | undefined, fallback: string) =>
+    value?.trim() || (useDeployment ? fallback : "");
   return {
-    rpcUrl: env.THRUPUT_RPC_URL?.trim() || DEFAULT_RPC_URL,
-    networkHash: optionalHex32(env.THRUPUT_NETWORK_HASH, "THRUPUT_NETWORK_HASH"),
-    scoreContract: optionalHex32(env.SCORE_CONTRACT, "SCORE_CONTRACT"),
-    tokenContract: optionalHex32(env.TOKEN_CONTRACT, "TOKEN_CONTRACT"),
+    rpcUrl: rpcOverride || DEFAULT_RPC_URL,
+    networkHash: optionalHex32(
+      pick(env.THRUPUT_NETWORK_HASH, deployment.networkHash),
+      "THRUPUT_NETWORK_HASH",
+    ),
+    scoreContract: optionalHex32(
+      pick(env.SCORE_CONTRACT, deployment.scoreContract),
+      "SCORE_CONTRACT",
+    ),
+    tokenContract: optionalHex32(
+      pick(env.TOKEN_CONTRACT, deployment.tokenContract),
+      "TOKEN_CONTRACT",
+    ),
     explorerUrl: env.EXPLORER_URL?.trim() || DEFAULT_EXPLORER_URL,
   };
 }

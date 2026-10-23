@@ -17,14 +17,14 @@
     "binding": "ASSETS",
   },
   "vars": {
-    // Thruput devnet. Copy network/contract values from
-    // shared/thruput/deployments/devnet.json after each deploy or devnet reset.
-    "THRUPUT_RPC_URL": "https://rpc.thruput.network",
-    // Pin; the client refuses an RPC with another identity (devnet reset). Empty = accept any.
-    "THRUPUT_NETWORK_HASH": "0xb69ec9c688b3936b5bcbfc4eebc355d39aa9e5c6f6f072cc4a05564a07435047",
-    "SCORE_CONTRACT": "0xed511226f0ac0d15c79d5ad85c086df105d08e93d7fa8c510b073b09e71ded81",
-    "TOKEN_CONTRACT": "0x6782bfd91f64afe26d540127e80d4c98842bfce8e43cb4b3ebb612a9f5ce4844",
-    "EXPLORER_URL": "https://explorer.thruput.network",
+    // Network and contracts come from shared/thruput/deployments/devnet.json at
+    // build time. Set these only to override it (for example, a local node:
+    // set THRUPUT_RPC_URL and the contracts in .dev.vars).
+    "THRUPUT_RPC_URL": "",
+    "THRUPUT_NETWORK_HASH": "",
+    "SCORE_CONTRACT": "",
+    "TOKEN_CONTRACT": "",
+    "EXPLORER_URL": "",
     // Relay gas (see docs/thruput/kt-worker.md). Child gas = base + per_frame * frames,
     // capped at max. Each in-flight run reserves its gas limit in free HOG.
     "RELAY_GAS_BASE": "3000000",

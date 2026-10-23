@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "node node_modules/vite/bin/vite.js dev",
     "build": "vite build",
-    "deploy:testnet": "vite build && wrangler deploy",
-    "deploy:mainnet": "CLOUDFLARE_ENV=mainnet vite build --mode mainnet && wrangler deploy --env mainnet",
+    "deploy": "bash worker/ops/deploy.sh",
+    "smoke": "bun worker/ops/smoke.ts",
     "typegen": "WRANGLER_LOG_PATH=.wrangler/logs wrangler types",
     "typegen:check": "WRANGLER_LOG_PATH=.wrangler/logs wrangler types --check",
     "typecheck:app": "tsc --noEmit -p tsconfig.json",

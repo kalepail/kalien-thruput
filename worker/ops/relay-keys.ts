@@ -7,6 +7,7 @@
 // Keys come from KALIEN_RELAY_DIR (default ~/.config/kalien-thruput): relay.secret
 // is lane 0, relay-2.secret lane 1, and so on. Each file holds a 32-byte hex seed.
 // --secrets refuses to write to a terminal, so the seeds are not shown.
+/* eslint-disable no-await-in-loop -- operator script: polls and steps in order */
 import { PrivateKeySigner, createPubkeyAccount, fromHex0x, toHex0x } from "@thruputchain/client";
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
