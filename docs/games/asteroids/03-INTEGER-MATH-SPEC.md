@@ -55,10 +55,12 @@ Define deterministic numeric rules used by gameplay and verification.
 - `EXTRA_LIFE_SCORE_STEP = 10000`
 
 ## Determinism Rules
-- No floating-point operations in consensus-critical updates.
+- No floating-point operations in consensus-critical updates (Thruput RV32 contracts have no
+  floating point at all).
 - No wall-clock dependency in simulation transitions.
 - No non-deterministic RNG in consensus-critical logic.
 
 ## RNG Separation
-- `gameplayRng`: affects authoritative state and must be proven.
+- `gameplayRng` (xorshift32, seeded from the tape seed; seed 0 maps to `0xDEADBEEF`): affects
+  authoritative state. The on-chain replay recomputes every call in the same order.
 - `visualRng`: affects cosmetics only and must not influence authoritative state.

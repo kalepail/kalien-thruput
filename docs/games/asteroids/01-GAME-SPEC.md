@@ -1,5 +1,10 @@
 # Asteroids Game Spec
 
+The Rust core (`asteroids-core/src/sim/`) is the reference implementation. The TypeScript twin
+(`src/game/AsteroidsGame.ts`) must match it on every frame
+(`bun run asteroids-core/parity/parity.ts`). When this page and the code disagree, the Rust code
+wins; fix this page.
+
 ## Deterministic Gameplay Contract
 Game state transitions must be deterministic given:
 - initial seed
@@ -7,8 +12,8 @@ Game state transitions must be deterministic given:
 - canonical update order
 
 ## Input Model
-- 4 action bits per frame: `left`, `right`, `thrust`, `fire`.
-- High nibble reserved and must be zero.
+- 4 action bits per frame: `left`, `right`, `thrust`, `fire` (bit 0 to bit 3).
+- The tape packs two frames per byte (see `02-VERIFICATION-SPEC.md`).
 
 ## Core Mechanics
 ### Ship
@@ -20,7 +25,8 @@ Game state transitions must be deterministic given:
 
 ### Player bullets
 - Bullet cap is enforced.
-- Fire gating uses an anti-autofire shift register (edge-triggered hold behavior).
+- Fire is edge-triggered: a shot needs a new press (fire latch) and an expired cooldown
+  (`SHIP_BULLET_COOLDOWN_FRAMES = 10`). See `03-INTEGER-MATH-SPEC.md`.
 - Bullet lifetime is frame-based.
 - Ship bullet lifetime is `72` frames.
 
@@ -34,7 +40,6 @@ Game state transitions must be deterministic given:
 - Anti-lurk behavior increases pressure when player stalls.
 - Small saucers aim with bounded error; large saucers are less accurate.
 - Saucers only enter from left/right edges and are culled as soon as they leave X bounds.
-- Saucer spawn/fire is paused while the ship is not visible.
 - Saucer fire cadence uses deterministic pressure-based cooldown ranges (sampled from game RNG), not a fixed reload constant.
 - Saucer bullet hard cap is `2`, with lifetime `72` frames.
 
@@ -44,8 +49,9 @@ Game state transitions must be deterministic given:
 - Wave progression triggers only when required entities are cleared.
 
 ## Difficulty and Session-Length Policy
-This build targets roughly 2-5 minute high-skill runs to keep proving costs
-reasonable while preserving arcade pressure.
+A run lasts at most 36,000 frames (10 minutes at 60 FPS). Most high-skill runs end sooner,
+because difficulty rises with each wave. The on-chain replay cost grows with the frame count
+(about 2,065 gas per frame).
 
 ### Difficulty controls
 - Asteroid wave count scales up to a cap of 16.

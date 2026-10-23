@@ -1,34 +1,41 @@
 # Documentation Map
 
-## Active Canonical Docs
+Kalien runs on the Thruput devnet. A smart contract replays each game tape on chain and mints
+KALIEN for new best scores. There is no zero-knowledge proof in this version.
 
-- [games/README.md](games/README.md): game-specific canonical docs.
-- [games/asteroids/README.md](games/asteroids/README.md): Asteroids source-of-truth specs.
-- [LEADERBOARD-EVENT-SOURCING-OPERATIONS.md](LEADERBOARD-EVENT-SOURCING-OPERATIONS.md): live leaderboard operations.
-- [VERIFIER-STATUS.md](VERIFIER-STATUS.md): verifier status snapshot.
-- [VERIFIER-PERF-NEXT.md](VERIFIER-PERF-NEXT.md): active perf backlog.
-- [PROVISIONING.md](PROVISIONING.md): runtime/provisioning settings.
-- [SEED_EPOCH_CLOCK_AUTHORITY.md](SEED_EPOCH_CLOCK_AUTHORITY.md): deferred seed epoch gap and follow-up criteria.
+## Start here
 
-## Reference Library
+- [ARCHITECTURE.md](ARCHITECTURE.md): components, the life of one run, trust model, open items.
+- [OPERATIONS.md](OPERATIONS.md): setup, tests, deploy, devnet reset, relay funding.
+- [games/asteroids/](games/asteroids/README.md): game rules, tape format, verification, and the
+  tape reuse policy.
 
-- [references/zk/README.md](references/zk/README.md): curated Stellar/ZK reference set (non-canonical for implementation details).
+## Port reports
 
-## Social
+`thruput/` holds the port plan and one report per port agent, with measured numbers and the
+exact test commands:
 
-- [social/TWITTER.md](social/TWITTER.md): KALIEN X article (polished draft).
+- [thruput/PORT-PLAN.md](thruput/PORT-PLAN.md): goal, environment rules, and the contract and
+  Worker interfaces (Interface v1, Worker API v0).
+- [thruput/kt-core.md](thruput/kt-core.md): game core, gas and memory, TS/Rust parity.
+- [thruput/kt-contract.md](thruput/kt-contract.md): contracts and devnet deployment.
+- [thruput/kt-worker.md](thruput/kt-worker.md): Worker, relay, leaderboard indexer.
+- [thruput/kt-client.md](thruput/kt-client.md): browser key wallet and submit flow.
+- [thruput/kt-cli.md](thruput/kt-cli.md): CLI, scripts, fixtures.
+
+## Component READMEs
+
+`asteroids-core/README.md`, `kalien-contract/README.md`, `shared/thruput/README.md`,
+`worker/README.md`, `cli/README.md`, `autopilot/README.md`, `test-fixtures/README.md`.
 
 ## Archive
 
-- [archive/README.md](archive/README.md): historical migrations, reconstruction artifacts, and superseded plans.
+[archive/](archive/README.md) keeps superseded docs for history. `archive/zk/` has the ZK-era
+material: RISC Zero, Boundless, Vast.ai, the Soroban contract, Stellar event sourcing, and the
+ZK reference library. Archive docs do not describe the current system.
 
-## Start Here
+## Editing policy
 
-- Product implementation: [games/asteroids/README.md](games/asteroids/README.md)
-- ZK background reading: [references/zk/README.md](references/zk/README.md)
-
-## Editing Policy
-
-- Keep canonical docs concise and implementation-aligned.
-- Move date-stamped incident/planning artifacts to `archive/` instead of deleting them.
-- Keep links and command paths current when behavior changes.
+- Keep these docs short and matched to the code. When code and docs disagree, fix the docs.
+- Move dated or superseded material to `archive/` instead of deleting it.
+- Mark facts that are not final as `TODO` with an owner.

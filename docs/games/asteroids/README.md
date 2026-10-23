@@ -1,37 +1,23 @@
 # Asteroids Docs
 
-Canonical documentation for the Asteroids game, deterministic verification, and
-ZK/Stellar integration.
+Source-of-truth specs for the Asteroids rules, the tape format, and on-chain verification.
+The Rust core (`asteroids-core/`) is the reference implementation; the TS sim (`src/game/`) must
+match it on every frame.
 
-## Canonical Sequence
 | File | Purpose |
 |---|---|
-| `00-OVERVIEW.md` | One-page system map and decisions |
-| `01-GAME-SPEC.md` | Gameplay rules and progression |
-| `02-VERIFICATION-SPEC.md` | Deterministic verification and tape contract |
-| `03-ZK-AND-STELLAR-ARCHITECTURE.md` | Proving flow and on-chain settlement model |
-| `04-INTEGER-MATH-SPEC.md` | Fixed-point and deterministic arithmetic |
-| `05-PROVING-SYSTEM-DECISION.md` | RISC Zero vs Noir decision and criteria |
-| `06-IMPLEMENTATION-STATUS.md` | Current implementation state and gaps |
-| `07-TESTING-AND-OPERATIONS.md` | Test strategy and operational defaults |
-| `08-SOURCES.md` | Curated source list used to derive this spec |
-| `09-SCORE-TOKEN-CONTRACT.md` | Soroban score-submission and KALIEN token minting contract spec |
-| `10-PROOF-GATEWAY-SPEC.md` | Cloudflare Worker + prover gateway behavior and API contract |
-| `11-TAPE-REUSE-AND-REPLAY-POLICY.md` | Current tape/journal uniqueness model and replay-protection options |
-| `12-GUEST-OPTIMIZATION.md` | RISC0 guest and proving optimization notes |
-| `15-DOCS-PARITY-CHECKLIST.md` | Latest docs parity checklist (dated; refresh when implementation changes) |
+| `01-GAME-SPEC.md` | Gameplay rules, progression, and difficulty |
+| `02-VERIFICATION-SPEC.md` | Tape format, transition order, strict rule checks, Worker pre-check |
+| `03-INTEGER-MATH-SPEC.md` | Fixed-point formats, operations, and consensus constants |
+| `04-TAPE-REUSE-AND-REPLAY-POLICY.md` | How a run is stopped from paying twice, and the known gap |
 
-## Legacy Context (Archived)
+System view: [docs/ARCHITECTURE.md](../../ARCHITECTURE.md).
 
-The following docs are preserved for historical context and are not canonical:
+## History
 
-- [11-CLIENT-INTEGRATION-SPEC.md](../../archive/games/asteroids/11-CLIENT-INTEGRATION-SPEC.md)
-- [13-ORIGINAL-RULESET-VARIANCE-AUDIT.md](../../archive/games/asteroids/13-ORIGINAL-RULESET-VARIANCE-AUDIT.md)
-- [14-VARIANCE-RESOLUTION-PLAN.md](../../archive/games/asteroids/14-VARIANCE-RESOLUTION-PLAN.md)
+- ZK-era Asteroids specs (RISC Zero proving, Soroban contract, proof gateway, guest
+  optimization): [docs/archive/zk/asteroids/](../../archive/zk/asteroids/).
+- Ruleset variance audit and plans: [docs/archive/asteroids-variance/](../../archive/asteroids-variance/).
 
-## Scope
-
-- Files listed in Canonical Sequence are source-of-truth specs.
-- If a decision changes, update the corresponding canonical file directly.
-
-See [docs/README.md](../../README.md) for global docs policy.
+If a rule changes, update the matching file here and the golden tests
+(`asteroids-core/tests/golden/`) in the same change.

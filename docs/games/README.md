@@ -1,15 +1,7 @@
-# Games Docs Guide
+# Games Docs
 
-Game-specific documentation lives in this directory.
+Game-specific documentation.
 
-## Domains
+- [asteroids/](asteroids/README.md): Asteroids rules, tape format, and verification.
 
-- `asteroids/`: canonical docs for gameplay, deterministic verification, ZK integration, and Stellar settlement.
-- Legacy Asteroids planning/context docs are archived under `docs/archive/games/asteroids/`.
-
-## Start Here
-
-- [docs/games/asteroids/README.md](asteroids/README.md)
-- [docs/games/asteroids/00-OVERVIEW.md](asteroids/00-OVERVIEW.md)
-
-See [docs/README.md](../README.md) for global docs policy.
+See [docs/README.md](../README.md) for the full docs map.

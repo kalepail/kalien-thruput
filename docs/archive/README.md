@@ -1,18 +1,22 @@
 # Archive
 
-Historical and superseded documentation is retained here for traceability.
+Historical and superseded documentation, kept for traceability. Archive docs are not a source
+of truth for the current (Thruput) system.
 
 ## Buckets
 
-- `asteroids-variance/`: legacy Asteroids specs/plans retained for context.
+- `zk/`: the ZK-era system (RISC Zero prover, Boundless, Vast.ai, Soroban score contract,
+  Stellar/Galexie leaderboard ingestion, provisioning, verifier status and performance notes).
+  - `zk/asteroids/`: the old Asteroids proof, contract, gateway, and optimization specs.
+  - `zk/references/`: the curated Stellar/ZK reference library.
+- `asteroids-variance/`: the ruleset variance audit and plans.
 - `leaderboard-reconstruction/`: date-scoped reconstruction and prompt-history artifacts.
-- `d1-migration/`: completed one-time migration runbooks.
-- `deferred-plans/`: deferred or superseded planning documents.
-- `social-drafts/`: earlier iterations of published social content.
-- `zk/`: legacy ZK strategy/reference artifacts that are not part of active docs.
+- `d1-migration/`: a completed one-time migration runbook.
+- `deferred-plans/`: deferred or superseded plans (mainnet checklist, SSR migration).
+- `social-drafts/`: social posts, including the ZK launch article (`TWITTER-zk-launch.md`).
 
-## Usage Rules
+## Rules
 
-- Archive docs are not source-of-truth for current implementation.
-- Keep original filenames and dates to preserve historical context.
-- When reviving an archived topic, create/update a canonical doc and link back.
+- Keep original filenames and dates.
+- Links inside archived docs may point to files that no longer exist.
+- When you revive a topic, write or update a current doc and link back here.
