@@ -1,0 +1,12 @@
+#![cfg_attr(not(feature = "dev"), no_std)]
+
+#[cfg(target_arch = "riscv32")]
+extern crate alloc;
+
+sdk::declare_mock_contract!();
+
+mod implementation;
+
+pub use implementation::Contract;
+pub use implementation::ContractClient;
+pub use implementation::{ReplayFailed, MAX_FRAMES};

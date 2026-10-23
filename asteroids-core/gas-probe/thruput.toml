@@ -1,0 +1,35 @@
+# Project-local Thruput config.
+#
+# User-level defaults live in ~/.config/thruput/config.toml.
+# Profiles here merge with global profiles of the same name, and project
+# aliases override global aliases.
+
+default_profile = "local"
+
+[profile.local]
+network = "local"
+default_key = "kt-core-local"
+# Set with `thruput wallet use <NAME> --profile local`.
+# default_wallet = "alice"
+
+[profile.local.contracts]
+# gas-probe = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# gas-probe = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+# [profile.local.wallets.alice]
+# address = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# owner_public_key = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+[profile.devnet]
+network = "devnet"
+default_key = "kt-core-devnet"
+# Set with `thruput wallet use <NAME> --profile devnet`.
+# default_wallet = "alice"
+
+[profile.devnet.contracts]
+gas-probe = "0x65713a9cd2431ea2b3eabd9bd88d98065eb26ee4565f83e313730c5eda3b6043"
+# gas-probe = "0x0000000000000000000000000000000000000000000000000000000000000000"
+
+# [profile.devnet.wallets.alice]
+# address = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# owner_public_key = "0x0000000000000000000000000000000000000000000000000000000000000000"
