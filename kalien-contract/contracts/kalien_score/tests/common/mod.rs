@@ -126,10 +126,25 @@ pub struct World {
 /// token's mint authority to the score contract.
 pub fn setup() -> World {
     let env = TestEnvironment::no_cost();
-    env.advance_block_at(seconds_to_timepoint(T0_SECONDS));
-
     let token_hash = *kalien_token::register_mock_contract(&env).as_hash();
     let score_hash = *kalien_score::register_mock_contract(&env).as_hash();
+    setup_with(env, token_hash, score_hash)
+}
+
+/// Deploy the RV32 artifacts from `target/thruput/` instead of the mocks.
+pub fn setup_rv32() -> World {
+    let dir = std::env::var_os("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target"))
+        .join("thruput");
+    let env = TestEnvironment::no_cost();
+    let token_hash = env.setup_create_contract(&load_rv32_contract(dir.join("kalien_token.rv32a")));
+    let score_hash = env.setup_create_contract(&load_rv32_contract(dir.join("kalien_score.rv32a")));
+    setup_with(env, token_hash, score_hash)
+}
+
+pub fn setup_with(env: TestEnvironmentHandle, token_hash: SHA256Hash, score_hash: SHA256Hash) -> World {
+    env.advance_block_at(seconds_to_timepoint(T0_SECONDS));
     let admin = ContractAddress::named("admin");
     let relay = ContractAddress::named("relay");
 
@@ -297,4 +312,16 @@ pub fn fix_crc(tape: &mut [u8]) {
     let crc = asteroids_verifier_core::tape::crc32(&tape[..body_end]);
     let len = tape.len();
     tape[len - 4..].copy_from_slice(&crc.to_le_bytes());
+}
+
+/// Gas the root frame spent in its child invocations (the contract calls),
+/// read from the execution trace.
+pub fn child_gas(result: &TransactResult) -> u64 {
+    let trace = result.frame().trace().expect("tracing is on in the test executor");
+    trace
+        .system_calls
+        .iter()
+        .filter(|call| matches!(call.body, thruput_trace::transaction_trace::SyscallTraceBody::kInvoke { .. }))
+        .map(|call| call.gas_remaining_at_start - call.gas_remaining_at_end)
+        .sum()
 }
