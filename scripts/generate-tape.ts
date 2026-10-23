@@ -2,18 +2,22 @@
  * Headless tape generator using autopilot.
  *
  * Usage: bun run scripts/generate-tape.ts [--seed <hex>] [--max-frames <n>] [--output <path>]
- *                                         [--api-url <url>]
+ *                                         [--api-url <url>] [--random-config]
  *
  * Runs an autopilot game in headless mode, records inputs to a tape,
  * writes the tape to a file, then verifies it inline. Without --seed, the
  * current seed comes from the Kalien API (GET /api/seed/current).
+ *
+ * The default autopilot is deterministic, so its tape for a seed is the same
+ * for everyone, and the API accepts each tape only once. Use --random-config
+ * (each numeric autopilot setting scaled by 0.9-1.1) to get a tape of your own.
  */
 
 import { writeFileSync, readFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { AsteroidsGame } from "../src/game/AsteroidsGame";
 import { TapeInputSource } from "../src/game/input-source";
-import { Autopilot } from "../src/game/Autopilot";
+import { Autopilot, type AutopilotConfig } from "../src/game/Autopilot";
 import { deserializeTape } from "../src/game/tape";
 
 const DEFAULT_MAX_FRAMES = 36_000;
@@ -25,6 +29,7 @@ let explicitSeed: number | null = null;
 let maxFrames = DEFAULT_MAX_FRAMES; // ~10 minutes
 let outputPath = "";
 let apiUrl = DEFAULT_API_URL;
+let randomConfig = false;
 
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
@@ -36,6 +41,8 @@ for (let i = 0; i < args.length; i++) {
     outputPath = args[++i];
   } else if (args[i] === "--api-url" && args[i + 1]) {
     apiUrl = args[++i];
+  } else if (args[i] === "--random-config") {
+    randomConfig = true;
   }
 }
 
@@ -95,7 +102,20 @@ console.log(`  Output:     ${outputPath}`);
 console.log();
 
 // Create headless game and start with the given seed
-const game = new AsteroidsGame({ headless: true, seed });
+function jitteredConfig(): AutopilotConfig {
+  const base = Autopilot.defaults() as unknown as Record<string, number | boolean>;
+  const out: Record<string, number | boolean> = {};
+  for (const [key, value] of Object.entries(base)) {
+    out[key] = typeof value === "number" ? value * (0.9 + Math.random() * 0.2) : value;
+  }
+  return out as unknown as AutopilotConfig;
+}
+
+const game = new AsteroidsGame({
+  headless: true,
+  seed,
+  autopilotConfig: randomConfig ? jitteredConfig() : undefined,
+});
 game.startNewGame(seed);
 
 // Enable the internal autopilot (pragmatic private access for script use)

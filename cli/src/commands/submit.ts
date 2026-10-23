@@ -79,7 +79,13 @@ export async function submitCommand(opts: SubmitOptions): Promise<void> {
   if (!result.success || !result.runId) {
     if (opts.json) {
       console.log(
-        JSON.stringify({ ok: false, error: result.error, httpStatus: result.httpStatus }),
+        JSON.stringify({
+          ok: false,
+          error: result.error,
+          code: result.code,
+          bestScore: result.bestScore,
+          httpStatus: result.httpStatus,
+        }),
       );
     }
     throw new Error(`submit failed: ${result.error ?? "unknown error"}`);
@@ -101,7 +107,7 @@ export async function submitCommand(opts: SubmitOptions): Promise<void> {
   }
 
   if (opts.json) {
-    console.log(JSON.stringify({ ok: true, ...run }));
+    console.log(JSON.stringify({ ok: true, existing: result.existing === true, ...run }));
   } else {
     printRun(run, (await api.config().catch(() => null))?.explorerUrl);
   }
