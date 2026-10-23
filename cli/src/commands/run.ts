@@ -1,25 +1,24 @@
 import { cpus } from "os";
-import { Client as ScoreClient } from "asteroids-score";
 import { Autopilot, type AutopilotConfig } from "@/game/Autopilot";
 import { renderDashboard, type DashboardStats } from "../display/dashboard";
 import * as ansi from "../display/ansi";
-import { submitTape, type SubmitResult } from "../api/submit";
+import { KalienApi, type SubmitResult } from "../api/client";
 import { fetchPlayerScore } from "../api/score";
+import type { Identity } from "../identity/keyfile";
 import type { MainToWorkerMessage, WorkerToMainMessage } from "../worker/messages";
 import {
-  type NetworkName,
   SEED_INTERVAL_SECONDS,
   MAX_SUBMISSIONS_PER_EPOCH,
   SETTLE_DELAY_MS,
+  currentSeedId,
 } from "../constants";
-import { fetchSeedFromContract } from "@/chain/seed";
 import { runCliPreflight } from "../preflight";
 
 const SEED_FETCH_TIMEOUT_MS = 6000;
 const SEED_REFRESH_INTERVAL_MS = 4000;
 
 function getCurrentEpoch(): number {
-  return Math.floor(Date.now() / 1000 / SEED_INTERVAL_SECONDS);
+  return currentSeedId();
 }
 
 function epochEndMs(epoch: number): number {
@@ -27,43 +26,9 @@ function epochEndMs(epoch: number): number {
 }
 
 export interface RunOptions {
-  network: NetworkName;
-  networkPassphrase: string;
-  address: string;
+  identity: Identity;
   threads: number;
   apiUrl: string;
-  rpcUrl: string;
-  contractId: string;
-  tokenContractId: string;
-  relayerBaseUrl: string;
-  relayerApiKey: string | null;
-}
-
-/**
- * Read claimant best score for a specific seed_id against the selected
- * network passphrase. Returns 0 for transient RPC/simulation failures.
- */
-async function fetchBestScoreForSeedOnNetwork(
-  contractId: string,
-  rpcUrl: string,
-  networkPassphrase: string,
-  claimant: string,
-  seedId: number,
-): Promise<number> {
-  try {
-    const client = new ScoreClient({
-      contractId,
-      rpcUrl,
-      networkPassphrase,
-    });
-    const tx = await client.best_score({
-      claimant,
-      seed_id: seedId >>> 0,
-    });
-    return tx.result;
-  } catch {
-    return 0;
-  }
 }
 
 export async function runCommand(opts: RunOptions): Promise<void> {
@@ -77,16 +42,13 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       ansi.color(ansi.dim, ` (${pct}%)\n`),
   );
 
+  const api = new KalienApi(opts.apiUrl);
+  const address = opts.identity.address;
+  process.stdout.write(
+    ansi.color(ansi.cyan, "  Address: ") + ansi.color(ansi.white, `${address}\n`),
+  );
   process.stdout.write(ansi.color(ansi.cyan, "  Running preflight checks..."));
-  const preflight = await runCliPreflight({
-    network: opts.network,
-    networkPassphrase: opts.networkPassphrase,
-    address: opts.address,
-    apiUrl: opts.apiUrl,
-    rpcUrl: opts.rpcUrl,
-    contractId: opts.contractId,
-    tokenContractId: opts.tokenContractId,
-  });
+  const preflight = await runCliPreflight(api);
   process.stdout.write(ansi.color(ansi.green, " ok\n"));
   for (const warning of preflight.warnings) {
     process.stdout.write(ansi.color(ansi.yellow, `  Warning: ${warning}\n`));
@@ -94,7 +56,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
 
   // Fetch on-chain high score before starting workers
   process.stdout.write(ansi.color(ansi.cyan, "  Fetching on-chain score..."));
-  const playerInfo = await fetchPlayerScore(opts.address, opts.apiUrl);
+  const playerInfo = await fetchPlayerScore(address, opts.apiUrl);
   let onChainBestScore = playerInfo.bestScore;
   if (onChainBestScore > 0) {
     process.stdout.write(ansi.color(ansi.green, ` ${onChainBestScore}\n`));
@@ -106,13 +68,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   // scores from a previous session or a different client (e.g. the web UI).
   const initialSeedId = getCurrentEpoch();
   process.stdout.write(ansi.color(ansi.cyan, "  Fetching seed best score..."));
-  const initialSeedBest = await fetchBestScoreForSeedOnNetwork(
-    opts.contractId,
-    opts.rpcUrl,
-    opts.networkPassphrase,
-    opts.address,
-    initialSeedId,
-  );
+  const initialSeedBest = await api.bestScoreForSeed(address, initialSeedId);
   if (initialSeedBest > 0) {
     process.stdout.write(ansi.color(ansi.green, ` ${initialSeedBest}\n`));
   } else {
@@ -127,14 +83,12 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   let lastSeedRefreshAt = 0;
   let announceSeedResolution = false;
 
-  // Read the currently materialized seed from temporary storage.
-  // If the active seed_id has not been materialized yet this returns null.
-  async function fetchCurrentSeed(): Promise<number | null> {
+  // Read the current seed from the Worker API. Returns null if the API does
+  // not serve the seed for the expected seed_id yet.
+  async function fetchCurrentSeed(expectedSeedId: number): Promise<number | null> {
     try {
-      return await Promise.race<number | null>([
-        fetchSeedFromContract(opts.contractId, opts.rpcUrl),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), SEED_FETCH_TIMEOUT_MS)),
-      ]);
+      const current = await api.currentSeed(SEED_FETCH_TIMEOUT_MS);
+      return current.seedId === expectedSeedId ? current.seed : null;
     } catch {
       return null;
     }
@@ -152,7 +106,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     seedRefreshInFlight = true;
     lastSeedRefreshAt = now;
     try {
-      const seed = await fetchCurrentSeed();
+      const seed = await fetchCurrentSeed(requestedEpoch);
 
       // Ignore stale responses that started in a previous epoch.
       if (requestedEpoch !== getCurrentEpoch()) {
@@ -161,6 +115,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
 
       if (seed !== null) {
         currentSeed = seed;
+        for (let i = 0; i < workers.length; i++) {
+          safePostToWorker(i, { type: "seed", seedId: requestedEpoch, seed });
+        }
         if (announceSeedResolution) {
           lastSubmitStatus = ansi.color(
             ansi.cyan,
@@ -291,11 +248,10 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       type: "start",
       workerId: i,
       role,
-      rpcUrl: opts.rpcUrl,
-      contractId: opts.contractId,
-      relayerBaseUrl: opts.relayerBaseUrl,
-      relayerApiKey: opts.relayerApiKey,
     });
+    if (currentSeed !== null) {
+      safePostToWorker(i, { type: "seed", seedId: currentEpoch, seed: currentSeed });
+    }
   }
 
   function resetEpoch(onChainSeedBest = 0): void {
@@ -353,7 +309,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
 
     lastSubmitStatus = ansi.color(ansi.yellow, `submitting (score: ${score})...`);
 
-    const result: SubmitResult = await submitTape(tape, opts.address, currentEpoch, opts.apiUrl);
+    const result: SubmitResult = await api.submitRun(opts.identity, currentEpoch, tape);
 
     if (result.success) {
       totalSubmissions++;
@@ -361,8 +317,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       lastSubmittedScore = score;
       lastSubmitStatus = ansi.color(
         ansi.green,
-        `score ${score} submitted (${result.jobId || "ok"})`,
+        `score ${score} submitted (run ${result.runId || "?"}, ${result.status || "queued"})`,
       );
+      if (result.runId) trackRun(result.runId, score);
     } else if (result.rateLimited) {
       lastSubmitStatus = ansi.color(ansi.yellow, `rate limited - will retry`);
     } else {
@@ -370,6 +327,29 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     }
 
     submitting = false;
+  }
+
+  // Follow a submitted run in the background and show its final status.
+  function trackRun(runId: string, score: number): void {
+    void api
+      .waitForRun(runId, { timeoutMs: 10 * 60_000, intervalMs: 3_000 })
+      .then((run) => {
+        if (run.status === "confirmed") {
+          lastSubmitStatus = ansi.color(
+            ansi.green,
+            `run ${runId} confirmed: score ${run.score ?? score}` +
+              (run.minted !== null && run.minted !== undefined ? `, minted ${run.minted}` : ""),
+          );
+          if ((run.score ?? score) > onChainBestScore) onChainBestScore = run.score ?? score;
+        } else if (run.status === "rejected" || run.status === "failed") {
+          lastSubmitStatus = ansi.color(
+            ansi.red,
+            `run ${runId} ${run.status}: ${run.error ?? "no reason given"}`,
+          );
+        }
+        return undefined;
+      })
+      .catch(() => undefined);
   }
 
   // Main tick: check epoch transitions and submit improvements
@@ -398,19 +378,13 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       announceSeedResolution = true;
       // Refresh seed and on-chain score in the background
       void refreshCurrentSeed(true);
-      void fetchPlayerScore(opts.address, opts.apiUrl).then((info) => {
+      void fetchPlayerScore(address, opts.apiUrl).then((info) => {
         onChainBestScore = info.bestScore;
         return undefined;
       });
       // Fetch this player's on-chain best for the new seed so we don't
       // submit scores worse than what's already claimed.
-      fetchBestScoreForSeedOnNetwork(
-        opts.contractId,
-        opts.rpcUrl,
-        opts.networkPassphrase,
-        opts.address,
-        epoch,
-      ).then((seedBest) => {
+      void api.bestScoreForSeed(address, epoch).then((seedBest) => {
         // Only apply if we're still in the same epoch and haven't already
         // submitted something better this session.
         if (epoch === currentEpoch && seedBest > lastSubmittedScore) {
@@ -456,7 +430,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
       currentSeed,
       threads: threadCount,
       availableCores,
-      address: opts.address,
+      address,
       startTime,
       workerBests,
       onChainBestScore,
@@ -488,10 +462,11 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     // Final submit if we have an unsubmitted improvement
     if (bestTape && bestScore > lastSubmittedScore) {
       console.log(ansi.color(ansi.yellow, `  Submitting best tape (score: ${bestScore})...`));
-      const result = await submitTape(bestTape, opts.address, currentEpoch, opts.apiUrl);
+      const result = await api.submitRun(opts.identity, currentEpoch, bestTape);
       if (result.success) {
         totalSubmissions++;
-        console.log(ansi.color(ansi.green, `  Submitted! Job: ${result.jobId || "ok"}`));
+        console.log(ansi.color(ansi.green, `  Submitted! Run: ${result.runId || "ok"}`));
+        console.log(ansi.color(ansi.dim, `  Follow it with: kalien status ${result.runId || ""}`));
       } else {
         console.log(ansi.color(ansi.red, `  Submit failed: ${result.error}`));
       }

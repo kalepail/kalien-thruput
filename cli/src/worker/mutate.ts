@@ -54,7 +54,7 @@ export function mutateConfig(
   for (const key of toTweak) {
     const bounds = BOUNDS[key];
     const range = bounds.max - bounds.min;
-    const current = (result as Record<string, number>)[key] as number;
+    const current = (result as unknown as Record<string, number>)[key] as number;
 
     // Perturbation: ±10-30% of the parameter's valid range, scaled by role
     const perturbScale = (0.1 + Math.random() * 0.2) * scale;
@@ -63,7 +63,7 @@ export function mutateConfig(
 
     // Clamp to bounds
     newVal = Math.max(bounds.min, Math.min(bounds.max, newVal));
-    (result as Record<string, number>)[key] = newVal;
+    (result as unknown as Record<string, number>)[key] = newVal;
   }
 
   // Randomly flip preferSmallAsteroids (~10% chance)
@@ -81,19 +81,22 @@ export function mutateConfig(
 
 /** Generate a fully random config within bounds. */
 export function randomConfig(): AutopilotConfig {
-  const config: Record<string, number | boolean> = {};
+  const numeric: Record<string, number> = {};
   for (const key of NUMERIC_KEYS) {
     const { min, max } = BOUNDS[key];
-    config[key] = min + Math.random() * (max - min);
+    numeric[key] = min + Math.random() * (max - min);
   }
-  config.preferSmallAsteroids = Math.random() < 0.5;
+  const config = {
+    ...numeric,
+    preferSmallAsteroids: Math.random() < 0.5,
+  } as unknown as AutopilotConfig;
 
   // Enforce constraint
   if (config.cautionRadius <= config.dangerRadius + 30) {
     config.cautionRadius = config.dangerRadius + 30;
   }
 
-  return config as AutopilotConfig;
+  return config;
 }
 
 /**
@@ -102,22 +105,25 @@ export function randomConfig(): AutopilotConfig {
  */
 export function warmRestartConfig(reference: AutopilotConfig): AutopilotConfig {
   const random = randomConfig();
-  const blended: Record<string, number | boolean> = {};
+  const numeric: Record<string, number> = {};
 
   for (const key of NUMERIC_KEYS) {
-    const refVal = (reference as Record<string, number>)[key];
-    const randVal = (random as Record<string, number>)[key];
-    blended[key] = refVal * 0.5 + randVal * 0.5;
+    const refVal = (reference as unknown as Record<string, number>)[key];
+    const randVal = (random as unknown as Record<string, number>)[key];
+    numeric[key] = refVal * 0.5 + randVal * 0.5;
   }
 
   // Boolean: 50% chance to inherit from reference, 50% random
-  blended.preferSmallAsteroids =
-    Math.random() < 0.5 ? reference.preferSmallAsteroids : random.preferSmallAsteroids;
+  const blended = {
+    ...numeric,
+    preferSmallAsteroids:
+      Math.random() < 0.5 ? reference.preferSmallAsteroids : random.preferSmallAsteroids,
+  } as unknown as AutopilotConfig;
 
   // Enforce constraint
   if (blended.cautionRadius <= blended.dangerRadius + 30) {
     blended.cautionRadius = blended.dangerRadius + 30;
   }
 
-  return blended as AutopilotConfig;
+  return blended;
 }

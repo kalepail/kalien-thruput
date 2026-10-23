@@ -3,74 +3,24 @@ import { AsteroidsGame } from "@/game/AsteroidsGame";
 import { Autopilot, type AutopilotConfig } from "@/game/Autopilot";
 import type { MainToWorkerMessage, WorkerRole, WorkerToMainMessage } from "./messages";
 import { mutateConfig, randomConfig, warmRestartConfig } from "./mutate";
-import { fetchSeedFromContract } from "@/chain/seed";
-import { MAX_FRAMES, EXPLORER_RESTART_THRESHOLD, SEED_INTERVAL_SECONDS } from "../constants";
-import { bumpSeedViaRelayer } from "../relayer";
+import { MAX_FRAMES, EXPLORER_RESTART_THRESHOLD, currentSeedId as clockSeedId } from "../constants";
 
 let workerId = 0;
 let role: WorkerRole = "explore";
-let rpcUrl = "";
-let contractId = "";
-let relayerBaseUrl = "";
-let relayerApiKey: string | null = null;
 let running = false;
 let bestScore = 0;
 let bestConfig: AutopilotConfig = Autopilot.defaults();
 let globalBestConfig: AutopilotConfig = Autopilot.defaults(); // latest global best for warm restarts
 let gamesWithoutImprovement = 0;
 
-// Active seed_id cache
+// Active seed, pushed by the main thread from the Worker API.
 let currentSeedId = -1;
 let currentSeed: number | null = null;
 
-async function ensureSeed(): Promise<void> {
-  const seedId = Math.floor(Date.now() / 1000 / SEED_INTERVAL_SECONDS);
-  if (seedId === currentSeedId && currentSeed !== null) return;
-
-  // A new epoch started. Do not keep using stale epoch seed.
-  if (seedId !== currentSeedId) {
-    currentSeed = null;
-  }
-
-  let fetched: number | null = null;
-  let resolvedSeedId: number | null = null;
-  /* eslint-disable no-await-in-loop -- seed materialization retries must remain sequential */
-  for (let attempt = 0; attempt < 6; attempt++) {
-    fetched = await fetchSeedFromContract(contractId, rpcUrl);
-    if (fetched !== null) {
-      resolvedSeedId = seedId;
-      break;
-    }
-    if (attempt < 5) {
-      await new Promise((r) => setTimeout(r, 5000));
-    }
-  }
-  /* eslint-enable no-await-in-loop */
-
-  // Seed not yet materialized — worker 0 bumps it via the relayer (if configured),
-  // then waits briefly for the chain to confirm before retrying once.
-  if (fetched === null && workerId === 0 && relayerApiKey) {
-    const bumped = await bumpSeedViaRelayer(contractId, rpcUrl, relayerBaseUrl, relayerApiKey);
-    if (bumped.success) {
-      if (bumped.seed !== null) {
-        fetched = bumped.seed;
-        resolvedSeedId = bumped.seedId ?? seedId;
-      } else {
-        await new Promise((r) => setTimeout(r, 3000));
-        fetched = await fetchSeedFromContract(contractId, rpcUrl);
-        if (fetched !== null) {
-          resolvedSeedId = seedId;
-        }
-      }
-    }
-  }
-
-  if (fetched !== null) {
-    currentSeed = fetched;
-    currentSeedId = resolvedSeedId ?? seedId;
-  }
-  // If still null after retries + relayer bump, runOneGame() will skip and
-  // retry — we never play games with an unmaterialized or stale seed.
+// Only play with a seed for the current seed_id. Never play a stale epoch.
+function activeSeed(): number | null {
+  if (currentSeed === null || currentSeedId !== clockSeedId()) return null;
+  return currentSeed;
 }
 
 function post(msg: WorkerToMainMessage, transfer?: Transferable[]) {
@@ -79,8 +29,7 @@ function post(msg: WorkerToMainMessage, transfer?: Transferable[]) {
 }
 
 async function runOneGame(): Promise<void> {
-  await ensureSeed();
-  const seed = currentSeed;
+  const seed = activeSeed();
   if (seed === null) {
     if (running) {
       setTimeout(runOneGame, 1000);
@@ -173,15 +122,15 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
     case "start":
       workerId = msg.workerId;
       role = msg.role;
-      rpcUrl = msg.rpcUrl;
-      contractId = msg.contractId;
-      relayerBaseUrl = msg.relayerBaseUrl;
-      relayerApiKey = msg.relayerApiKey;
       running = true;
       bestScore = 0;
       gamesWithoutImprovement = 0;
       bestConfig = role === "exploit" ? Autopilot.defaults() : randomConfig();
       void runOneGame();
+      break;
+    case "seed":
+      currentSeedId = msg.seedId >>> 0;
+      currentSeed = msg.seed >>> 0;
       break;
     case "stop":
       running = false;
@@ -189,9 +138,7 @@ self.addEventListener("message", (event: MessageEvent<MainToWorkerMessage>) => {
     case "reset-best":
       bestScore = 0;
       gamesWithoutImprovement = 0;
-      // Reset seed cache so the next game fetches the current seed_id's seed.
-      currentSeedId = -1;
-      currentSeed = null;
+      // The next seed message brings the new seed_id's seed.
       // On epoch reset, explorers warm-restart from the global best blended
       // with random so they search new territory with some learned structure.
       if (role === "explore") {

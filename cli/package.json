@@ -13,5 +13,8 @@
     "build:macos-x64": "bun build src/index.ts src/worker/game-worker.ts --compile --outfile dist/kalien-macos-x64 --target bun-darwin-x64",
     "build:macos-arm64": "bun build src/index.ts src/worker/game-worker.ts --compile --outfile dist/kalien-macos-arm64 --target bun-darwin-arm64",
     "build:all": "bun run build:linux-x64 && bun run build:linux-arm64 && bun run build:macos-x64 && bun run build:macos-arm64"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.4"
   }
 }
