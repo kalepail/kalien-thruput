@@ -320,6 +320,17 @@ export async function runCommand(opts: RunOptions): Promise<void> {
         `score ${score} submitted (run ${result.runId || "?"}, ${result.status || "queued"})`,
       );
       if (result.runId) trackRun(result.runId, score);
+    } else if (result.code === "not_improved") {
+      // Another client (or an earlier session) already holds a better score.
+      lastSubmittedScore = Math.max(lastSubmittedScore, result.bestScore ?? score);
+      lastSubmitStatus = ansi.color(
+        ansi.yellow,
+        `score ${score} not improved (best ${result.bestScore ?? "?"}) - waiting for a better tape`,
+      );
+    } else if (result.code === "already_claimed") {
+      // Another player claimed this exact tape. Never retry it.
+      lastSubmittedScore = Math.max(lastSubmittedScore, score);
+      lastSubmitStatus = ansi.color(ansi.red, `tape already claimed by another player`);
     } else if (result.rateLimited) {
       lastSubmitStatus = ansi.color(ansi.yellow, `rate limited - will retry`);
     } else {

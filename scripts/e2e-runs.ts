@@ -2,8 +2,10 @@
  * End-to-end run test against the Kalien Worker API v0:
  * generate tapes on the current seed -> sign and POST /api/runs -> poll
  * /api/runs/:id -> check score, previous best, minted KALIEN, the run list,
- * the leaderboard entry, and the stored tape. Also checks that the API
- * refuses a bad signature, a wrong seed, and a non-improving replay.
+ * the leaderboard entry, and the stored tape. Also checks dedupe (runId =
+ * sha256(tape); same player gets the same run, another player gets 409
+ * already_claimed) and that the API refuses a bad signature, a wrong seed_id,
+ * and a tape that does not beat the player's best.
  *
  * Usage:
  *   bun run scripts/e2e-runs.ts [--api-url <url>] [--runs <n>] [--key <path>]
@@ -17,9 +19,9 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AsteroidsGame } from "../src/game/AsteroidsGame";
-import { Autopilot } from "../src/game/Autopilot";
+import { Autopilot, type AutopilotConfig } from "../src/game/Autopilot";
 import { KalienApi, type RunRecord } from "../cli/src/api/client";
-import { bytesToHex } from "../cli/src/identity/claim";
+import { bytesToHex, sha256 } from "../cli/src/identity/claim";
 import { loadOrCreateIdentity } from "../cli/src/identity/keyfile";
 
 const KALIEN_UNITS = 10_000_000n; // 7 decimals
@@ -53,9 +55,20 @@ function check(ok: boolean, msg: string): void {
   }
 }
 
+// One random autopilot config per e2e run. The API refuses a tape that another
+// player already claimed, so every run must make tapes nobody has sent before.
+const autopilotConfig: AutopilotConfig = (() => {
+  const base = Autopilot.defaults() as unknown as Record<string, number | boolean>;
+  const out: Record<string, number | boolean> = {};
+  for (const [key, value] of Object.entries(base)) {
+    out[key] = typeof value === "number" ? value * (0.9 + Math.random() * 0.2) : value;
+  }
+  return out as unknown as AutopilotConfig;
+})();
+
 /** Autopilot tape for `seed`, cut at `maxFrames`. Same seed and config, so longer cuts never score less. */
 function generateTape(seed: number, seedId: number, maxFrames: number) {
-  const game = new AsteroidsGame({ headless: true, seed, seedId });
+  const game = new AsteroidsGame({ headless: true, seed, seedId, autopilotConfig });
   game.startNewGame(seed, seedId);
   (game as unknown as { autopilot: Autopilot }).autopilot.setEnabled(true);
   let frame = 0;
@@ -101,6 +114,7 @@ for (const t of tapes) {
   const result = await api.submitRun(identity, seedId, t.tape);
   check(result.success, `POST /api/runs score=${t.score} -> ${result.runId ?? result.error}`);
   if (!result.success || !result.runId) continue;
+  check(result.runId === bytesToHex(sha256(t.tape)), "runId == sha256(tape)");
   const run = await api.waitForRun(result.runId, {
     timeoutMs: timeoutSec * 1000,
     onUpdate: (r) => log(`  run ${r.runId}: ${r.status}`),
@@ -145,41 +159,87 @@ if (last) {
   if (lb.ok) log(`  leaderboard: ${JSON.stringify(await lb.json()).slice(0, 300)}`);
 }
 
-if (negative && tapes.length > 0) {
-  log("Negative checks");
-  const t = tapes[0];
-  const goodSigner = identity;
+if (negative && last) {
+  log("Dedupe and negative checks");
+  const lastTape = tapes[confirmed.length - 1];
 
-  // Signature over another seed_id: the API must refuse it.
+  // Same player re-sends a confirmed tape: 200 with the same run.
+  const again = await api.submitRun(identity, seedId, lastTape.tape);
+  check(
+    again.success && again.existing === true && again.runId === last.runId,
+    `same player re-send -> HTTP ${again.httpStatus}, same run ${again.runId === last.runId}`,
+  );
+
+  // Another player sends the same tape with a valid signature: 409 already_claimed.
+  const other = loadOrCreateIdentity(
+    join(mkdtempSync(join(tmpdir(), "kalien-e2e-")), "key.json"),
+  ).identity;
+  const stolen = await api.submitRun(other, seedId, lastTape.tape);
+  check(
+    !stolen.success && stolen.httpStatus === 409 && stolen.code === "already_claimed",
+    `other player same tape -> ${stolen.httpStatus} ${stolen.code}`,
+  );
+
+  // A fresh tape that scores below the best: not_improved with bestScore.
+  let low: ReturnType<typeof generateTape> | null = null;
+  for (const cut of [2_000, 1_500, 900, 4_500, 9_000]) {
+    const t = generateTape(seed, seedId, cut);
+    const used = tapes.some((u) => bytesToHex(u.tape) === bytesToHex(t.tape));
+    if (t.score > 0 && t.score < best && !used) {
+      low = t;
+      break;
+    }
+  }
+  if (low) {
+    const lower = await api.submitRun(identity, seedId, low.tape);
+    check(
+      !lower.success && lower.code === "not_improved" && lower.bestScore === best,
+      `score ${low.score} < best ${best} -> ${lower.httpStatus} ${lower.code} (bestScore ${lower.bestScore})`,
+    );
+  } else {
+    log("  skip not_improved: no lower-scoring fresh tape");
+  }
+
+  // The checks below use a tape that nobody has sent yet. A tape this player
+  // already sent hits the dedupe first and returns the existing run (200).
+  const fresh = generateTape(seed, seedId, 8_000);
+
+  // Zero signature: bad_signature.
   const params = new URLSearchParams({
-    pubkey: goodSigner.publicKeyHex,
+    pubkey: identity.publicKeyHex,
     seed_id: String(seedId),
     sig: "00".repeat(64),
   });
   const badSig = await fetch(`${api.baseUrl}/api/runs?${params.toString()}`, {
     method: "POST",
     headers: { "content-type": "application/octet-stream" },
-    body: t.tape,
+    body: fresh.tape,
   });
-  check(badSig.status >= 400 && badSig.status < 500, `zero signature refused (${badSig.status})`);
-
-  const wrongSeed = await api.submitRun(identity, (seedId + 1) >>> 0, t.tape);
-  const wrongSeedFinal = wrongSeed.runId ? await api.waitForRun(wrongSeed.runId) : null;
+  const badSigBody = (await badSig.json().catch(() => ({}))) as { code?: string };
   check(
-    !wrongSeed.success ||
-      wrongSeedFinal?.status === "rejected" ||
-      wrongSeedFinal?.status === "failed",
-    `wrong seed_id refused (${wrongSeed.error ?? wrongSeedFinal?.status})`,
+    badSig.status >= 400 && badSig.status < 500 && badSigBody.code === "bad_signature",
+    `zero signature -> ${badSig.status} ${badSigBody.code}`,
   );
 
-  if (confirmed.length > 0) {
-    const replay = await api.submitRun(identity, seedId, t.tape);
-    const replayFinal = replay.runId ? await api.waitForRun(replay.runId) : null;
+  // Valid signature, but the signed seed_id is not the tape's epoch.
+  for (const wrong of [(seedId + 1) >>> 0, (seedId - 1) >>> 0, (seedId - 1_000) >>> 0]) {
+    // eslint-disable-next-line no-await-in-loop -- one request at a time keeps the log readable
+    const r = await api.submitRun(identity, wrong, fresh.tape);
     check(
-      !replay.success || replayFinal?.status === "rejected" || replayFinal?.status === "failed",
-      `non-improving replay refused (${replay.error ?? `${replayFinal?.status}: ${replayFinal?.error}`})`,
+      !r.success && (r.httpStatus ?? 0) >= 400 && (r.httpStatus ?? 0) < 500,
+      `seed_id ${wrong} for a seed_id ${seedId} tape -> ${r.httpStatus} ${r.code}`,
     );
   }
+
+  // Forged footer score: replay_mismatch.
+  const forged = new Uint8Array(fresh.tape);
+  const view = new DataView(forged.buffer);
+  view.setUint32(forged.length - 8, best + 1_000_000, true); // footer score; CRC covers header+body only
+  const forgedRes = await api.submitRun(identity, seedId, forged);
+  check(
+    !forgedRes.success && (forgedRes.httpStatus ?? 0) >= 400,
+    `forged footer score -> ${forgedRes.httpStatus} ${forgedRes.code}`,
+  );
 }
 
 log(failures === 0 ? "PASSED" : `FAILED (${failures} checks)`);

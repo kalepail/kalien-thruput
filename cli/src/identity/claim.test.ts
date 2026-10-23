@@ -207,6 +207,7 @@ describe.skipIf(!existsSync(vectorsPath))("shared/thruput/claim-vectors.json", (
       const id = identityFromSecret(hexToBytes(v.secretKey));
       expect(id.publicKeyHex).toBe(strip(v.pubkey));
       // Ed25519 is deterministic, so the signature must match byte for byte.
+      // eslint-disable-next-line no-await-in-loop -- vectors are checked one by one
       expect(bytesToHex(await signClaim(id, digest))).toBe(strip(v.signature));
     }
   });

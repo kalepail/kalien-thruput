@@ -35,7 +35,13 @@ export interface SubmitResult {
   success: boolean;
   runId?: string;
   status?: string;
+  /** True when the API returned an existing run for this tape (same player, HTTP 200). */
+  existing?: boolean;
   error?: string;
+  /** API error slug, e.g. `not_improved`, `already_claimed`, `bad_signature`. */
+  code?: string;
+  /** Current best for this player and seed (sent with `not_improved`). */
+  bestScore?: number;
   httpStatus?: number;
   rateLimited?: boolean;
 }
@@ -58,13 +64,31 @@ export function isTerminalStatus(status: string): boolean {
   return status === "confirmed" || status === "rejected" || status === "failed";
 }
 
-async function errorMessage(response: Response): Promise<string> {
+interface ApiErrorBody {
+  message: string;
+  code?: string;
+  bestScore?: number;
+}
+
+async function errorBody(response: Response): Promise<ApiErrorBody> {
   try {
-    const body = (await response.json()) as { error?: unknown; message?: unknown };
-    if (typeof body.error === "string" && body.error) return body.error;
-    if (typeof body.message === "string" && body.message) return body.message;
-  } catch {}
-  return `HTTP ${response.status}`;
+    const body = (await response.json()) as Record<string, unknown>;
+    const message =
+      (typeof body.error === "string" && body.error) ||
+      (typeof body.message === "string" && body.message) ||
+      `HTTP ${response.status}`;
+    return {
+      message,
+      code: typeof body.code === "string" ? body.code : undefined,
+      bestScore: typeof body.bestScore === "number" ? body.bestScore : undefined,
+    };
+  } catch {
+    return { message: `HTTP ${response.status}` };
+  }
+}
+
+async function errorMessage(response: Response): Promise<string> {
+  return (await errorBody(response)).message;
 }
 
 async function getJson<T>(url: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
@@ -176,9 +200,12 @@ export class KalienApi {
         signal: AbortSignal.timeout(30_000),
       });
       if (!response.ok) {
+        const body = await errorBody(response);
         return {
           success: false,
-          error: await errorMessage(response),
+          error: body.code ? `${body.code}: ${body.message}` : body.message,
+          code: body.code,
+          bestScore: body.bestScore,
           httpStatus: response.status,
           rateLimited: response.status === 429,
         };
@@ -187,7 +214,13 @@ export class KalienApi {
       if (!run) {
         return { success: false, error: "unexpected response from /api/runs" };
       }
-      return { success: true, runId: run.runId, status: run.status };
+      return {
+        success: true,
+        runId: run.runId,
+        status: run.status,
+        existing: response.status === 200,
+        httpStatus: response.status,
+      };
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) };
     }

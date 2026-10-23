@@ -58,6 +58,17 @@ async function handle(req: Request): Promise<Response> {
       url.searchParams.get("sig") ?? "",
     );
     if (!ok) return Response.json({ error: "bad signature" }, { status: 401 });
+    if (url.searchParams.get("seed_id") === "124") {
+      return Response.json(
+        {
+          success: false,
+          error: "score does not beat your best",
+          code: "not_improved",
+          bestScore: 5000,
+        },
+        { status: 409 },
+      );
+    }
     return Response.json({ runId: "run-1", status: "queued" }, { status: 202 });
   }
   if (url.pathname === "/api/runs/run-1") {
@@ -104,7 +115,13 @@ describe("KalienApi", () => {
     expect(await api.currentSeed()).toEqual({ seedId: 123, seed: 0xdeadbeef });
 
     const result = await api.submitRun(identity, 123, tape);
-    expect(result).toEqual({ success: true, runId: "run-1", status: "queued" });
+    expect(result).toMatchObject({
+      success: true,
+      runId: "run-1",
+      status: "queued",
+      existing: false,
+      httpStatus: 202,
+    });
     expect(lastQuery?.get("pubkey")).toBe(identity.publicKeyHex);
     expect(lastQuery?.get("seed_id")).toBe("123");
     expect(lastQuery?.get("sig")).toMatch(/^[0-9a-f]{128}$/);
@@ -126,6 +143,18 @@ describe("KalienApi", () => {
       tape,
     });
     expect(verifySig(identity.publicKeyHex, msg, "00".repeat(64))).toBe(false);
+  });
+
+  test("error responses carry the code and bestScore", async () => {
+    const api = new KalienApi(BASE);
+    const result = await api.submitRun(identity, 124, tape);
+    expect(result).toMatchObject({
+      success: false,
+      code: "not_improved",
+      bestScore: 5000,
+      httpStatus: 409,
+      error: "not_improved: score does not beat your best",
+    });
   });
 
   test("best score for a seed uses only confirmed runs of that seed", async () => {

@@ -9,9 +9,12 @@ export interface PlayerScoreInfo {
  */
 export async function fetchPlayerScore(address: string, apiUrl: string): Promise<PlayerScoreInfo> {
   try {
-    const response = await fetch(`${apiUrl}/api/leaderboard/player/${address}`, {
-      signal: AbortSignal.timeout(5000),
-    });
+    const response = await fetch(
+      `${apiUrl.replace(/\/+$/, "")}/api/leaderboard/player/${address}`,
+      {
+        signal: AbortSignal.timeout(5000),
+      },
+    );
 
     if (!response.ok) {
       return { bestScore: 0, totalRuns: 0 };
@@ -21,8 +24,8 @@ export async function fetchPlayerScore(address: string, apiUrl: string): Promise
       success: boolean;
       player?: {
         stats?: {
-          best_score?: number;
-          total_runs?: number;
+          bestScore?: number;
+          totalRuns?: number;
         };
       };
     };
@@ -32,8 +35,8 @@ export async function fetchPlayerScore(address: string, apiUrl: string): Promise
     }
 
     return {
-      bestScore: data.player.stats.best_score ?? 0,
-      totalRuns: data.player.stats.total_runs ?? 0,
+      bestScore: data.player.stats.bestScore ?? 0,
+      totalRuns: data.player.stats.totalRuns ?? 0,
     };
   } catch {
     // Network error, timeout, etc. — don't block startup

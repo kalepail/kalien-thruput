@@ -85,6 +85,11 @@ export async function submitCommand(opts: SubmitOptions): Promise<void> {
     throw new Error(`submit failed: ${result.error ?? "unknown error"}`);
   }
 
+  if (result.existing && !opts.json) {
+    console.log(
+      ansi.color(ansi.dim, "  This tape was already submitted by you; showing that run."),
+    );
+  }
   let run: RunRecord = { runId: result.runId, status: result.status ?? "queued" };
   if (opts.wait && !isTerminalStatus(run.status)) {
     run = await api.waitForRun(result.runId, {
