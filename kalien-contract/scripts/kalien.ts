@@ -11,6 +11,9 @@
  *   set-seed     --deployment FILE --key NAME --seed HEX|DEC [--seed-id N]   admin only
  *   submit       --deployment FILE --relay-key NAME --tape FILE
  *                (--player-key NAME | --player-secret-file FILE) [--seed-id N] [--gas N]
+ *   fixtures     --deployment FILE --admin-key NAME --relay-key NAME --player-key NAME [--out FILE]
+ *                fix fixture seeds on free epochs and submit the fixture tapes
+ *   export-secret --key NAME                               print the 32-byte seed as hex (for the Worker secret file)
  *   integration  --rpc URL [--out FILE]                     full local-node test with fresh keys
  *
  * Keys are read from ~/.config/thruput/keys/<NAME>.json (the `thruput keys` store) and
@@ -33,6 +36,7 @@ import {
   toHex0x,
 } from "@thruputchain/client";
 import { gasAmount, type ContractAddress } from "@thruputchain/protocol";
+import { fixedBytes } from "@thruputchain/client/contract";
 import { KalienScore, kalien_score } from "../../shared/thruput/bindings/kalien-score";
 import { ERC20, KalienTokenAdmin } from "../../shared/thruput/bindings/kalien-token";
 import { claimMessage, fromHex, pubkeyAccountAddress, tapeHash, toHex } from "../../shared/thruput/claim";
@@ -135,7 +139,7 @@ async function fund(client: Client, address: ContractAddress, times = 1) {
 // ---------------------------------------------------------------------------
 // Contract operations.
 
-async function deploy(client: Client, deployer: Wallet, opts: { fundScoreHog: bigint; fundTokenHog: bigint }) {
+async function deploy(deployer: Wallet, opts: { fundScoreHog: bigint; fundTokenHog: bigint }) {
   const read = (name: string) => new Uint8Array(readFileSync(join(ARTIFACTS, `${name}.rv32a`)));
   const tokenBytes = read("kalien_token");
   const scoreBytes = read("kalien_score");
@@ -168,7 +172,7 @@ async function deploy(client: Client, deployer: Wallet, opts: { fundScoreHog: bi
   });
   console.log(`token administrator -> score, tx ${toHex0x(link.txHash)}`);
 
-  const sha = (b: Uint8Array) => toHex(new Uint8Array(new Bun.CryptoHasher("sha256").update(b).digest()));
+  const sha = (b: Uint8Array) => toHex(tapeHash(b)); // plain sha256
   return {
     score: scoreRes.address,
     token: tokenRes.address,
@@ -219,7 +223,6 @@ const jsonable = (v: unknown): unknown =>
   typeof v === "bigint" ? v.toString() : v instanceof Uint8Array ? toHex(v) : v;
 
 async function submit(
-  client: Client,
   relay: Wallet,
   score: ContractAddress,
   networkHash: Uint8Array,
@@ -236,7 +239,7 @@ async function submit(
   const call = KalienScore.v0_1.submitScore.call({
     contract: score,
     gasLimit: gasAmount(gasLimit - 100_000n),
-    args: { playerPubkey: pubkey, seedId: BigInt(seedId), tape, signature },
+    args: { playerPubkey: fixedBytes(pubkey, 32), seedId: BigInt(seedId), tape, signature: fixedBytes(signature, 64) },
   });
   try {
     const res = await relay.executeCallsAndWait({ calls: [call] as const, gasLimit: gasAmount(gasLimit) });
@@ -304,7 +307,7 @@ async function cmdDeploy(args: Record<string, string>) {
   const client = await connect(rpcUrl);
   const deployer = walletFor(client, loadKeySecret(need(args, "deployer-key")));
   console.log(`deployer ${toHex0x(deployer.account.address)} balance ${await balanceHog(client, deployer.account.address)} HOG`);
-  const d = await deploy(client, deployer, {
+  const d = await deploy(deployer, {
     fundScoreHog: BigInt(args["fund-score"] ?? "20"),
     fundTokenHog: BigInt(args["fund-token"] ?? "20"),
   });
@@ -354,11 +357,66 @@ async function cmdSubmit(args: Record<string, string>) {
   const score = addressFromHex(dep.scoreContract);
   const seedId = args["seed-id"] ? Number(args["seed-id"]) : await viewCurrentSeedId(client, score);
   const tape = new Uint8Array(readFileSync(need(args, "tape")));
-  const outcome = await submit(client, relay, score, client.network.networkHash, player, seedId, tape, args.gas ? BigInt(args.gas) : undefined);
+  const outcome = await submit(relay, score, client.network.networkHash, player, seedId, tape, args.gas ? BigInt(args.gas) : undefined);
   const playerAddress = pubkeyAccountAddress(ed25519.getPublicKey(player));
   const bal = await ERC20.v0_1.getBalanceOf.view({ client, contract: addressFromHex(dep.tokenContract), args: { addr: addressFromHex(playerAddress) } });
   console.log(JSON.stringify({ ...outcome, seedId, player: playerAddress, kalienBalance: bal.value.toString() }, null, 2));
   if (!outcome.ok) process.exitCode = 1;
+}
+
+
+async function cmdFixtures(args: Record<string, string>) {
+  const depPath = need(args, "deployment");
+  const dep = loadDeployment(depPath);
+  const client = await connect(dep.rpcUrl);
+  const admin = walletFor(client, loadKeySecret(need(args, "admin-key")));
+  const relay = walletFor(client, loadKeySecret(need(args, "relay-key")));
+  const player = loadKeySecret(need(args, "player-key"));
+  const score = addressFromHex(dep.scoreContract);
+  const token = addressFromHex(dep.tokenContract);
+  const networkHash = client.network.networkHash;
+
+  // Free epochs inside the active window, newest first (the current one is left to the cron).
+  const now = await viewCurrentSeedId(client, score);
+  const free: number[] = [];
+  for (let id = now - 1; id > now - 144 && free.length < 3; id--) {
+    const s = await KalienScore.v0_1.seed.view({ client, contract: score, args: { seedId: BigInt(id) } });
+    if (s.value === null || s.value === undefined) free.push(id);
+  }
+  if (free.length < 3) throw new Error("fewer than 3 unseeded epochs in the active window");
+  const plan = [
+    { seedId: free[0]!, seed: 0xdeadbeef, tapes: ["test-short.tape", "test-medium.tape"] },
+    { seedId: free[1]!, seed: 0x43c9c6cd, tapes: ["test-real-game.tape"] },
+    { seedId: free[2]!, seed: 1_598_125_870, tapes: ["kalien-911140-seed1598125870.tape"] },
+  ];
+  const explorer = (hash: string) => `https://explorer.thruput.network/tx/${hash}`;
+  const runs: Record<string, unknown>[] = [];
+  for (const p of plan) {
+    const tx = await setSeed(admin, score, p.seedId, p.seed);
+    console.log(`set_seed(${p.seedId}, 0x${p.seed.toString(16)}) tx ${tx}`);
+    for (const name of p.tapes) {
+      const outcome = await submit(relay, score, networkHash, player, p.seedId, fixture(name));
+      console.log(`${name}: ${outcome.ok ? "ok" : outcome.error} score ${outcome.receipt?.final_score} gas ${outcome.gasUsed}/${outcome.gasLimit} tx ${outcome.txHash}`);
+      runs.push({ tape: name, seedId: p.seedId, seed: p.seed, setSeedTx: tx, ...outcome, explorer: explorer(outcome.txHash) });
+      if (!outcome.ok) throw new Error(`${name} failed: ${outcome.error}`);
+    }
+  }
+  const playerAddress = pubkeyAccountAddress(ed25519.getPublicKey(player));
+  const bal = await ERC20.v0_1.getBalanceOf.view({ client, contract: token, args: { addr: addressFromHex(playerAddress) } });
+  const result = { network: dep.networkHash, scoreContract: dep.scoreContract, tokenContract: dep.tokenContract, player: playerAddress, kalienBalance: bal.value.toString(), runs, at: new Date().toISOString() };
+  if (args.out) {
+    mkdirSync(dirname(resolve(args.out)), { recursive: true });
+    writeFileSync(resolve(args.out), JSON.stringify(result, (_, v) => jsonable(v), 2) + "\n");
+    console.log(`wrote ${args.out}`);
+  }
+  console.log(`player ${playerAddress} holds ${bal.value} KALIEN base units`);
+}
+
+async function cmdExportSecret(args: Record<string, string>) {
+  // Raw 32-byte Ed25519 seed, lowercase hex, no 0x, no newline: the format
+  // `new PrivateKeySigner(fromHex(secret))` expects. Redirect it to a file.
+  if (process.stdout.isTTY) throw new Error("refusing to print a secret to a terminal; redirect stdout to a file");
+  process.stdout.write(toHex(loadKeySecret(need(args, "key"))).slice(2));
 }
 
 // ---------------------------------------------------------------------------
@@ -388,7 +446,7 @@ async function cmdIntegration(args: Record<string, string>) {
   await fund(client, relay.account.address, 2);
   console.log(`deployer ${await balanceHog(client, deployer.account.address)} HOG, relay ${await balanceHog(client, relay.account.address)} HOG`);
 
-  const d = await deploy(client, deployer, { fundScoreHog: 3n, fundTokenHog: 3n });
+  const d = await deploy(deployer, { fundScoreHog: 3n, fundTokenHog: 3n });
   const score = d.score;
   const token = d.token;
   const results: Record<string, unknown> = { network: toHex0x(networkHash), score: toHex0x(score), token: toHex0x(token), deployTxs: d.txs };
@@ -416,32 +474,32 @@ async function cmdIntegration(args: Record<string, string>) {
     (await ERC20.v0_1.getBalanceOf.view({ client, contract: token, args: { addr: addressFromHex(addr) } })).value;
 
   const runs: Record<string, SubmitOutcome> = {};
-  runs.short = await submit(client, relay, score, networkHash, alice, shortId, fixture("test-short.tape"));
+  runs.short = await submit(relay, score, networkHash, alice, shortId, fixture("test-short.tape"));
   check(runs.short.ok && runs.short.receipt?.final_score === "1480", `short tape accepted, score 1480 (gas ${runs.short.gasUsed})`);
   check((await balanceOf(aliceAddr)) === 1480n * HOG, "alice holds 1480 KALIEN");
 
-  runs.medium = await submit(client, relay, score, networkHash, alice, shortId, fixture("test-medium.tape"));
+  runs.medium = await submit(relay, score, networkHash, alice, shortId, fixture("test-medium.tape"));
   check(runs.medium.ok && runs.medium.receipt?.previous_best === "1480" && runs.medium.receipt?.minted_delta === String((11190n - 1480n) * HOG), `medium tape improves best, mints the delta (gas ${runs.medium.gasUsed})`);
   check((await balanceOf(aliceAddr)) === 11190n * HOG, "alice holds 11190 KALIEN");
 
-  runs.realGame = await submit(client, relay, score, networkHash, alice, realId, fixture("test-real-game.tape"));
+  runs.realGame = await submit(relay, score, networkHash, alice, realId, fixture("test-real-game.tape"));
   check(runs.realGame.ok && runs.realGame.receipt?.final_score === "14870", `real-game tape accepted (gas ${runs.realGame.gasUsed})`);
 
-  runs.maxGame = await submit(client, relay, score, networkHash, alice, maxId, fixture("kalien-911140-seed1598125870.tape"));
+  runs.maxGame = await submit(relay, score, networkHash, alice, maxId, fixture("kalien-911140-seed1598125870.tape"));
   check(runs.maxGame.ok && runs.maxGame.receipt?.final_score === "911140", `36,000-frame tape accepted, score 911140 (gas ${runs.maxGame.gasUsed})`);
   check((await balanceOf(aliceAddr)) === (11190n + 14870n + 911140n) * HOG, "alice holds the sum of her bests");
 
   const best = await KalienScore.v0_1.bestScore.view({ client, contract: score, args: { player: addressFromHex(aliceAddr), seedId: BigInt(shortId) } });
   check(best.value === 11190n, "best_score view");
-  const claimed = await KalienScore.v0_1.isClaimed.view({ client, contract: score, args: { tapeHash: tapeHash(fixture("test-short.tape")) } });
+  const claimed = await KalienScore.v0_1.isClaimed.view({ client, contract: score, args: { tapeHash: fixedBytes(tapeHash(fixture("test-short.tape")), 32) } });
   check(claimed.value === true, "is_claimed view");
 
   // Rejections are committed as failed executions with the contract error.
-  runs.duplicate = await submit(client, relay, score, networkHash, mallory, shortId, fixture("test-short.tape"));
+  runs.duplicate = await submit(relay, score, networkHash, mallory, shortId, fixture("test-short.tape"));
   check(!runs.duplicate.ok && runs.duplicate.error === "ScoreError::AlreadyClaimed", `duplicate tape from another player rejected: ${runs.duplicate.error}`);
-  runs.notImproved = await submit(client, relay, score, networkHash, alice, realId, fixture("test-real-game.tape"));
+  runs.notImproved = await submit(relay, score, networkHash, alice, realId, fixture("test-real-game.tape"));
   check(runs.notImproved.error === "ScoreError::NotImproved", `same tape again rejected: ${runs.notImproved.error}`);
-  runs.wrongSeed = await submit(client, relay, score, networkHash, mallory, realId, fixture("test-medium.tape"));
+  runs.wrongSeed = await submit(relay, score, networkHash, mallory, realId, fixture("test-medium.tape"));
   check(runs.wrongSeed.error === "ScoreError::SeedMismatch", `wrong seed rejected: ${runs.wrongSeed.error}`);
   check((await balanceOf(pubkeyAccountAddress(ed25519.getPublicKey(mallory)))) === 0n, "mallory holds 0 KALIEN");
 
@@ -473,6 +531,8 @@ const commands: Record<string, (a: Record<string, string>) => Promise<void>> = {
   "ensure-seed": cmdEnsureSeed,
   "set-seed": cmdSetSeed,
   submit: cmdSubmit,
+  fixtures: cmdFixtures,
+  "export-secret": cmdExportSecret,
   integration: cmdIntegration,
 };
 if (import.meta.main) {

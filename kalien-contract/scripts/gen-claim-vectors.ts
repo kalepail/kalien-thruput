@@ -18,7 +18,7 @@ const fixtures = join(root, "kalien-contract/fixtures");
 
 const secret = (fill: number) => new Uint8Array(32).fill(fill);
 
-const addresses = [0x01, 0x07, 0xab, 0xff].map((fill) => {
+const addresses: { secretKey: string; pubkey: string; address: string }[] = [0x01, 0x07, 0xab, 0xff].map((fill) => {
   const pubkey = ed25519.getPublicKey(secret(fill));
   return { secretKey: toHex(secret(fill)), pubkey: toHex(pubkey), address: pubkeyAccountAddress(pubkey) };
 });
@@ -69,7 +69,7 @@ const claims = claimCases.map((c) => {
 const out = {
   comment:
     "Test vectors for shared/thruput/claim.ts and kalien_score claim.rs. Tapes live in kalien-contract/fixtures/. Regenerate with: bun kalien-contract/scripts/gen-claim-vectors.ts",
-  addresses: addresses.filter((a) => a.secretKey !== "" || a.pubkey),
+  addresses,
   claims,
 };
 writeFileSync(join(root, "shared/thruput/claim-vectors.json"), JSON.stringify(out, null, 2) + "\n");

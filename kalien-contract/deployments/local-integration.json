@@ -1,0 +1,98 @@
+{
+  "network": "0x4b414c49454e2d4c4f43414c2d54455354000000000000000000000000000001",
+  "score": "0x58906faa300e5e11d6a5a17f4582387eaed7d5b2de93f602864cacdb80e2b8ec",
+  "token": "0x4c75f780a3ca326c5ef72d6ab577e5f650955c856a2092304b535ac41c7df3ca",
+  "deployTxs": {
+    "deployToken": "0xb3c1c02fa887f46b081481dba818309ec96c9afa0839beaa1c15ed83602aa040",
+    "deployScore": "0x92402b698190de8d127a5f41575ecc181c098c92d0d6158e1e40041a3fa29378",
+    "setTokenAdministrator": "0x149db0564f6d3f68960fe4473cd71b4c3fb984329dc03b523b55b0bdbc10731f"
+  },
+  "runs": {
+    "short": {
+      "ok": true,
+      "txHash": "0x97d95ac83c91c4704d677089403867dd7cc6aad99cdfae663c5a4646d6b3f9f1",
+      "gasLimit": "4540000",
+      "gasUsed": "1504343",
+      "receipt": {
+        "player": "0x0a0492aa076dabd53d85491b6c6f918afce001644ec32f3353ab661116c4dcaa",
+        "seed_id": "2987989",
+        "seed": "3735928559",
+        "frame_count": "700",
+        "final_score": "1480",
+        "previous_best": "0",
+        "minted_delta": "14800000000",
+        "tape_hash": "0xedeb1bb0d05e69eabddf0bde5d95d635f18bb3fbb332f6b6d6f7841538dc91c4"
+      }
+    },
+    "medium": {
+      "ok": true,
+      "txHash": "0xb14d439c6c428dc24b3f349f75eebc8a56e544f544b6e728c9d6f82049a9a353",
+      "gasLimit": "14000000",
+      "gasUsed": "9750461",
+      "receipt": {
+        "player": "0x0a0492aa076dabd53d85491b6c6f918afce001644ec32f3353ab661116c4dcaa",
+        "seed_id": "2987989",
+        "seed": "3735928559",
+        "frame_count": "5000",
+        "final_score": "11190",
+        "previous_best": "1480",
+        "minted_delta": "97100000000",
+        "tape_hash": "0xee4a145acc60cd12bb9f2e501cc9436d5a757d9f03fcbf3659837caf97715b6b"
+      }
+    },
+    "realGame": {
+      "ok": true,
+      "txHash": "0x27543eefde4d81ecd9ccf7e502471e0c8748fffe7c3948216333450b883d2055",
+      "gasLimit": "17614600",
+      "gasUsed": "14266307",
+      "receipt": {
+        "player": "0x0a0492aa076dabd53d85491b6c6f918afce001644ec32f3353ab661116c4dcaa",
+        "seed_id": "2987988",
+        "seed": "1137297101",
+        "frame_count": "6643",
+        "final_score": "14870",
+        "previous_best": "0",
+        "minted_delta": "148700000000",
+        "tape_hash": "0xd3d4aac058d4685c0b180af805de96dbd3014856f70c62184a790e9713c460d3"
+      }
+    },
+    "maxGame": {
+      "ok": true,
+      "txHash": "0x68cf868d80d11d70dc8a017aa9d32d0e7036e694cbb780f74bc92edf5d542d6a",
+      "gasLimit": "82200000",
+      "gasUsed": "67385636",
+      "receipt": {
+        "player": "0x0a0492aa076dabd53d85491b6c6f918afce001644ec32f3353ab661116c4dcaa",
+        "seed_id": "2987987",
+        "seed": "1598125870",
+        "frame_count": "36000",
+        "final_score": "911140",
+        "previous_best": "0",
+        "minted_delta": "9111400000000",
+        "tape_hash": "0x2f0234a86ffea4099b4011f06ef9483b53f3c6c5afcd2915870153c9ed1c58b6"
+      }
+    },
+    "duplicate": {
+      "ok": false,
+      "txHash": "0xa5be9080055a0d57606781bdfc5ebcdd6082f18692bf56a1708ba3e2018b9fe2",
+      "gasLimit": "4540000",
+      "gasUsed": "162860",
+      "error": "ScoreError::AlreadyClaimed"
+    },
+    "notImproved": {
+      "ok": false,
+      "txHash": "0x1b7f257bec0f73079eac21a8c9d0b45cfdebcc8100e99d9eb3ac8a0fcf5d0fe4",
+      "gasLimit": "17614600",
+      "gasUsed": "166014",
+      "error": "ScoreError::NotImproved"
+    },
+    "wrongSeed": {
+      "ok": false,
+      "txHash": "0xda8095b5dcabd4598e5abceebe940bb25278f3666a2def4361d78625fc817fed",
+      "gasLimit": "14000000",
+      "gasUsed": "115164",
+      "error": "ScoreError::SeedMismatch"
+    }
+  },
+  "aliceAddress": "0x0a0492aa076dabd53d85491b6c6f918afce001644ec32f3353ab661116c4dcaa"
+}
