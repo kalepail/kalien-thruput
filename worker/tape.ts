@@ -5,7 +5,13 @@ import {
   TAPE_MAGIC,
   TAPE_VERSION,
 } from "./constants";
-import type { TapeMetadata } from "./types";
+
+export interface TapeMetadata {
+  seed: number;
+  frameCount: number;
+  finalScore: number;
+  checksum: number;
+}
 
 export function parseAndValidateTape(bytes: Uint8Array, maxTapeBytes: number): TapeMetadata {
   if (bytes.length === 0) {
@@ -41,6 +47,9 @@ export function parseAndValidateTape(bytes: Uint8Array, maxTapeBytes: number): T
 
   const seed = view.getUint32(8, true);
   const frameCount = view.getUint32(12, true);
+  if (frameCount === 0) {
+    throw new Error("tape has no frames");
+  }
   const bodyBytes = (frameCount + 1) >> 1;
   const expectedLength = TAPE_HEADER_SIZE + bodyBytes + TAPE_FOOTER_SIZE;
 
@@ -65,8 +74,6 @@ export function parseAndValidateTape(bytes: Uint8Array, maxTapeBytes: number): T
 
   return {
     seed,
-    // seed_id is provided out-of-band by the API request query param (seed_id).
-    seedId: 0,
     frameCount,
     finalScore,
     checksum,

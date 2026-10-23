@@ -1,6 +1,3 @@
-import { MAX_RETRY_DELAY_SECONDS } from "./constants";
-import type { ProofJobStatus } from "./types";
-
 export function nowIso(): string {
   return new Date().toISOString();
 }
@@ -44,19 +41,6 @@ export function safeErrorMessage(error: unknown): string {
   // remain valid JSON and readable in UI surfaces.
   // eslint-disable-next-line no-control-regex
   return raw.replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
-}
-
-export function isLocalHostname(hostname: string): boolean {
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-}
-
-export function isTerminalProofStatus(status: ProofJobStatus): boolean {
-  return status === "succeeded" || status === "failed";
-}
-
-export function retryDelaySeconds(attempt: number): number {
-  const base = Math.min(2 ** Math.min(Math.max(attempt - 1, 0), 7), MAX_RETRY_DELAY_SECONDS);
-  return Math.max(2, base);
 }
 
 export function sleep(ms: number): Promise<void> {
