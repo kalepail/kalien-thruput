@@ -184,10 +184,7 @@ fn tape_files() -> Vec<(String, PathBuf)> {
             .collect();
         entries.sort();
         for path in entries {
-            let name = format!(
-                "{label}/{}",
-                path.file_name().unwrap().to_string_lossy()
-            );
+            let name = format!("{label}/{}", path.file_name().unwrap().to_string_lossy());
             files.push((name, path));
         }
     }
@@ -196,7 +193,9 @@ fn tape_files() -> Vec<(String, PathBuf)> {
 
 fn synthetic_inputs(input_seed: u32, frame_count: usize) -> Vec<u8> {
     let mut rng = SeededRng::new(input_seed);
-    (0..frame_count).map(|_| (rng.next() & 0x0F) as u8).collect()
+    (0..frame_count)
+        .map(|_| (rng.next() & 0x0F) as u8)
+        .collect()
 }
 
 fn build_golden() -> String {
@@ -224,10 +223,20 @@ fn build_golden() -> String {
     // Synthetic fixtures used by the other integration tests, plus a full-length random tape.
     let synthetic: [(&str, u32, u32, usize); 6] = [
         ("synthetic/checkpoints-short", 0xDEAD_BEEF, 0xA0A0_0001, 700),
-        ("synthetic/checkpoints-medium", 0xDEAD_BEEF, 0xA0A0_0002, 4_500),
+        (
+            "synthetic/checkpoints-medium",
+            0xDEAD_BEEF,
+            0xA0A0_0002,
+            4_500,
+        ),
         ("synthetic/fixtures-short", 0xDEAD_BEEF, 0xA0A0_0101, 500),
         ("synthetic/fixtures-medium", 0xDEAD_BEEF, 0xA0A0_0202, 3_980),
-        ("synthetic/fixtures-downloads", 0x9432_C6CD, 0xA0A0_0303, 13_829),
+        (
+            "synthetic/fixtures-downloads",
+            0x9432_C6CD,
+            0xA0A0_0303,
+            13_829,
+        ),
         ("synthetic/random-36000", 0x1234_5678, 0xA0A0_0404, 36_000),
     ];
     for (name, seed, input_seed, frames) in synthetic {
@@ -262,5 +271,9 @@ fn replay_matches_golden_baseline() {
     for (exp, act) in expected_lines.iter().zip(actual_lines.iter()) {
         assert_eq!(act, exp, "golden mismatch");
     }
-    assert_eq!(actual_lines.len(), expected_lines.len(), "golden line count");
+    assert_eq!(
+        actual_lines.len(),
+        expected_lines.len(),
+        "golden line count"
+    );
 }

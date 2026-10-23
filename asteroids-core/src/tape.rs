@@ -348,7 +348,9 @@ mod tests {
     #[test]
     fn packed_reader_matches_unpacked_inputs() {
         for frame_count in 1usize..=9 {
-            let inputs: Vec<u8> = (0..frame_count).map(|i| ((i * 7 + 3) & 0x0F) as u8).collect();
+            let inputs: Vec<u8> = (0..frame_count)
+                .map(|i| ((i * 7 + 3) & 0x0F) as u8)
+                .collect();
             let bytes = serialize_tape(0x1234_5678, &inputs, 0);
             let tape = parse_tape_ref(&bytes, 100).unwrap();
             assert_eq!(tape.frame_count as usize, frame_count);

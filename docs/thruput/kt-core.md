@@ -7,22 +7,27 @@ Agent: `kt-core`. Branch: `thruput-devnet`. Status: **STOP point A reached** (ta
 One transaction can replay a full 36,000-frame tape. A chunked replay is not necessary.
 
 - Gas for a full tape is 67M to 74M. The sender needs that much free HOG (7.4 HOG). Gas is not burned.
-- Peak guest memory is about 47.7 KiB of 64 KiB, with a 16 KiB stack.
+- Peak guest memory is about 44.2 KiB of 64 KiB, with a 16 KiB stack (after the score-table
+  bitset; it was 47.7 KiB before).
 - The contract **must** build with a 16 KiB stack. The default 30 KiB stack leaves too little heap
   for an 18,024-byte tape (see "Memory").
 
 ## Gas table
 
-Measured with `thruput test` (RV32 executor). The local node and devnet transactions report the
-same numbers + 50 gas (the wallet wrapper).
+Measured with `thruput test` (RV32 executor), current code (score-delta bitset):
 
 | tape | frames | bytes | noop gas | parse gas | replay gas | gas/frame | executor wall ms |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| test-short | 700 | 374 | 1,001 | 6,423 | 1,243,024 | 1,767 | 6.7 |
-| test-medium | 5,000 | 2,524 | 1,001 | 36,523 | 9,488,037 | 1,890 | 50.4 |
-| test-real-game | 6,643 | 3,346 | 1,001 | 48,031 | 14,003,931 | 2,101 | 73.4 |
-| test-long | 36,000 | 18,024 | 10,360 | 262,882 | 74,026,010 | 2,049 | 393.0 |
-| kalien-911140 | 36,000 | 18,024 | 10,360 | 262,882 | 67,118,230 | 1,857 | 349.8 |
+| test-short | 700 | 374 | 996 | 6,417 | 1,247,218 | 1,773 | 6.6 |
+| test-medium | 5,000 | 2,524 | 996 | 36,517 | 9,518,031 | 1,896 | 49.8 |
+| test-real-game | 6,643 | 3,346 | 996 | 48,025 | 14,043,783 | 2,107 | 74.2 |
+| test-long | 36,000 | 18,024 | 10,353 | 262,874 | 74,242,002 | 2,055 | 389.7 |
+| kalien-911140 | 36,000 | 18,024 | 10,353 | 262,874 | 67,334,222 | 1,863 | 353.9 |
+
+Before the bitset (`[bool; 3961]` table), replay gas was 1,243,024 / 9,488,037 / 14,003,931 /
+74,026,010 / 67,118,230. The bitset costs about 0.3% more gas and saves 3,464 bytes of memory.
+The local node and devnet transactions below ran before the bitset. They report the executor
+numbers + 50 gas (the wallet wrapper).
 
 - `noop` = calldata only. `parse` = container checks and CRC-32. `replay` = parse + strict replay.
 - gas/frame = (replay − parse) / frames.
@@ -56,16 +61,16 @@ Devnet `groundhog_chainConfig` reports `maxRv32MemoryBytes = 65536` and no per-t
 ## Memory
 
 Measured on RV32 with the probe method `memory_probe` (stack painting and the bump-allocator
-cursor), 16 KiB stack:
+cursor), 16 KiB stack, current code:
 
 | item | bytes |
 |---|---:|
 | stack reserve (16 KiB) | 16,384 |
 | stack used by `replay` (peak, includes SDK entry) | 5,296–5,340 |
-| statics (`.rodata` + `.data` + `.bss`) | 9,160 |
+| statics (`.rodata` + `.data` + `.bss`) | 5,696 (was 9,160 before the bitset) |
 | heap used, 374–3,346-byte tapes | 4,096 |
 | heap used, 18,024-byte tape | 22,123 |
-| **peak total, 18,024-byte tape** | **47,667 of 65,536** |
+| **peak total, 18,024-byte tape** | **44,203 of 65,536** (was 47,667) |
 
 - `size_of` of the game state is about 2 KiB (43 asteroids × 36 B, 5 + 3 bullets × 24 B,
   4 saucers × 36 B, plus scalars). It is on the stack. No allocation happens per frame.
@@ -77,10 +82,10 @@ cursor), 16 KiB stack:
 - Fix: put `"-C", "link-arg=--defsym=__stack_size=16384",` in `.cargo/config.toml` rustflags
   **before** the `-Tgroundhog-rv32.ld` line. After `-T`, lld ignores it.
   `thruput build --stack-size 16K` also works, but `thruput test` does not take that flag.
-- Headroom for the score contract (signature check, SHA-256, storage, mint call): about 17.9 KiB
+- Headroom for the score contract (signature check, SHA-256, storage, mint call): about 20.8 KiB
   of heap plus about 11 KiB of unused stack reserve.
-- Possible saving, if needed: the legal-score-delta table is a `[bool; 3961]` in `.rodata`. A
-  bitset would save about 3.4 KiB with the same semantics.
+- The legal-score-delta table is now a 496-byte bitset (`LEGAL_SCORE_DELTA_BITS`), packed at
+  compile time from the same `build_legal_score_delta_table`. A test compares every delta.
 
 ## What changed
 

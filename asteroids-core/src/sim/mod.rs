@@ -14,11 +14,11 @@ use crate::constants::{
     SHIP_THRUST_Q8_8, SHIP_TURN_SPEED_BAM, STARTING_LIVES, WORLD_HEIGHT_Q12_4, WORLD_WIDTH_Q12_4,
 };
 use crate::error::RuleCode;
-use crate::fixed_vec::FixedVec;
 use crate::fixed_point::{
     apply_drag, atan2_bam, clamp_i32, clamp_speed_q8_8, collision_dist_sq_q12_4, cos_bam,
     displace_q12_4, shortest_delta_q12_4, sin_bam, velocity_q8_8, wrap_x_q12_4, wrap_y_q12_4,
 };
+use crate::fixed_vec::FixedVec;
 use crate::rng::SeededRng;
 use crate::tape::{decode_input_byte, encode_input_byte, FrameInput};
 
@@ -294,7 +294,11 @@ const SCORE_EVENT_VALUES: [u32; 5] = [
     SCORE_LARGE_SAUCER,
     SCORE_SMALL_SAUCER,
 ];
-const LEGAL_SCORE_DELTAS: [bool; LEGAL_SCORE_DELTA_TABLE_SIZE] = build_legal_score_delta_table();
+const LEGAL_SCORE_DELTA_WORDS: usize = LEGAL_SCORE_DELTA_TABLE_SIZE.div_ceil(32);
+// Bit `d` is set when a one-frame score delta of `d` is legal. Packed (496 bytes) instead of a
+// `[bool; 3961]` to keep guest memory free; `build_legal_score_delta_table` stays the definition.
+const LEGAL_SCORE_DELTA_BITS: [u32; LEGAL_SCORE_DELTA_WORDS] =
+    pack_score_delta_bits(&build_legal_score_delta_table());
 
 pub fn replay(seed: u32, inputs: &[u8]) -> ReplayResult {
     replay_inputs(seed, inputs.iter().copied())
@@ -563,7 +567,22 @@ fn is_legal_score_delta(delta: u32) -> bool {
         return false;
     }
 
-    LEGAL_SCORE_DELTAS[delta as usize]
+    let delta = delta as usize;
+    (LEGAL_SCORE_DELTA_BITS[delta >> 5] >> (delta & 31)) & 1 != 0
+}
+
+const fn pack_score_delta_bits(
+    table: &[bool; LEGAL_SCORE_DELTA_TABLE_SIZE],
+) -> [u32; LEGAL_SCORE_DELTA_WORDS] {
+    let mut bits = [0u32; LEGAL_SCORE_DELTA_WORDS];
+    let mut i = 0;
+    while i < LEGAL_SCORE_DELTA_TABLE_SIZE {
+        if table[i] {
+            bits[i >> 5] |= 1 << (i & 31);
+        }
+        i += 1;
+    }
+    bits
 }
 
 #[cfg(feature = "alloc")]

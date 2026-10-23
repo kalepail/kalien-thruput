@@ -53,4 +53,3 @@ pub const LURK_SAUCER_SPAWN_FAST_FRAMES: i32 = 180;
 pub const RULES_TAG: u8 = 4; // "AST4"
 pub const RULES_DIGEST: u32 = 0x4153_5434; // "AST4"
 pub const RULESET_NAME: &str = "AST4";
-

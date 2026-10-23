@@ -734,5 +734,25 @@ fn entity_storage_stays_within_proven_bounds() {
     // The fixtures must actually exercise the busy cases.
     assert!(overall[0] > ASTEROID_CAP / 2, "asteroid peak {overall:?}");
     assert_eq!(overall[1], SHIP_BULLET_LIMIT, "bullet peak {overall:?}");
-    assert_eq!(overall[3], SAUCER_BULLET_LIMIT, "saucer bullet peak {overall:?}");
+    assert_eq!(
+        overall[3], SAUCER_BULLET_LIMIT,
+        "saucer bullet peak {overall:?}"
+    );
+}
+
+#[test]
+fn score_delta_bitset_matches_bool_table() {
+    let table = build_legal_score_delta_table();
+    for delta in 0..(LEGAL_SCORE_DELTA_TABLE_SIZE as u32 + 64) {
+        let expected = (delta as usize) < table.len() && table[delta as usize];
+        assert_eq!(is_legal_score_delta(delta), expected, "delta {delta}");
+    }
+    assert_eq!(
+        table.iter().filter(|legal| **legal).count(),
+        LEGAL_SCORE_DELTA_BITS
+            .iter()
+            .map(|word| word.count_ones() as usize)
+            .sum::<usize>()
+    );
+    assert!(!is_legal_score_delta(u32::MAX));
 }
