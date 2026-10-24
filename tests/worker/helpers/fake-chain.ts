@@ -8,7 +8,11 @@ import type {
   SubmitScoreArgs,
 } from "../../../worker/chain/score-contract";
 import { bytesToHex, sha256 } from "../../../worker/hex";
-import type { BroadcastResult, RelayChain } from "../../../worker/relay/engine";
+import {
+  DEFAULT_RELAY_POLICY,
+  type BroadcastResult,
+  type RelayChain,
+} from "../../../worker/relay/engine";
 import { replayTape } from "../../../worker/replay";
 
 export const NETWORK_HASH = toBase58(new Uint8Array(32).fill(0x11));
@@ -53,6 +57,8 @@ export class FakeChain {
   minGasToSucceed: bigint | null = null;
   /** When true, submit_score faults (not out of gas). */
   forceFault = false;
+  /** When true, an out-of-gas child shows as a wallet abort (as on devnet). */
+  childOutOfGasAborts = false;
   private counter = 0;
   readonly gasSeen: bigint[] = [];
 
@@ -104,12 +110,19 @@ export class FakeChain {
     }
     const outOfGas = this.minGasToSucceed !== null && tx.gasLimit < this.minGasToSucceed;
     if (outOfGas || this.forceFault) {
+      const walletAbort = outOfGas && this.childOutOfGasAborts;
       this.receipts.set(tx.txHash, {
         txHash: tx.txHash,
         blockHeight: this.height,
-        outcome: "fault",
-        abortData: null,
-        gasUsed: outOfGas ? tx.gasLimit : 1n,
+        outcome: walletAbort ? "abort" : "fault",
+        // The wallet re-throws a failed child call with its own error.
+        abortData: walletAbort ? new Uint8Array([0xff, 0xdf]) : null,
+        // Out of gas uses the whole child budget (plus the wallet's 150).
+        gasUsed: outOfGas
+          ? walletAbort
+            ? tx.gasLimit - DEFAULT_RELAY_POLICY.walletGasOverhead + 150n
+            : tx.gasLimit
+          : 1n,
         raw: null,
       });
       return;
@@ -220,7 +233,11 @@ export class FakeChain {
       scoreSubmittedFromReceipt: (receipt) => this.eventsByTx.get(receipt.txHash) ?? null,
       classifyFailure: (receipt) => {
         const reason = this.failures.get(receipt.txHash) ?? "failed";
-        return { reason, relayFault: reason === "NotRelay" || reason === "Paused" };
+        return {
+          reason,
+          relayFault: reason === "NotRelay" || reason === "Paused" || reason === "failed",
+          declared: reason !== "failed",
+        };
       },
       scoreEvents: async ({ fromHeight, cursor, limit }) => {
         // Cursor = "<fromHeight>:<offset>", so a continuation keeps its walk.

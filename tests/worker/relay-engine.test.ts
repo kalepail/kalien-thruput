@@ -221,6 +221,22 @@ describe("RelayEngine", () => {
     ]);
   });
 
+  it("treats a wallet abort that used the whole child budget as out of gas (devnet case)", async () => {
+    const run = await newRun(mediumTape);
+    const first = scoreGas(DEFAULT_RELAY_POLICY, 5000) + DEFAULT_RELAY_POLICY.walletGasOverhead;
+    chain.minGasToSucceed = first + 1n;
+    chain.childOutOfGasAborts = true;
+    engine.enqueue(run);
+    await engine.tick();
+    await chain.mine();
+    await engine.tick();
+    expect(store.requireRun(run.runId)).toMatchObject({ status: "submitting", oogRetries: 1 });
+    await chain.mine();
+    await engine.tick();
+    expect(store.requireRun(run.runId).status).toBe("confirmed");
+    expect(chain.signed.size).toBe(2);
+  });
+
   it("fails after a second out-of-gas fault, and at once on any other fault", async () => {
     const run = await newRun(mediumTape);
     chain.minGasToSucceed = 10n ** 12n;

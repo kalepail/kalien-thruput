@@ -332,38 +332,56 @@ export class RelayEngine {
   }
 
   /**
-   * A committed `fault` changed no state. Out of gas (gas used reached the
-   * limit) gets one new transaction with more gas; any other fault repeats
-   * for the same input, so the run fails at once.
+   * A committed failure that is not a contract `ScoreError` changed no state.
+   * Out of gas gets exactly one new transaction with 1.5x child gas:
+   * - a root `fault` whose gas used reached the root limit, or
+   * - a root `abort` (the wallet re-throws a failed child call) whose gas used
+   *   reached the child limit (root limit minus the wallet overhead).
+   * A fault without out-of-gas repeats for the same input, so the run fails.
+   * Other wallet aborts are relay faults (retried with the normal policy).
    */
-  private settleFault(run: RunRecord, receipt: ChainReceipt): void {
+  private settleFault(run: RunRecord, receipt: ChainReceipt, reason: string): void {
     const { store, policy } = this.deps;
     const now = this.deps.now();
     const height = receipt.blockHeight.toString();
     const limit = run.gasLimit ? BigInt(run.gasLimit) : null;
-    const outOfGas = limit !== null && receipt.gasUsed >= limit;
-    if (!outOfGas) {
-      store.finish(
-        run.runId,
-        "failed",
-        `execution fault (gas used ${receipt.gasUsed})`,
-        height,
-        now,
-      );
+    const child = limit === null ? null : limit - policy.walletGasOverhead;
+    const outOfGas =
+      limit !== null &&
+      child !== null &&
+      (receipt.outcome === "fault" ? receipt.gasUsed >= limit : receipt.gasUsed >= child);
+    if (!outOfGas || child === null) {
+      if (receipt.outcome === "fault") {
+        store.finish(
+          run.runId,
+          "failed",
+          `execution fault (gas used ${receipt.gasUsed})`,
+          height,
+          now,
+        );
+      } else {
+        this.log(`run ${run.runId.slice(0, 12)} relay fault: ${reason}`);
+        this.retryOrFail(run.runId, reason);
+      }
       return;
     }
-    const child = limit - policy.walletGasOverhead;
     const boosted = (child * 3n) / 2n;
     const next = boosted > policy.gasRetryMax ? policy.gasRetryMax : boosted;
     if (run.oogRetries >= 1 || next <= child) {
-      store.finish(run.runId, "failed", `out of gas at ${limit} gas`, height, now);
+      store.finish(
+        run.runId,
+        "failed",
+        `out of gas: used ${receipt.gasUsed} of ${limit}`,
+        height,
+        now,
+      );
       return;
     }
     this.log(`run ${run.runId.slice(0, 12)} out of gas at ${limit}; one retry with ${next}`);
     store.requeueWithMoreGas(
       run.runId,
       next.toString(),
-      `out of gas at ${limit} gas; retrying`,
+      `out of gas: used ${receipt.gasUsed} of ${limit}; retrying with more gas`,
       now,
     );
   }
@@ -373,8 +391,8 @@ export class RelayEngine {
     const now = this.deps.now();
     if (receiptFailed(receipt)) {
       const failure = score.classifyFailure(receipt);
-      if (receipt.outcome === "fault") {
-        this.settleFault(run, receipt);
+      if (receipt.outcome === "fault" || (receipt.outcome === "abort" && !failure.declared)) {
+        this.settleFault(run, receipt, failure.reason);
         return;
       }
       if (failure.relayFault) {

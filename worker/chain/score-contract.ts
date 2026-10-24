@@ -38,6 +38,8 @@ export interface ScoreSubmitted {
 export interface FailureInfo {
   reason: string;
   relayFault: boolean;
+  /** True when the abort data is a declared `ScoreError` of the score contract. */
+  declared: boolean;
 }
 
 export interface IndexedScoreSubmitted extends ScoreSubmitted {
@@ -152,6 +154,7 @@ export function classifyScoreFailure(receipt: ChainReceipt): FailureInfo {
         return {
           reason: ERROR_REASONS[name] ? `${name}: ${ERROR_REASONS[name]}` : name,
           relayFault: RELAY_FAULTS.has(name),
+          declared: true,
         };
       }
     } catch {
@@ -164,6 +167,7 @@ export function classifyScoreFailure(receipt: ChainReceipt): FailureInfo {
     reason:
       receipt.outcome === "abort" ? "aborted without a ScoreError" : `execution ${receipt.outcome}`,
     relayFault: true,
+    declared: false,
   };
 }
 

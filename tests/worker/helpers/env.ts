@@ -86,6 +86,7 @@ export function testApp(options: { lanes?: number } = {}) {
       touchSeed: async (lane: number, seedId: number) => (check(lane), service.touchSeed(seedId)),
       status: async (lane: number) => (check(lane), await service.kick(), service.status()),
       kick: async (lane: number) => (check(lane), service.kick()),
+      retryFailed: async (lane: number, runId: string) => (check(lane), service.retryFailed(runId)),
       runsByStatus: async (lane: number, statuses: never[], limit: number) => (
         check(lane), service.runsByStatus(statuses, limit)
       ),

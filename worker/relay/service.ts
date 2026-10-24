@@ -69,6 +69,17 @@ export class RelayService {
     };
   }
 
+  /** Ops: queue a failed run again (same signed claim). Null if not failed. */
+  async retryFailed(runId: string): Promise<RunView | null> {
+    const run = this.store.getRun(runId);
+    if (!run || run.status !== "failed") {
+      return null;
+    }
+    const { run: queued } = this.store.enqueue(run, this.now());
+    await this.schedule(this.now());
+    return runView(queued);
+  }
+
   /** Recent runs with these statuses (ops), newest first. */
   runsByStatus(statuses: RunStatus[], limit: number): RunView[] {
     return this.store.listByStatus(statuses, limit).map(runView);

@@ -5,7 +5,7 @@ import { CONFIG_CACHE_CONTROL, HEALTH_CACHE_CONTROL, SEED_CACHE_CONTROL } from "
 import { getIndexerState } from "../leaderboard/store";
 import { runLeaderboardSync } from "../leaderboard/sync";
 import type { RunStatus } from "../relay/store";
-import { allLanes, allowedLanes, relayLane } from "../relay/stub";
+import { allLanes, allowedLanes, findRun, relayLane } from "../relay/stub";
 import { currentSeedId, lookupSeed, secondsLeftInEpoch } from "../seed";
 import { safeErrorMessage } from "../utils";
 import { isAdmin, jsonError, type AppEnv } from "./http";
@@ -130,6 +130,23 @@ export function createApiRouter(): Hono<AppEnv> {
     const runs = merged.slice(0, limit);
     c.header("Cache-Control", "no-store");
     return c.json({ success: true, statuses, runs });
+  });
+
+  // POST /api/admin/runs/:id/retry — queue a failed run again in its lane.
+  api.post("/admin/runs/:id/retry", async (c) => {
+    if (!isAdmin(c)) {
+      return jsonError(c, 404, "not found");
+    }
+    const runId = c.req.param("id").trim().toLowerCase().replace(/^0x/u, "");
+    const found = /^[0-9a-f]{64}$/u.test(runId) ? await findRun(c.env, runId) : null;
+    if (!found) {
+      return jsonError(c, 404, "run not found");
+    }
+    const run = await relayLane(c.env, found.lane).retryFailed(found.lane, runId);
+    if (!run) {
+      return jsonError(c, 409, `run is ${found.run.status}, not failed`);
+    }
+    return c.json({ success: true, lane: found.lane, ...run });
   });
 
   api.post("/admin/seed/touch", async (c) => {

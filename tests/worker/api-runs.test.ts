@@ -228,6 +228,27 @@ describe("GET /api/admin/runs", () => {
   });
 });
 
+describe("POST /api/admin/runs/:id/retry", () => {
+  it("queues a failed run again and it confirms", async () => {
+    const t = testApp();
+    t.chain.seeds.set(currentSeedId(), seedOf(shortTape));
+    t.chain.forceFault = true;
+    const { body } = await submit(t, shortTape);
+    await t.settle();
+    const runId = String(body.runId);
+    const failed = (await (await t.request(`/api/runs/${runId}`)).json()) as { status: string };
+    expect(failed.status).toBe("failed");
+    t.chain.forceFault = false;
+    const admin = { method: "POST", headers: { authorization: "Bearer test-key" } };
+    const retry = await t.request(`/api/admin/runs/${runId}/retry`, admin);
+    expect(retry.status).toBe(200);
+    await t.settle();
+    const done = (await (await t.request(`/api/runs/${runId}`)).json()) as { status: string };
+    expect(done.status).toBe("confirmed");
+    expect((await t.request(`/api/admin/runs/${runId}/retry`, admin)).status).toBe(409);
+  });
+});
+
 describe("GET /api/seed/current", () => {
   it("returns a stored seed and asks the relay to touch a missing one", async () => {
     const t = testApp();

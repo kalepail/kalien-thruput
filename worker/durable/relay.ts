@@ -101,6 +101,11 @@ export class RelayDO extends DurableObject<WorkerEnv> {
     return this.service.listRuns(playerAddress, options);
   }
 
+  retryFailed(lane: number, runId: string) {
+    this.bind(lane);
+    return this.service.retryFailed(runId);
+  }
+
   runsByStatus(lane: number, statuses: RunStatus[], limit: number) {
     this.bind(lane);
     return this.service.runsByStatus(statuses, limit);
