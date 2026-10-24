@@ -23,6 +23,7 @@ import { Autopilot, type AutopilotConfig } from "../src/game/Autopilot";
 import { KalienApi, type RunRecord } from "../cli/src/api/client";
 import { bytesToHex, sha256 } from "../cli/src/identity/claim";
 import { loadOrCreateIdentity } from "../cli/src/identity/keyfile";
+import { fetchGasUsed, fetchLaneCounts, laneSpread } from "./lib/probe";
 
 const KALIEN_UNITS = 10_000_000n; // 7 decimals
 
@@ -94,7 +95,25 @@ const config = await api.config();
 log(`Network: ${config.networkHash}`);
 log(`Score:   ${config.scoreContract}`);
 
-const { seedId, seed } = await api.currentSeed();
+// Do not start a run sequence close to an epoch change.
+{
+  const res = await fetch(`${api.baseUrl}/api/seed/current`);
+  const info = (await res.json()) as { secondsLeft?: number };
+  if ((info.secondsLeft ?? 600) < 90) {
+    log(`Waiting ${info.secondsLeft}s for the next seed epoch...`);
+    await new Promise((r) => setTimeout(r, ((info.secondsLeft ?? 0) + 15) * 1000));
+  }
+}
+let seedInfo = await api.currentSeed().catch(() => null);
+for (let i = 0; !seedInfo && i < 20; i++) {
+  // eslint-disable-next-line no-await-in-loop -- the seed appears a few seconds after the epoch starts
+  await new Promise((r) => setTimeout(r, 3000));
+  // eslint-disable-next-line no-await-in-loop -- see above
+  seedInfo = await api.currentSeed().catch(() => null);
+}
+if (!seedInfo) throw new Error("no current seed");
+const { seedId, seed } = seedInfo;
+const lanesBefore = await fetchLaneCounts(api.baseUrl).catch(() => []);
 log(`Seed:    0x${seed.toString(16).padStart(8, "0")} (seed_id ${seedId})`);
 
 // Increasing frame cuts give non-decreasing scores; keep only strict improvements.
@@ -125,6 +144,10 @@ for (const t of tapes) {
     log(`  error: ${run.error}`);
     continue;
   }
+  const gas = run.txHash ? await fetchGasUsed(config.rpcUrl, run.txHash) : null;
+  log(
+    `  RUN ${run.runId} score=${t.score} frames=${t.frames} gas=${gas ?? "?"} secs=${secs} tx=${run.txHash}`,
+  );
   check(run.score === t.score, `score ${run.score} == tape score ${t.score}`);
   check((run.previousBest ?? 0) === best, `previousBest ${run.previousBest} == ${best}`);
   const expectedMint = BigInt(t.score - best) * KALIEN_UNITS;
@@ -231,6 +254,26 @@ if (negative && last) {
     );
   }
 
+  // Malformed tapes: refused before any chain work.
+  const malformed: [string, Uint8Array][] = [];
+  const badMagic = new Uint8Array(fresh.tape);
+  badMagic[0] ^= 0xff;
+  malformed.push(["bad magic", badMagic]);
+  malformed.push(["truncated", fresh.tape.slice(0, fresh.tape.length - 20)]);
+  const badBody = new Uint8Array(fresh.tape);
+  badBody[20] ^= 0x01; // body byte; the CRC no longer matches
+  malformed.push(["CRC mismatch", badBody]);
+  malformed.push(["empty", new Uint8Array(0)]);
+  malformed.push(["oversized (18,025 bytes)", new Uint8Array(18_025)]);
+  for (const [name, bytes] of malformed) {
+    // eslint-disable-next-line no-await-in-loop -- one request at a time keeps the log readable
+    const r = await api.submitRun(identity, seedId, bytes);
+    check(
+      !r.success && (r.httpStatus ?? 0) >= 400 && (r.httpStatus ?? 0) < 500,
+      `${name} tape -> ${r.httpStatus} ${r.code}`,
+    );
+  }
+
   // Forged footer score: replay_mismatch.
   const forged = new Uint8Array(fresh.tape);
   const view = new DataView(forged.buffer);
@@ -241,6 +284,9 @@ if (negative && last) {
     `forged footer score -> ${forgedRes.httpStatus} ${forgedRes.code}`,
   );
 }
+
+const lanesAfter = await fetchLaneCounts(api.baseUrl).catch(() => []);
+if (lanesBefore.length > 0) log(`Lane spread: ${laneSpread(lanesBefore, lanesAfter)}`);
 
 log(failures === 0 ? "PASSED" : `FAILED (${failures} checks)`);
 process.exit(failures === 0 ? 0 : 1);
