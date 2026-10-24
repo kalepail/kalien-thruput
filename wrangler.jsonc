@@ -5,7 +5,15 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-02-24",
   "compatibility_flags": ["nodejs_compat"],
+  // Canonical URL https://thruput.kalien.xyz (custom domain on the kalien.xyz zone; the
+  // root and testnet hostnames belong to other Workers). workers.dev stays on as a fallback.
   "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "thruput.kalien.xyz",
+      "custom_domain": true,
+    },
+  ],
   "observability": {
     "enabled": true,
     "logs": {

@@ -9,7 +9,8 @@ KALIEN for each improvement.
 There is no zero-knowledge proof and no wallet setup. The browser makes an Ed25519 key on your
 first visit. A relay pays the transaction, and your signature binds the run to your address.
 
-- App: `https://kalien-thruput.sdf-ecosystem.workers.dev` (live; Worker version `d2cc7b39`)
+- App: `https://thruput.kalien.xyz` (live; the same Worker also answers at
+  `https://kalien-thruput.sdf-ecosystem.workers.dev`)
 - Chain: Thruput devnet (wire format 14, base58 identifiers), RPC `https://rpc.thruput.network`,
   explorer `https://explorer.thruput.network/`
 - Contracts (v3): score `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`, token
@@ -45,7 +46,7 @@ bun run dev                              # browser app + Worker; contracts from 
 ```
 
 The local Worker needs `.dev.vars` (copy `.dev.vars.example`: `RELAY_SECRETS`, `DEV_API_KEY`).
-To use the deployed API instead: `KALIEN_API_PROXY=https://kalien-thruput.sdf-ecosystem.workers.dev bun run dev`.
+To use the deployed API instead: `KALIEN_API_PROXY=https://thruput.kalien.xyz bun run dev`.
 
 ### Full stack on a local node
 

@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://kalien-thruput.sdf-ecosystem.workers.dev/sitemap.xml
+Sitemap: https://thruput.kalien.xyz/sitemap.xml

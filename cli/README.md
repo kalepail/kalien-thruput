@@ -53,7 +53,8 @@ The CLI keeps one player key file. It makes the file on first use.
 
 ## API
 
-Default API: `https://kalien-thruput.sdf-ecosystem.workers.dev`. Override with
+Default API: `https://thruput.kalien.xyz` (the same Worker answers at
+`https://kalien-thruput.sdf-ecosystem.workers.dev`). Override with
 `--api-url <url>` or `KALIEN_API_URL` (for a local Worker, use
 `http://localhost:8787`).
 

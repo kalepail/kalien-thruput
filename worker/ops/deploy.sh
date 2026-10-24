@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploy the Kalien Worker `kalien-thruput` to the Ecosystem - Stellar account
-# (https://kalien-thruput.sdf-ecosystem.workers.dev).
+# (https://thruput.kalien.xyz, also https://kalien-thruput.sdf-ecosystem.workers.dev).
 #
 #   worker/ops/deploy.sh             # checks, build, D1 migrations, deploy
 #   worker/ops/deploy.sh --secrets   # also upload RELAY_SECRETS and DEV_API_KEY
@@ -82,4 +82,4 @@ if [[ $secrets -eq 1 ]]; then
   $WRANGLER secret put DEV_API_KEY --env="" < "$key_file"
 fi
 
-echo "== done: https://kalien-thruput.sdf-ecosystem.workers.dev"
+echo "== done: https://thruput.kalien.xyz (and https://kalien-thruput.sdf-ecosystem.workers.dev)"

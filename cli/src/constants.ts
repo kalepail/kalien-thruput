@@ -1,5 +1,5 @@
 // Default Kalien Worker API. Override with --api-url or KALIEN_API_URL.
-export const DEFAULT_API_URL = "https://kalien-thruput.sdf-ecosystem.workers.dev";
+export const DEFAULT_API_URL = "https://thruput.kalien.xyz";
 
 // Seed epoch length. Must match the score contract (seed_id = block_timestamp / 600).
 export const SEED_INTERVAL_SECONDS = 600;

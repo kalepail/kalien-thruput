@@ -1,6 +1,6 @@
 // Smoke test for a deployed (or local) Worker.
 //
-//   bun worker/ops/smoke.ts [--api https://kalien-thruput.sdf-ecosystem.workers.dev] [--frames 3000]
+//   bun worker/ops/smoke.ts [--api https://thruput.kalien.xyz] [--frames 3000]
 //
 // 1. GET /api/config and check the RPC reports the same network hash.
 // 2. GET /api/seed/current (waits for the seed if the epoch just started).
@@ -18,10 +18,7 @@ const option = (name: string, fallback: string) => {
   const index = args.indexOf(name);
   return index >= 0 && args[index + 1] ? (args[index + 1] as string) : fallback;
 };
-const api = option("--api", "https://kalien-thruput.sdf-ecosystem.workers.dev").replace(
-  /\/+$/u,
-  "",
-);
+const api = option("--api", "https://thruput.kalien.xyz").replace(/\/+$/u, "");
 const maxFrames = Number(option("--frames", "3000"));
 let failed = false;
 

@@ -2,7 +2,7 @@
 
 Branch `thruput-devnet`, worktree `/Users/kalepail/Desktop/Web/Soroban/kalien-thruput`.
 Final home: private repo `kalepail/kalien-thruput`, Worker `kalien-thruput` at
-`https://kalien-thruput.sdf-ecosystem.workers.dev` (Cloudflare account "Ecosystem - Stellar",
+`https://thruput.kalien.xyz` (custom domain; also `https://kalien-thruput.sdf-ecosystem.workers.dev`) (Cloudflare account "Ecosystem - Stellar",
 `ba55b7ae9acfb3ed152103e3497c0752`).
 
 ## Goal
@@ -312,6 +312,6 @@ explorer link.
 1. Contract replays all fixture tapes on RV32 (`thruput test`) with exact scores, and on devnet.
 2. Gas and memory measured and recorded for short, medium, 36k-frame tapes.
 3. Browser: play a game, submit, see the confirmed score, KALIEN balance, leaderboard entry, and
-   the replay, on `kalien-thruput.sdf-ecosystem.workers.dev`.
+   the replay, on `thruput.kalien.xyz`.
 4. CLI and autopilot submit runs to the new API.
 5. `bun run check` passes; Rust tests pass; no ZK code left.

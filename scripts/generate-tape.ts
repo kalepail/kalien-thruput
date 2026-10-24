@@ -22,7 +22,7 @@ import { deserializeTape } from "../src/game/tape";
 
 const DEFAULT_MAX_FRAMES = 36_000;
 const DEFAULT_API_URL =
-  process.env.KALIEN_API_URL ?? "https://kalien-thruput.sdf-ecosystem.workers.dev";
+  process.env.KALIEN_API_URL ?? "https://thruput.kalien.xyz";
 
 // Parse arguments
 let explicitSeed: number | null = null;
