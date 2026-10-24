@@ -278,9 +278,12 @@ impl Game {
             return Err(RuleCode::GlobalWaveNonZero);
         }
 
+        // After game over, ship bullets still in flight can score and cross one extra-life
+        // threshold (at most SHIP_BULLET_LIMIT kills worth <= 990 each, < EXTRA_LIFE_SCORE_STEP),
+        // so a finished game can hold one life.
         let mode_lives_consistent = match self.mode {
             GameMode::Playing => self.lives > 0,
-            GameMode::GameOver => self.lives <= 0,
+            GameMode::GameOver => self.lives <= 1,
         };
         if !mode_lives_consistent {
             return Err(RuleCode::GlobalModeLivesConsistency);

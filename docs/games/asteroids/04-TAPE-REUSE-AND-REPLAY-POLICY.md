@@ -36,8 +36,9 @@ on the same seed:
 1. **Padding nibble.** With an odd frame count, the high nibble of the last body byte is not a
    frame. Neither parser checks that it is zero, so up to 16 byte variants give the same replay.
    The parity corpus has such a tape; both sims accept it.
-2. **Frames after game over.** After game over, nothing can add score. A copier can append frames
-   (up to 36,000 in total) and keep the score.
+2. **Frames after game over.** Ship bullets in flight can still score for up to 72 frames after
+   game over; after that nothing can add score. A copier can append frames (up to 36,000 in
+   total) and keep the score.
 3. **Inputs the sim ignores.** While the ship respawns, turn and thrust do nothing. Changes there
    (and other changes that do not reach a score event) keep the score.
 
@@ -51,7 +52,7 @@ same with the original bytes.
 | Option | Closes | Cost |
 |---|---|---|
 | Reject a non-zero padding nibble | case 1 | Small. Rust parser, `src/game/tape.ts`, the contract (redeploy), and the Worker change together. Existing tapes are not affected (all writers write 0). |
-| Require the tape to end at game over or at 36,000 frames | case 2 | Small rule change in `verify_tape` and the TS pre-check; the client already stops at game over. |
+| Require the tape to end within a fixed number of frames after game over (or at 36,000 frames) | case 2 | Small rule change in `verify_tape` and the TS pre-check; the client already stops at game over. |
 | Dedupe on an "effective input" hash computed during the replay (only inputs that changed state, cut at game over) | cases 1–3 | Larger. A new hash in the replay loop; more gas per frame. |
 | Shorter active window (for example the current epoch plus a grace period) | narrows the copy window | Changes the product (24-hour seeds). |
 | Accept the gap on devnet | — | KALIEN on devnet has no value. |

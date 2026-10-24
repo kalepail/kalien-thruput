@@ -454,7 +454,32 @@ fn wave_asteroid_count(wave: i32) -> usize {
 
 #[inline]
 fn max_ship_step_sq_q12_4() -> i32 {
-    (SHIP_MAX_SPEED_SQ_Q16_16 >> 8) + 4
+    MAX_SHIP_STEP_SQ_Q12_4
+}
+
+/// Largest squared one-frame ship displacement in Q12.4: the maximum of
+/// `(vx >> 4)^2 + (vy >> 4)^2` over integer velocities with
+/// `vx^2 + vy^2 <= SHIP_MAX_SPEED_SQ_Q16_16` (the clamp guarantees that bound).
+/// `>> 4` floors, so a negative component moves up to `(|v| + 15) >> 4` units; the old bound
+/// `(max_sq >> 8) + 4` ignored that and rejected honest deaths at full speed.
+const MAX_SHIP_STEP_SQ_Q12_4: i32 = build_max_ship_step_sq();
+
+const fn build_max_ship_step_sq() -> i32 {
+    let max_sq = SHIP_MAX_SPEED_SQ_Q16_16;
+    let mut best = 0;
+    let mut a = 0;
+    while a * a <= max_sq {
+        // Per axis, the largest step for |v| is `(|v| + 15) >> 4`, which grows with |v|, so
+        // for each |vx| only the largest allowed |vy| matters.
+        let b = (max_sq - a * a).isqrt();
+        let da = (a + 15) >> 4;
+        let db = (b + 15) >> 4;
+        if da * da + db * db > best {
+            best = da * da + db * db;
+        }
+        a += 1;
+    }
+    best
 }
 
 #[inline]

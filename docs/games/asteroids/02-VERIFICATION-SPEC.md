@@ -85,9 +85,17 @@ each frame. A failure rejects the tape with `RuleViolation { frame, rule }`.
 | Saucers | `SAUCER_CAP` |
 | Progression | `PROGRESSION_SCORE_DELTA` (each frame's score delta must be a sum of at most four score events), `PROGRESSION_WAVE_ADVANCE` |
 
-These rules check the simulation's own state. Inputs alone do not trip them: the parity corpus
-and the fuzz tests found no input stream that fails a rule check while the loose replay gives the
-claimed score (see `docs/thruput/kt-core.md`). They stay as defense in depth.
+These rules check the simulation's own state, so they must accept every honest run. Two rules
+were too tight and rejected honest runs (20 of 2,506 valid tapes in the first large parity run);
+both are fixed (see `docs/thruput/kt-core.md`):
+
+- `SHIP_POSITION_STEP`: when the ship dies in a frame at full speed, the step bound now accounts
+  for `v >> 4` rounding negative velocities down (exact bound 8,458 instead of 8,228).
+- `GLOBAL_MODE_LIVES_CONSISTENCY`: a game-over state may hold one life, because a ship bullet in
+  flight can score after game over and earn an extra life.
+
+Regression tapes: `asteroids-core/tests/fixtures/strict-regressions/`. The parity tool counts
+any tape that the TS pre-check accepts and the strict replay rejects.
 
 ## RNG integrity
 
@@ -98,8 +106,9 @@ claimed score (see `docs/thruput/kt-core.md`). They stay as defense in depth.
 
 `worker/replay.ts` parses the tape with `src/game/tape.ts` and replays it with
 `src/game/AsteroidsGame.ts` (headless). It rejects the run if the replayed score differs from the
-claim. The TS sim has no strict rule checks. That is safe because the TS and Rust sims give the
-same full state on every frame, and no input stream trips a strict rule.
+claim. The TS sim has no strict rule checks. That is safe only while the TS and Rust sims give the
+same full state on every frame and the strict rules accept every honest run; the parity tool
+checks both.
 
 ## Result
 

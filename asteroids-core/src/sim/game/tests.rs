@@ -205,10 +205,17 @@ fn checked_step_accepts_verified_fixture_inputs() {
 #[test]
 fn invariant_checks_report_expected_rule_codes() {
     assert_invariant_violation(|game| game.wave = 0, RuleCode::GlobalWaveNonZero);
+    // One life after game over is legal (a bullet in flight can earn an extra life); two is not.
+    {
+        let mut game = Game::new(0xDEAD_BEEF);
+        game.mode = GameMode::GameOver;
+        game.lives = 1;
+        assert_eq!(game.validate_invariants(), Ok(()));
+    }
     assert_invariant_violation(
         |game| {
             game.mode = GameMode::GameOver;
-            game.lives = 1;
+            game.lives = 2;
         },
         RuleCode::GlobalModeLivesConsistency,
     );
@@ -755,4 +762,69 @@ fn score_delta_bitset_matches_bool_table() {
             .sum::<usize>()
     );
     assert!(!is_legal_score_delta(u32::MAX));
+}
+
+#[test]
+fn max_ship_step_bound_is_exact_over_the_velocity_disc() {
+    let max_sq = SHIP_MAX_SPEED_SQ_Q16_16;
+    let limit = (max_sq as f64).sqrt() as i32 + 1;
+    let mut best = 0;
+    for vx in -limit..=limit {
+        for vy in -limit..=limit {
+            if vx * vx + vy * vy <= max_sq {
+                let (dx, dy) = (vx >> 4, vy >> 4);
+                best = best.max(dx * dx + dy * dy);
+            }
+        }
+    }
+    assert_eq!(MAX_SHIP_STEP_SQ_Q12_4, best);
+    // The old bound was too tight.
+    assert!(best > (max_sq >> 8) + 4);
+}
+
+/// Honest inputs must never trip a strict rule: strict and loose replays agree on every run.
+/// Covers the two false positives found by the parity corpus (a full-speed death, and an extra
+/// life from a bullet that lands after game over).
+#[test]
+fn strict_replay_accepts_every_honest_run() {
+    let cases = if cfg!(debug_assertions) { 24 } else { 240 };
+    let mut rng = SeededRng::new(0x0057_A1C7);
+    for case in 0..cases {
+        let seed = rng.next();
+        let frames = 2_000 + (rng.next() % 10_000) as usize;
+        let inputs: Vec<u8> = match case % 3 {
+            // Thrust + one turn key held, fire every few frames: reaches top speed often.
+            0 => {
+                let turn = if rng.next() & 1 == 0 { 0x01 } else { 0x02 };
+                let fire_every = 2 + rng.next() % 12;
+                (0..frames)
+                    .map(|i| {
+                        0x04 | turn
+                            | if (i as u32).is_multiple_of(fire_every) {
+                                0x08
+                            } else {
+                                0
+                            }
+                    })
+                    .collect()
+            }
+            // Held random inputs.
+            1 => {
+                let mut out = Vec::with_capacity(frames);
+                while out.len() < frames {
+                    let byte = (rng.next() & 0x0F) as u8;
+                    let run = 1 + (rng.next() % 90) as usize;
+                    out.extend(core::iter::repeat_n(byte, run.min(frames - out.len())));
+                }
+                out
+            }
+            _ => (0..frames).map(|_| (rng.next() & 0x0F) as u8).collect(),
+        };
+        let loose = replay(seed, &inputs);
+        assert_eq!(
+            replay_strict(seed, &inputs),
+            Ok(loose),
+            "case {case} seed {seed:#x}"
+        );
+    }
 }
