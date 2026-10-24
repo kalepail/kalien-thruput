@@ -251,15 +251,19 @@ decimal strings of base units (7 decimals). `runId` = `sha256(tape)` as 64 hex c
   (same tape, same player → 200 with the existing run; another player → 409
   `already_claimed`), seed window, claim signature, TS replay score, stored seed equals the
   tape seed, `is_claimed`, `best_score`. Error codes: `bad_pubkey`, `bad_signature`,
-  `bad_seed_id`, `tape_too_large`, `bad_tape`, `seed_inactive`, `seed_missing`,
+  `bad_seed_id`, `seed_blocked` (403: a closed fixture epoch, `BLOCKED_SEED_IDS`),
+  `tape_too_large`, `bad_tape`, `seed_inactive`, `seed_missing`,
   `seed_mismatch`, `replay_mismatch`, `already_claimed`, `not_improved` (with `bestScore`),
   `chain_unavailable`.
 - Run record (`GET /api/runs/:id`, POST response, list items): `{ runId, status:
-  queued|submitting|confirmed|rejected|failed, playerAddress, seedId, seed, frameCount,
+  queued|submitting|confirmed|rejected|failed|unknown, playerAddress, seedId, seed, frameCount,
   claimedScore, score, previousBest, minted, txHash, blockHeight, attempts, error, createdAt,
   updatedAt }`. `score` is the confirmed new best, else the claimed score. `rejected` means the
   contract refused the run (`error` = contract error name and reason). `failed` means the relay
-  gave up (a new POST of the same tape retries it).
+  gave up (a new POST of the same tape retries it, except for a final failure: a deterministic
+  fault or a second out-of-gas). `unknown` means the relay could not settle the transaction in
+  time (for example a commitment without a receipt); it keeps checking with backoff and the
+  status can still change to `confirmed` or another final state. Clients poll it slowly.
 - `GET /api/runs?player=<address>&limit=<1..100>&offset=<0..1000>` or `&cursor=<nextCursor>` →
   `{ player, runs: [run record], total, limit, offset, nextOffset, nextCursor }` (newest first,
   merged over relay lanes).
@@ -278,9 +282,12 @@ decimal strings of base units (7 decimals). `runId` = `sha256(tape)` as 64 hex c
   return them; `timestamp` = ms, within 5 minutes of server time, newer than the last update). `pubkeyAccountAddress(pubkey)` must equal `address`. Helper: `worker/profile.ts`
   `profileMessage`.
 - `GET /api/health` → `{ lanes: [{ lane, allowed, address, counts, seedTouch, lastError }], indexer }`.
-  `allowed` = the lane key passes `is_relay`; new runs go only to allowed lanes.
+  `allowed` = the lane key passes `is_relay`; new runs go only to allowed lanes. Public calls
+  get a view cached for 15 s per isolate; the admin key gets a fresh one.
 - Admin (`Authorization: Bearer <DEV_API_KEY>`): `POST /api/admin/sync`,
-  `POST /api/admin/seed/touch`.
+  `POST /api/admin/seed/touch`, `GET /api/admin/runs?status=failed,rejected,unknown`,
+  `POST /api/admin/runs/:id/retry` (non-final `failed`, or `unknown` when provably dead),
+  `POST /api/admin/indexer/reset?fromHeight=N`.
 - Leaderboard data: the relay writes a row on confirmation; a 1-minute cron indexes
   `ScoreSubmitted` events into D1 (`getEvents`). `closedAt` is the block time
   (`getBlockByHeight`; the event's `submitted_at` as fallback). Rows are kept per score

@@ -6,12 +6,27 @@
 #   worker/ops/deploy.sh --secrets   # also upload RELAY_SECRETS and DEV_API_KEY
 #   worker/ops/deploy.sh --skip-checks
 #
+# It builds a clean export of HEAD (commit first). Set KALIEN_DEPLOY_WORKTREE=1
+# to build the working tree instead.
+#
 # Secrets come from KALIEN_RELAY_DIR (default ~/.config/kalien-thruput):
 # relay.secret, relay-2.secret, ... (one per lane) and dev-api.key (made if
 # missing). They are piped to wrangler and never printed.
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
+
+# Agents share one worktree, so build from a clean export of HEAD: never ship
+# someone's uncommitted edits. KALIEN_DEPLOY_WORKTREE=1 builds the working tree.
+if [[ "${KALIEN_DEPLOY_WORKTREE:-0}" != 1 && -z "${KALIEN_DEPLOY_CLEAN:-}" ]]; then
+  head=$(git rev-parse --short HEAD)
+  clean="${TMPDIR:-/tmp}/kalien-deploy-$head"
+  rm -rf "$clean" && mkdir -p "$clean/.wrangler"
+  git archive HEAD | tar -x -C "$clean"
+  ln -s "$PWD/node_modules" "$clean/node_modules"
+  echo "== building clean HEAD $head in $clean"
+  KALIEN_DEPLOY_CLEAN=1 exec bash "$clean/worker/ops/deploy.sh" "$@"
+fi
 export WRANGLER_LOG_PATH=.wrangler/logs
 export CLOUDFLARE_ACCOUNT_ID=ba55b7ae9acfb3ed152103e3497c0752
 RELAY_DIR="${KALIEN_RELAY_DIR:-$HOME/.config/kalien-thruput}"

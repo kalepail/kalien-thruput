@@ -2,6 +2,78 @@
 
 Agent: `kt-worker` (Cloudflare Worker API, relay, leaderboard). Branch `thruput-devnet`.
 
+## Round 6 (2026-10-24): fixture-epoch block, gas 4,500/frame, review fixes
+
+**Status: deployed (version `f9474f10-552e-40a9-92c2-b29faa95ab52`, built from clean HEAD `20781c0`)
+and smoke-tested.** URL: https://kalien-thruput.sdf-ecosystem.workers.dev
+
+### 1. Urgent: fixture epochs (review item 2)
+
+- The v3 deploy set seeds for `seed_id` 2988058 (`0x5F41772E`), 2988059 (`0x43C9C6CD`) and
+  2988060 (`0xDEADBEEF`) to match public tapes (`kalien-contract/deployments/devnet-fixture-runs.json`;
+  read back from the contract with `seed(id)`).
+- `BLOCKED_SEED_IDS` (var, plus `fixtureSeedIds` from the deploy record if present) makes the
+  POST answer 403 `seed_blocked` right after it parses `seed_id`, before any chain call.
+  Committed `12b55aa`, deployed as version `e131eb9f-3e7f-47a9-801a-b5b70b223389`.
+- Proof on the live Worker: the 911,260 tape signed by a new key for 2988058 → `POST 403 seed 2988058
+  is closed for claims`; no run for 2988058–2988060 in any lane; on chain the 911,260 and 35,850
+  fixture tapes are still unclaimed. The epochs leave the window about 2026-10-25 10:00 UTC.
+
+### 2. Gas
+
+- Child gas 5,000,000 + 4,500 × frames, max 167,000,000; out-of-gas retry once at 2.5×
+  (`RELAY_GAS_RETRY_TENTHS` 25), max 400,000,000. All vars.
+- Local rc.14 node, kt-contract artifacts of 17:42, `asteroids-core/tests/fixtures/gas-worst/`:
+
+| Tape | Frames | Gas used | Limit (root) | Result |
+|---|---:|---:|---:|---|
+| gas-worst-110m (seed 7f80916e) | 36,000 | 110,693,971 | 167,100,000 | confirmed, attempt 1 |
+| gas-dense-92m (seed 7f80916e) | 36,000 | 92,495,522 | 167,100,000 | confirmed, attempt 1 |
+| gas-dense-2716-per-frame (seed 3fcb25f7) | 17,368 | 47,340,682 | 83,256,000 | confirmed, attempt 1 |
+| 30,000-frame prefix of gas-worst, with `RELAY_GAS_PER_FRAME=2000` (forced) | 30,000 | 97,943,323 (retry) | 65,100,000 → 162,600,000 | out of gas, one retry at 2.5×, confirmed (attempts 2) |
+
+### 3. Stuck `submitting` (item 4) and failure finality (item 10)
+
+- A known commitment without a receipt 30 blocks later: if `is_claimed` (read at a snapshot ≥ the
+  commit height) is true, the run is confirmed; else it becomes `unknown`. A transaction still
+  `pending` 15 min after signing also becomes `unknown`. `unknown` frees the lane slot and is
+  re-checked with backoff (1 min doubling to 1 h): a receipt settles it, a claimed tape confirms
+  it. The relay never re-sends it. `POST /api/admin/runs/:id/retry` re-dispatches an `unknown` run
+  only when it is provably dead or failed (no receipt, tape not claimed, and either a committed
+  failure or past expiry plus margin with no commitment).
+- Deterministic faults and a second out-of-gas are final: a re-POST does not queue them again.
+
+### 4. Other review items (all ours, fixed, with tests)
+
+- 5a: the per-player submit limit is taken only after a valid signature (junk signatures for a
+  key no longer lock the player out). Limits are still in-isolate memory (not moved to a Durable
+  Object or the rate-limit binding).
+- 7: request bodies are read through a hard byte cap, also without `Content-Length` (chunked).
+  Live: a chunked 30 KB POST → 413. Profile JSON is capped at 4 KiB.
+- 8: `/api/health` public view is cached 15 s per isolate and never kicks lanes; the admin key
+  gets a fresh view (and re-arms lost alarms). The minute cron still kicks all lanes.
+- 9: overlapping seed touches share one call per relay object.
+- 11: `POST /api/admin/indexer/reset?fromHeight=N`; after a walk that ran within one sync, the
+  next walk starts 20 blocks below that walk's first `latestIndexedBlockHeight` (rows dedupe).
+- 12: constant-time admin key compare. 17: base58 wording in the address error.
+- `worker/ops/deploy.sh` now builds a clean `git archive HEAD` export, so it never ships another
+  agent's uncommitted edits (a kt-client edit to `src/components/shared/PageHero.tsx` was open
+  during this deploy).
+
+### Results
+
+| Check | Result |
+|---|---|
+| `bun run check` | green |
+| `bun test tests/worker` | 84 pass, 0 fail |
+| Deployed smoke | PASS, 2,649 frames confirmed in 6.3 s |
+| Fixture seed on live | 403 `seed_blocked` |
+| `/api/seed/current` on live | `{ seedId, seed, indexed, secondsLeft }` present |
+| Live site key import (kt-client `b33ab18`) | importing the wallet's own address is refused: "this is an address or public key, not a secret key"; the key does not change |
+| Indexer | synced 16:47 UTC, 52 events |
+
+Not done: per-player limits in a Durable Object (item 5b). Items 3, 6, 13–16 are client/contract.
+
 ## Round 5 (2026-10-24): gas margin, out-of-gas retry, failed-run investigation
 
 **Status: deployed (version `d5b258ad-0c86-4d2b-b89d-87c7d5cdf403`) and smoke-tested.**
