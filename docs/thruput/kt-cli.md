@@ -5,16 +5,14 @@ paths, `test-fixtures/`.
 
 ## Status
 
-**Round 2 (local Worker) is done.** The shared vectors pass (no skips). The e2e
-script, `kalien submit`, `kalien status`, and `kalien run` work against the
-local Worker at `http://127.0.0.1:5174` on the live devnet contracts, including
-all rejection paths. See "Round 2 results".
+**Round 3 (devnet wire-14 migration) is green.** The CLI uses
+`@thruputchain/client@0.23.0`, base58 identifiers, and the new pubkey account
+derivation. All CLI tests pass (23), and they also pass against kt-contract's
+migrated `claim.ts` and vectors that are on disk but not yet committed. Waiting
+for the lead: the deployed Worker on the new devnet, then a repeat of the e2e.
 
-The deployed Worker (`https://kalien-thruput.sdf-ecosystem.workers.dev`) still
-returns Cloudflare error 1042. The repeat against it waits for the deploy (see
-"Deployed Worker" at the end).
-
-Round 1 (STOP point A) is done: the CLI builds and signs correct claims.
+Round 2 (local Worker on the old devnet) passed; see "Round 2 results". Those
+addresses and run ids are gone with the devnet wipe.
 
 ## Commits
 
@@ -27,6 +25,8 @@ Round 1 (STOP point A) is done: the CLI builds and signs correct claims.
 | `1d0b677` | `tests/src/cli-preflight.test.ts` rewritten for the new preflight |
 | `cc1794a` | Vector test reads the real `claim-vectors.json` format (addresses + claims, tapes in `kalien-contract/fixtures/`), checks signatures byte for byte |
 | `69cc9b5` | CLI handles `code` / `bestScore`; run loop handles `not_improved` and `already_claimed`; e2e covers dedupe and refusals |
+| `0517091` | Wire-14 migration: `Ed25519Signer`, base58 addresses and keys, new derivation, legacy key file upgrade, import/export formats |
+| `9d0fef4` | Vector test checks `pubkeyHash` and the hex forms of the claim inputs |
 | `86b18f0` | `generate-tape.ts --random-config`; `submit --json` includes `code`, `bestScore`, `existing` |
 
 Lesson: the shared index is not private. I now stage and commit in one command
@@ -221,7 +221,58 @@ the runs; `GET /api/runs/:id/tape` returns the same bytes; player stats
   **kt-worker:** please check the relay log near 22:32–22:38 UTC (run
   `4ea01cb0…9e0d`).
 
+## Round 3: devnet wire-14 migration (2026-10-24)
+
+What changed in `cli/`:
+
+- `PrivateKeySigner` → `Ed25519Signer.fromSeed`.
+- Address = wire-14 pubkey account (nonce 0): the preimage names the key by its
+  scheme-inclusive hash.
+  `publicKeyHash = sha256(00 09 "PublicKey" || 00 || pk)`,
+  `address = sha256(00 0d "PubkeyAccount" || publicKeyHash || 00)`.
+  Addresses and public keys print in base58.
+- `claimMessage` takes the network hash and score contract as base58 or hex
+  (`decodeBytes32`). The digest bytes did not change.
+- The key file keeps `secretKey` as `0x` hex (the browser imports it). `publicKey`
+  and `address` are now base58. A pre-upgrade file (`0x` address) is rewritten in
+  place on first use (same secret, mode 0600, `createdAt` kept).
+- `kalien key import` accepts hex, base58, an S StrKey, the browser backup string
+  (checksum checked), and key/backup JSON text.
+  `kalien key export --format hex|base58|strkey`.
+- The `pubkey=` and `sig=` query values stay lowercase hex, as API v0 says.
+
+Tests (`cd cli && bun test src`: 23 pass, 0 fail; `tsc` and `oxlint` clean;
+`bun test tests/src/cli-preflight.test.ts`: 4 pass):
+
+- The RFC 8032 key gives public key `FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z`,
+  public key hash `9xarfCYUWxzeV2RSX5B9h6fZK4CoR2WfVvBf2rfvc1yB`, and address
+  `D4E11uoczkwDh6eUMTXs29SrALae4yn6g8xYQtP1bDiQ`. These are the outputs of
+  `thruput keys import` / `keys ls --json` from thruput 0.36.0 (temporary HOME).
+  An independent byte-layout test computes the same values.
+- A real CLI key, exported as `--format strkey` and as `--format base58`, imports
+  into `thruput keys import` with the same address as `kalien whoami`
+  (`EtfBZrAGtgNbb8ADX9emepQyEPDiPN51whNXfKBGGZpE`).
+- Shared vectors: addresses (with `pubkeyHash`), claim digests from base58 and
+  from hex inputs, and byte-exact signatures. Pre-upgrade vectors (`0x`
+  addresses) skip only the address check.
+- Key file: legacy upgrade in place, address mismatch refused, all import forms,
+  wrong backup checksum refused.
+
+Notes for other agents:
+
+- **kt-contract:** `shared/thruput/claim.test.ts` (uncommitted) still imports
+  `PrivateKeySigner`, so it fails to load under client 0.23.0. Use
+  `Ed25519Signer.fromSeed`.
+- **kt-client:** the browser `parseBackup` compares a CLI key file's `address`
+  with its own derived address. CLI key files now carry base58 addresses with the
+  wire-14 derivation, so the browser must use the same rules (or skip that
+  compare for the CLI format).
+- **kt-worker:** the CLI sends `pubkey=` and `sig=` as hex. If API v0 moves to
+  base58 for these, tell me. The CLI reads any address or hash format in
+  responses.
+
 ## Open issues
 
-- Repeat the e2e and CLI checks against the deployed Worker (waits for deploy).
-- The 372 s `queued` delay above (kt-worker).
+- Repeat the e2e and CLI checks against the deployed Worker on the new devnet
+  (the lead will say when it is up).
+- The 372 s `queued` delay from round 2 (kt-worker).
