@@ -9,7 +9,7 @@ Two Rust `no_std` contracts for the Thruput RV32 VM (SDK `=0.51.1`, CLI 0.29.2):
   score contract.
 
 The interface (methods, claim message, address rule, errors, events, gas) is in
-`docs/thruput/PORT-PLAN.md`, section "Interface v2".
+`docs/thruput/PORT-PLAN.md`, section "Interface v3".
 
 ## Setup
 

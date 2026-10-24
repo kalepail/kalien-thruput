@@ -12,6 +12,6 @@ first, then `thruput skill show contracts` for the SDK model.
   `kalien_score/src/claim.rs` (mirror: `shared/thruput/claim.ts`, vectors in
   `shared/thruput/claim-vectors.json`); the replay sits behind `kalien_score/src/replay.rs`.
 - After an interface change: `scripts/build.sh` (regenerates `shared/thruput/bindings/`),
-  `scripts/test.sh`, update "Interface v2" in `docs/thruput/PORT-PLAN.md`, and redeploy with
+  `scripts/test.sh`, update "Interface v3" in `docs/thruput/PORT-PLAN.md`, and redeploy with
   `scripts/deploy-devnet.sh` (contracts are immutable).
 - Never print or commit secret keys. Keys live in `~/.config/thruput/keys`.

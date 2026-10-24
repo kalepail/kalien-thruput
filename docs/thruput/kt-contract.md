@@ -2,7 +2,125 @@
 
 Agent: `kt-contract`. Owns `kalien-contract/`, `shared/thruput/`, devnet keys and deploys.
 
-## Status
+## Round 3 (2026-10-24): wire-14 migration and v3 deploy — current
+
+### Devnet v3 (current; wire 14.1.0, implementation 0.36.0)
+
+| item | value |
+|---|---|
+| network hash | `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj` |
+| RPC | `https://rpc.thruput.network` |
+| score contract | `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT` |
+| token contract | `AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87` |
+| admin (`kalien-deployer`) | `5y9nbDvLXhF87vezDQQKKfHd9DccibjUutkHrhE5UojK` (≈ 799 HOG) |
+| relays (allowlist, relay-only on) | `kalien-relay` `94febNxmANEba5YFYVrrKvYEpTq7dEXzhqPARRCnUkMJ`, `kalien-relay-2` `63sSHUhsshPPYc6HATTfiJKBChhhUEpTnuMGvUBjXqYT`, `kalien-relay-3` `9U7TwtWnL8mg2XYwf6L4R5TAzGnsYVwMxaPaM1Loj7PD`, `kalien-relay-4` `6uHAVi82rWirY492rSmd2oUXpmvUfmTBfiSBXdZtVrP8` (999 HOG each) |
+| test player (`kalien-test-player`) | `5KWwyykYcxUEmDFdA8sgUX7BbiXL3VtiYS8KdBRp4nwi` (937,200 KALIEN) |
+| settings | `relay_only = true`, `seeding_locked = true`, `paused = false`; each contract holds ≈ 50 HOG for storage |
+
+Deploy transactions are in `shared/thruput/deployments/devnet.json`. Fixture runs
+(`kalien-contract/deployments/devnet-fixture-runs.json`), through `kalien-relay`:
+
+| tape | seed_id | frames | score | gas used | gas limit | tx |
+|---|---:|---:|---:|---:|---:|---|
+| test-short | 2988060 | 700 | 1,480 | 1,550,301 | 4,540,000 | `23mYLNEXjsSdAHZqgBKcQESYmF9xT1bWJtKwN1fjXZiG` |
+| test-medium | 2988060 | 5,000 | 11,190 | 9,817,917 | 14,000,000 | `DR9stXEM4BrxsjTUX9RaEPuQ6AbbmdGzj169qCsaPo5s` |
+| test-real-game | 2988059 | 6,643 | 14,870 | 14,341,977 | 17,614,600 | `E5L9BD6CW3TsLoVtwtAH2V77F8WYaKUKriPPLW2TdGJx` |
+| kalien-911140 | 2988058 | 36,000 | 911,140 | 67,608,056 | 82,200,000 | `6BncKoSmPSbp6DWBSY2SpYMhJ9z5CAiVYwiseXsKXgTy` |
+
+Note: the first v3 deploy attempt today (score `67QdfbkX…HLS42`, token `HgYSzDan…J6kM`) stopped
+after its first fixture run because of a receipt-decoding bug in my helper (fixed in `5c9924a`).
+Those contracts are unused; ignore them.
+
+### What changed in round 3
+
+- `aaf9b10`: the v3 layout (relay set, `relay`/`submitted_at` in `ScoreSubmitted`, claimed tapes keep
+  their epoch, `prune_run`/`prune_seed`, `handover_token`). See "Interface v3" in the plan.
+- `42d0b48`: `thruput-sdk =0.54.0` (from a fresh CLI 0.36.0 scaffold; only my three config
+  additions differ), `thruput-erc20-if`/`-metadata-if =0.1.65` (the first versions on sdk 0.54),
+  test dev-dep `thruput-trace =0.57.0`. **Wire 14 changed the pubkey account address:** the
+  preimage now holds `pubkey_hash = sha256(sep("PublicKey") || 0x00 || pk)`, not the key.
+  `claim.rs` and `claim.ts` follow it; vectors are pinned to `derivePubkeyAccountAddress` and
+  `createPubkeyAccount` of client 0.23. `claim.ts` takes and returns base58.
+- `b66b64a`, `5c9924a`, `c9d1930`: `shared/thruput/kalien.ts` rewritten for client 0.23 and the
+  wire-14 guide; `scripts/kalien.ts` uses it; kt-core's 4 strict-regression tapes run through the
+  contract (native and RV32); new `kalien.test.ts`; v3 deployed.
+- `asteroids-core` at `c8d6644` (rule fix) is in the build: the regression tapes pass.
+
+### Tests (round 3)
+
+```bash
+kalien-contract/scripts/test.sh      # cargo: adversarial 12, test 26; RV32 8 (gas lines); bun claim 11
+bun test shared/thruput/                                  # 15 pass, 3 skip (live)
+KALIEN_LIVE=1 bun test shared/thruput/kalien.test.ts      # 7 pass against devnet v3
+node_modules/.bin/tsc -p kalien-contract/tsconfig.json    # clean
+```
+
+RV32 gas (sdk 0.54): short 1,549,986; medium 9,817,247; real-game 14,341,656; long 74,515,543;
+911,140-point 67,607,763; regression tapes 7.2M (3,956 frames) to 23.2M (10,757 frames).
+Rejections: `UnknownSeed` 88,703; `NotImproved` 381,545; `AlreadyClaimed` 426,088;
+`BadSignature` 444,495; `ScoreMismatch` (full replay) 74,388,070.
+Memory with the 18,024-byte tape: peak 46,080–47,104 bytes of 65,536 with the 16 KiB stack
+(≈ 18 KiB spare). With the default 30 KiB stack it is 60–61 KiB, so the 16 KiB rule stays.
+
+### For kt-worker, kt-client, kt-cli (shared/thruput is committed and green)
+
+- `shared/thruput/kalien.ts` API (all identifiers base58 strings; payload bytes `0x` hex):
+  - `connectKalien(config)`; `parseAddress(text)`.
+  - Reads: `readPlayerState(client, config, player, seedId?, { minStateBlockHeight? })`,
+    `getBestScore`, `getCurrentSeed`, `getSeed`, `getCurrentSeedId`, `isTapeClaimed`,
+    `getClaimedSeedId`, `getKalienBalance`, `getTokenMetadata`, `getScoreConfig`, `isRelay`,
+    `getRelays`, `getBlockTime(client, blockHeight)` (unix seconds via `getBlockByHeight`).
+  - Events: `getScoreSubmittedPage(client, config, { start: { order, fromHeight? } | cursor, player?, seedId?, limit? })`
+    → `{ rows, nextCursor, oldestIndexedBlockHeight, latestIndexedBlockHeight }`; continue with
+    `cursor` and the same filters until `nextCursor === null`. Rows: `transactionHash, blockHeight,
+    sequenceNumber, player, playerPubkey, relay, submittedAt, seedId, seed, frameCount, finalScore,
+    previousBest, newBest, mintedDelta, tapeHash`. Cron: `walkScoreSubmitted(client, config,
+    { fromHeight }, onPage)` → `{ watermarkBlockHeight, completedThroughBlockHeight }`; persist rows
+    in `onPage`, save `completedThroughBlockHeight` only after it resolves, start the next walk there.
+  - Relay: `createRelayWallet(client, env.RELAY_SECRET)`; `submitScore(wallet, config,
+    { playerPubkey, seedId, tape, signature }, { onSigned, onStatus, timeoutMs })` → `{ status:
+    confirmed | rejected | failed | notAdmitted | unknown, transactionHash, gasUsed, blockHeight,
+    executionResult, errorCode, errorName, rpcErrorKind?, admission?, knownCommitmentHeight?, run }`.
+    `onSigned({ transactionHash, signedTransaction })` runs before `sendTransaction`; persist both.
+    It never resubmits; on `unknown`, poll `getSubmitResult(client, config, transactionHash)`.
+    `ensureCurrentSeed(wallet, config)` for the cron.
+- `claim.ts`: `claimMessage` accepts base58 (as in `devnet.json`) or hex; `pubkeyAccountAddress`
+  returns base58; `publicKeyHash` and `pubkeyAccountAddressBytes` are new.
+- Relay secrets (kt-worker): unchanged files `~/.config/kalien-thruput/relay.secret` and
+  `relay-2..4.secret` (64 hex chars, 32-byte seed). The deploy script writes `relay-N.secret` only
+  when missing. Load with `Ed25519Signer.fromSeed(fromHex(secret))`.
+- Worker config: `SCORE_CONTRACT=8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`,
+  `TOKEN_CONTRACT=AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87`,
+  `THRUPUT_NETWORK_HASH=DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj`.
+
+### Copycat tapes: design note for a later decision (kept as a residual risk)
+
+The lead decided to keep one shared seed per epoch. The test
+`residual_copycat_with_a_no_op_input_change_is_accepted` documents the risk. Options for a later fix:
+
+1. **Per-player seed.** `tape_seed = sha256(epoch_seed || player_pubkey)[0..4]`. A tape replays only
+   for its player. Strong, simple in the contract. Cost: players no longer share one asteroid field,
+   so the "same seed for everyone" leaderboard idea changes; client, Worker pre-check, CLI and
+   autopilot must derive the seed.
+2. **Commit-reveal.** The player first commits `sha256(tape || pubkey)` on-chain, and reveals the tape
+   in a later block. A copycat sees the tape only at reveal, after the author's commitment. Keeps the
+   shared seed. Cost: two transactions per run, a commitment window, and storage for commitments.
+3. **First-claimer priority by commitment time.** As 2, but only for runs above a threshold
+   (for example the top 10 of the epoch), so normal runs stay one transaction.
+4. **Delay publication.** The Worker serves tapes only after the epoch closes, and relays only
+   through its own lanes (relay-only is already on). This stops casual copying through the API, but
+   not someone who reads calldata on-chain.
+5. **Canonical tapes.** Reject inputs that cannot matter (after game over, during respawn). This
+   removes the easy no-op edits, but not every equivalent tape; it needs care in the sim.
+
+My recommendation if the risk matters later: option 2 for the top of the leaderboard (option 3),
+plus option 4 now (Worker-only, no contract change).
+
+---
+
+## Round 2 (2026-10-23) — superseded deployments, kept for history
+
+### Status (round 2)
 
 Round 1 (contracts, shared TS, local node, devnet) and round 2 (read helpers, adversarial
 review, hardened redeploy) are done.

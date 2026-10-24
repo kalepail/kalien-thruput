@@ -112,11 +112,13 @@ relay funds). Current devnet (from `getVersionInfo`): wire format **14.1.0**, im
 Root `README.md` and `docs/`: the coordinator merges at the end; each agent may add
 `docs/thruput/<agent>.md`.
 
-## Interface v2 (the `contract` agent owns it and may change it; record changes here)
+## Interface v3 (the `contract` agent owns it and may change it; record changes here)
 
-v2 is built, tested on RV32, and deployed on devnet (see `docs/thruput/kt-contract.md`).
-Changes from v0 are marked **(v1)**; changes from the adversarial review are marked **(v2)**.
-v2 replaced the v1 devnet contracts on 2026-10-23 (new addresses in `deployments/devnet.json`).
+v3 is built on `thruput-sdk` 0.54.0, tested on RV32, and deployed on the wire-14 devnet on
+2026-10-24 (score `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`, token
+`AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87`; always read them from `deployments/devnet.json`).
+Changes from v0 are marked **(v1)**, from the adversarial review **(v2)**, from the final layout
+pass **(v3)**. Identifiers are base58 on the wire and in `devnet.json`.
 
 ### Score contract `kalien_score`
 
@@ -153,33 +155,46 @@ Source: `kalien-contract/contracts/kalien_score/`. TS bindings: `shared/thruput/
      score must equal the tape (`ScoreMismatch`, `RuleViolation`).
   5. Store the new best and the tape hash, mint `(new - prev) * 10^7` KALIEN to the player address,
      emit `ScoreSubmitted`.
-- Player address **(v1: exact)**: the nonce-0 pubkey account,
-  `sha256(0x00 0x0d "PubkeyAccount" || 0x00 || pubkey || 0x00)` = `derivePubkeyAccountAddress({pubkey: Ed25519, nonce: 0n})`
-  = `createPubkeyAccount({ signer }).address` (default nonce 0). View: `player_address(pubkey)`.
+- Player address **(v3, wire 14)**: the nonce-0 pubkey account,
+  `sha256(0x00 0x0d "PubkeyAccount" || pubkey_hash || 0x00)` with
+  `pubkey_hash = sha256(0x00 0x09 "PublicKey" || 0x00 || pubkey)`
+  = `derivePubkeyAccountAddress(pubkeyAccountPreimage(key, 0n))` = `createPubkeyAccount({ signer }).address`.
+  View: `player_address(pubkey)`.
 - Views: `best_score(player, seed_id) -> u32`, `is_claimed(tape_hash: [u8;32]) -> bool`,
   **(v1)** `claim_message(seed_id, tape_hash) -> [u8;32]` (the digest to sign),
   `config() -> Config { admin, token, paused, relay_only (v2), seeding_locked (v2) }`,
-  **(v2)** `is_relay(address) -> bool`.
+  `is_relay(address) -> bool`, **(v3)** `relays() -> RelaySet { count, relays: [address; 8] }`
+  (the first `count` entries), `claimed_seed_id(tape_hash) -> Option<u32>`.
 - Admin: `set_paused(bool)`, `set_admin(address)`, `set_seed`, `lock_seeding` (above),
-  **(v2)** `set_relay(address, allowed: bool)`, `set_relay_only(bool)`. The devnet deploy allows
-  `kalien-relay` and turns relay-only on: only the Worker relay can submit.
-- Events: `ScoreSubmitted { #[topic] player, #[topic] seed_id, player_pubkey (v1), seed, frame_count,
-  final_score, previous_best, new_best, minted_delta: i128, tape_hash: [u8;32] }`;
+  `set_relay_only(bool)`, **(v3)** `add_relay(address)` / `remove_relay(address)` (bounded set of
+  8; adding twice or removing an unknown address changes nothing; a 9th throws `RelaySetFull`;
+  replaces v2 `set_relay`), **(v3)** `handover_token(new_administrator)` (moves mint authority to a
+  later score contract, so a redeploy can keep the token and balances). The devnet deploy allows
+  `kalien-relay`, `kalien-relay-2`, `kalien-relay-3`, `kalien-relay-4` and turns relay-only on.
+- **(v3)** Anyone: `prune_run(player, seed_id, tape_hash) -> Pruned` and `prune_seed(seed_id)`
+  delete the best entry, the claimed tape hash and the seed of an epoch that has left the
+  active window (`SeedNotExpired` otherwise). The deposits return to the contract.
+  Afterwards `best_score` for that epoch reads 0; the indexer keeps history.
+- Events: `ScoreSubmitted { #[topic] player, #[topic] seed_id, player_pubkey (v1), relay (v3),
+  submitted_at (v3, unix seconds), seed, frame_count, final_score, previous_best, new_best,
+  minted_delta: i128, tape_hash: [u8;32] }`; **(v3)** `TokenHandedOver { #[topic] token, #[topic] new_administrator }`;
   **(v1)** `SeedCreated { #[topic] seed_id, seed }`, `AdminChanged { #[topic] previous, #[topic] admin }`;
   **(v2)** `SettingsChanged { paused, relay_only, seeding_locked }` (replaces v1 `PausedChanged`),
   `RelayChanged { #[topic] relay, allowed }`.
 - Errors `ScoreError` (discriminant): AlreadyInitialized 1, NotAdmin 2, Paused 3, UnknownSeed 4,
   SeedInactive 5, SeedMismatch 6, BadSignature 7, AlreadyClaimed 8, ZeroScore 9, NotImproved 10,
-  SeedAlreadySet 11, ZeroSeed 12, SeedingLocked 13 (v2), NotRelay 14 (v2), TapeTooShort 20, TapeBadMagic 21, TapeBadVersion 22,
+  SeedAlreadySet 11, ZeroSeed 12, SeedingLocked 13 (v2), NotRelay 14 (v2), RelaySetFull 15 (v3),
+  SeedNotExpired 16 (v3), TapeTooShort 20, TapeBadMagic 21, TapeBadVersion 22,
   TapeBadRulesTag 23, TapeReservedNonZero 24, TapeFrameCountOutOfRange 25, TapeLengthMismatch 26,
   TapeCrcMismatch 27, TapeBadPadding 28 (v2), RuleViolation 30, FrameCountMismatch 31, ScoreMismatch 32.
   A rejected submission commits as a failed transaction; the wallet root re-throws the
   `ScoreError` in `abortData` (decode with `KalienScore.v0_1.submitScore.decodeException`).
-- Gas and memory **(v1, measured)**: one transaction replays a full tape; no chunked replay.
-  Gas ≈ 2,065/frame + 0.2M (36,000 frames: 67–74M). Use wallet root gas limit
+- Gas and memory **(v3, measured on sdk 0.54)**: one transaction replays a full tape; no chunked
+  replay. Gas ≈ 1.8–2.2k/frame + 0.2M (36,000 frames: 67.6–74.5M). Use wallet root gas limit
   `3_000_000 + 2_200 * frame_count` (max 82.2M). The sender (relay) must hold free HOG ≥ gas limit
-  (≤ 8.22 HOG); gas is not burned. Peak guest memory with an 18,024-byte tape: 54–55 KiB of 64 KiB.
-  The contract builds with a 16 KiB guest stack (in `kalien-contract/.cargo/config.toml`).
+  (≤ 8.22 HOG); gas is not burned. Peak guest memory with an 18,024-byte tape: 46–47 KiB of
+  64 KiB with the 16 KiB guest stack (in `kalien-contract/.cargo/config.toml`); with the default
+  30 KiB stack it is 60–61 KiB, so keep the 16 KiB rule.
 
 ### KALIEN token `kalien_token`
 
@@ -192,20 +207,27 @@ Deploy order: token `initialize(deployer)`, then score `initialize(admin, token)
 ### Shared TS (`shared/thruput/`, owned by `contract`)
 
 - `deployments/devnet.json`: `{ network, networkHash, rpcUrl, explorerUrl, scoreContract,
-  tokenContract, admin, deployedAt, deployTxs, artifacts }`.
+  tokenContract, admin, deployedAt, deployTxs, artifacts }`, identifiers in base58.
 - `bindings/kalien-score.ts`, `bindings/kalien-token.ts` (from `thruput codegen ts`; do not edit).
-- **(v2)** `kalien.ts`: chain helpers for Worker, browser and CLI (fetch only). `connectKalien(config)`
-  (checks the network hash), reads (`readPlayerState`, `getBestScore`, `getCurrentSeed`, `getSeed`,
-  `getCurrentSeedId`, `isTapeClaimed`, `getKalienBalance`, `getTokenMetadata`, `getScoreConfig`,
-  `isRelay`), events (`getScoreSubmittedPage`, `iterateScoreSubmitted`: cursor, height anchor,
-  player and seed-id topic filters), relay writes (`createRelayWallet(client, RELAY_SECRET)`,
-  `submitScore` with `onSigned` persistence hook, `getSubmitResult`, `ensureCurrentSeed`),
-  `submitGasLimit`, `SCORE_ERRORS`, `tapePaddingOk`. Tests: `shared/thruput/kalien.test.ts`.
-- `claim.ts`: `claimMessage({networkHash, scoreContract, seedId, tape}) -> Uint8Array(32)`,
-  `claimPreimageFromHash(...)`, `tapeHash(tape)`, `pubkeyAccountAddress(pubkey) -> 0x hex`,
-  `toHex`, `fromHex`. Depends only on `@noble/hashes`. Vectors: `claim-vectors.json`, checked by
-  `bun test shared/thruput/claim.test.ts` and the Rust test `claim_and_address_vectors_match_shared_ts`.
-- Signing: `ed25519.sign(claimMessage(...), secret)` or `await new PrivateKeySigner(secret).sign(digest)`
+- **(v3)** `kalien.ts` (wire 14, client 0.23): chain helpers for Worker, browser and CLI (fetch only).
+  `connectKalien(config)` (pins the network hash), reads (`readPlayerState`, `getBestScore`,
+  `getCurrentSeed`, `getSeed`, `getCurrentSeedId`, `isTapeClaimed`, `getClaimedSeedId`,
+  `getKalienBalance`, `getTokenMetadata`, `getScoreConfig`, `isRelay`, `getRelays`, `getBlockTime`),
+  events (`getScoreSubmittedPage` with `start` or `cursor`, ends only at `nextCursor: null`;
+  `walkScoreSubmitted` with a `completedThroughBlockHeight` checkpoint; player and seed-id topic
+  filters), relay writes (`createRelayWallet(client, RELAY_SECRET)` with `Ed25519Signer`,
+  `submitScore` with an `onSigned` hook before `sendTransaction`, statuses
+  `confirmed | rejected | failed | notAdmitted | unknown`, never resubmits; `getSubmitResult`;
+  `ensureCurrentSeed`), `submitGasLimit`, `SCORE_ERRORS`, `tapePaddingOk`, `parseAddress`.
+  Tests: `bun test shared/thruput/` (offline) and `KALIEN_LIVE=1` (live devnet).
+- `claim.ts` (wire 14): `claimMessage({networkHash, scoreContract, seedId, tape}) -> Uint8Array(32)`,
+  `claimPreimageFromHash(...)`, `tapeHash(tape)`, `publicKeyHash(pubkey)`,
+  `pubkeyAccountAddress(pubkey) -> base58`, `pubkeyAccountAddressBytes`, `bytes32` (base58, 0x hex or
+  bytes), `toHex`, `fromHex`, `toBase58`, `fromBase58`. Depends on `@noble/hashes` and
+  `@thruputchain/protocol/utils`. Vectors: `claim-vectors.json` (base58 + hex), checked by
+  `bun test shared/thruput/claim.test.ts` (also against client 0.23) and the Rust test
+  `claim_and_address_vectors_match_shared_ts`.
+- Signing: `ed25519.sign(claimMessage(...), secret)` or `await Ed25519Signer.fromSeed(secret).sign(digest)`
   (`.ed25519` holds the 64 bytes). Both give the same signature.
 
 ### Worker API v0 (owned by `worker`; as built, see `docs/thruput/kt-worker.md`)
