@@ -187,12 +187,16 @@ describe("identity", () => {
 interface AddressVector {
   secretKey: string;
   pubkey: string;
+  /** Wire 14: sha256(DomainSeparator "PublicKey" || cxs PublicKey). */
+  pubkeyHash?: string;
   address: string;
 }
 interface ClaimVector {
   tape: string; // file name in kalien-contract/fixtures/
   networkHash: string;
+  networkHashHex?: string;
   scoreContract: string;
+  scoreContractHex?: string;
   seedId: number;
   tapeHash: string;
   digest: string;
@@ -225,6 +229,13 @@ describe.skipIf(!existsSync(vectorsPath))("shared/thruput/claim-vectors.json", (
       const legacy = v.address.startsWith("0x");
       if (!legacy)
         expect(decodeBytes32(addressFromPublicKey(v.pubkey))).toEqual(bytesOf(v.address));
+      if (v.pubkeyHash) {
+        const enc = new TextEncoder();
+        const pkHash = sha256(
+          new Uint8Array([0x00, 0x09, ...enc.encode("PublicKey"), 0x00, ...bytesOf(v.pubkey)]),
+        );
+        expect(pkHash).toEqual(bytesOf(v.pubkeyHash));
+      }
       if (v.secretKey) {
         const id = identityFromSecret(bytesOf(v.secretKey));
         expect(id.publicKey).toEqual(bytesOf(v.pubkey));
@@ -244,6 +255,15 @@ describe.skipIf(!existsSync(vectorsPath))("shared/thruput/claim-vectors.json", (
         tape,
       });
       expect(digest).toEqual(bytesOf(v.digest));
+      if (v.networkHashHex && v.scoreContractHex) {
+        const fromHex = claimMessage({
+          networkHash: v.networkHashHex,
+          scoreContract: v.scoreContractHex,
+          seedId: v.seedId,
+          tape,
+        });
+        expect(fromHex).toEqual(digest);
+      }
       expect(
         bytesToHex(
           claimMessageFromTapeHash({
