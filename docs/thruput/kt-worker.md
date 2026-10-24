@@ -2,6 +2,39 @@
 
 Agent: `kt-worker` (Cloudflare Worker API, relay, leaderboard). Branch `thruput-devnet`.
 
+## Round 7 (2026-10-24): custom domain https://thruput.kalien.xyz
+
+**Status: live at https://thruput.kalien.xyz** (Worker version `f5793b16-6914-4e9c-aa6d-36d0819cab2c`,
+built from clean HEAD `a425ec0`). `https://kalien-thruput.sdf-ecosystem.workers.dev` still works.
+
+- `wrangler.jsonc`: `routes: [{ pattern: "thruput.kalien.xyz", custom_domain: true }]`, `workers_dev: true`.
+  Wrangler created the custom domain on the `kalien.xyz` zone; the root and `testnet` hostnames
+  (other Workers) were not touched.
+- Canonical URL changed in `index.html` (canonical, og:url, og/twitter image, JSON-LD),
+  `src/hooks/useDocumentTitle.ts`, `public/robots.txt`, `public/sitemap.xml`, the CLI default API URL
+  (`cli/src/constants.ts`, `--api-url`/`KALIEN_API_URL` still override), `scripts/generate-tape.ts`,
+  `scripts/.env.example`, `worker/ops/smoke.ts`, `worker/ops/deploy.sh`, `README.md`, `cli/README.md`,
+  `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md`, the port plan. Kept: agent reports (historical test
+  records), `docs/archive/` (old project), `public/_headers` (no host; CSP uses `'self'`). The deploy
+  records name no app URL.
+
+| Check | Result |
+|---|---|
+| DNS (1.1.1.1, Tailscale 100.100.100.100) | `172.67.163.28`, `104.21.15.160` |
+| TLS | TLS 1.3, certificate from Google Trust Services (WE1), valid to 2027-01-22, verified by curl |
+| `GET https://thruput.kalien.xyz/` | HTTP/2 200 with the `_headers` CSP (`default-src 'self'; …; frame-ancestors 'none'`) |
+| `/api/config`, `/api/seed/current` | answer (network `DWELtFbb…48uj`, score `8fFcXcMD…ktjTT`; `secondsLeft` present) |
+| Crons after the deploy | seed row for epoch 2988123 at 20:30:38 UTC; indexer synced 20:30:33 and 20:41:33, no error |
+| workers.dev URL | `/` 200, `/api/seed/current` answers |
+| `bun worker/ops/smoke.ts --api https://thruput.kalien.xyz` | PASS, 2,763 frames confirmed in 6.5 s |
+| `bun run scripts/e2e-runs.ts --api-url https://thruput.kalien.xyz` | PASSED (2 runs confirmed, dedupe, 409/400/413 refusals, forged footer) |
+
+Note: this Mac's system resolver kept a negative cache entry for `thruput.kalien.xyz` from a
+lookup before the domain existed (it still failed 20 minutes later; flushing needs `sudo
+dscacheutil -flushcache; sudo killall -HUP mDNSResponder`). The two test runs above went through a
+local CONNECT proxy that resolves with 1.1.1.1; TLS was end to end with the real hostname. Public
+resolvers answer correctly.
+
 ## Round 6 (2026-10-24): fixture-epoch block, gas 4,500/frame, review fixes
 
 **Status: deployed (version `f9474f10-552e-40a9-92c2-b29faa95ab52`, built from clean HEAD `20781c0`)

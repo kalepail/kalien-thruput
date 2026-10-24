@@ -285,8 +285,8 @@ layout per epoch.
 
 ## Deployment status (2026-10-24)
 
-- Worker live at `https://kalien-thruput.sdf-ecosystem.workers.dev` (version `d2cc7b39`, built from
-  `8491d9a`); the smoke test passed.
+- Worker live at `https://thruput.kalien.xyz` (custom domain; also
+  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `f5793b16`, built from `a425ec0`.
 - Contracts v3 on the wire-14 devnet; addresses in `shared/thruput/deployments/devnet.json` and
   the table under "On-chain contracts".
 - 4 relay lanes, about 999 HOG each.

@@ -117,8 +117,8 @@ bun run smoke                        # worker/ops/smoke.ts against the deployed 
   `shared/thruput/deployments/devnet.json`; `wrangler.jsonc` vars can override them.
 - `worker/ops/relay-keys.ts` lists, funds, and exports lane keys. Each lane address must be
   allowed on the score contract (relay allowlist).
-- Live at `https://kalien-thruput.sdf-ecosystem.workers.dev` (version `d2cc7b39`, built from
-  `8491d9a`; smoke test passed).
+- Live at `https://thruput.kalien.xyz` (custom domain on the `kalien.xyz` zone; also
+  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `f5793b16`, built from `a425ec0`.
 - Gas policy (`wrangler.jsonc`): `RELAY_GAS_BASE` 5,000,000 + `RELAY_GAS_PER_FRAME` 4,500 × frames
   (max `RELAY_GAS_MAX` 167M), one out-of-gas retry at 2.5× (`RELAY_GAS_RETRY_TENTHS` 25) up to
   `RELAY_GAS_RETRY_MAX` 400M. Worst valid tape measured: 110.9M with contract overhead.
