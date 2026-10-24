@@ -3,7 +3,77 @@
 Agent: `kt-client`. Scope: `src/` (not `src/game/`), `index.html`, `public/`, `vite.config.ts`,
 `.env.example`, browser deps in root `package.json`, and the `tests/src/` tests for those modules.
 
-## Status
+## Round 3 (2026-10-24): wire-14 migration, endless fix, mobile, cleanup
+
+**Status: green on the mock API.** Typecheck, lint, format clean for `src`; `bun test tests/src`
+46 pass, 0 fail. The real end-to-end pass waits for a migrated Worker and new devnet contracts
+(the local Worker on 5174 is down; `devnet.json` still holds pre-upgrade hex ids).
+
+| Commit | Content |
+|---|---|
+| `5f3318f` | Remove dead Stellar/ZK code and deps (`stellar.toml`, dialog/collapsible + Radix deps, `smart-account-kit(-bindings)`, `asteroids-score`, `playwright-core`, old field names) |
+| `38267a9` | Mobile layouts (result card sheet, run cards, stat grids, title wrap); ignore `worker/` in proxy mode |
+| `9c14ac3` + `0050f20` | Client 0.23 / wire-14 migration (see below). `0050f20` adds two new files that `git commit -- src` left out (untracked files are not committed by a pathspec) |
+| `41a6101` | Clear message on a network reset; drop unused `with0x` |
+
+### Endless-mode bug (root cause and fix)
+
+The runs were lost in dev, not by the endless logic. I edited `src` files while endless mode ran.
+Vite HMR re-ran `contexts/WalletContext.tsx` (it imports `useTokenBalance`, which imports the
+edited `lib/format.ts`), so `createContext` made new context objects. Mounted consumers then threw
+"useWalletState must be used inside <WalletProvider>", and the error boundary remounted the game,
+which dropped the run. Fix: the context objects live in `contexts/walletContextObjects.ts` with
+type-only imports, so HMR does not re-create them. Verified on the mock API with no edits in
+flight: 6 minutes of endless mode auto-submitted 2 runs, both confirmed (5,020, then 18,260 with
+previous best 5,020). No page reload.
+
+### Wire-14 / client 0.23 migration
+
+- Signer: `Ed25519Signer.fromSeed`. The 32-byte seed in `localStorage` (`kalien:wallet:v1`) is
+  unchanged, so existing players keep their key. Their **address changes**: wire 14 derives the
+  pubkey account from the public-key hash (`pubkeyAccountPreimage`). The browser derivation
+  matches `createPubkeyAccount().address` and the base58 vectors in
+  `shared/thruput/claim-vectors.json` (test passes).
+- Identifiers: new `src/thruput/ids.ts`. Addresses, tx hashes, network hash and contract ids parse
+  from base58 or legacy hex and always display and compare as base58 (case kept). `/api/config`,
+  run records, leaderboard rows and explorer links go through it. Run ids stay hex (`sha256(tape)`).
+- Views pass `address` (0.23 API). The client pins the base58 network hash; tested: connects to
+  devnet `DWELtFbb…` at height 17,376.
+- Claim: the wrapper passes bytes to `shared/thruput/claim.ts`, so it works with either id format.
+- Profile message: identifiers in base58, case kept (no `toLowerCase`).
+- Backups and import: accept the browser backup string, the JSON backup file (a pre-upgrade hex
+  address is not checked; a base58 one must match), `kalien` CLI key files (base58 address checked
+  with the same rule as `shared/thruput/claim.ts`), a bare seed as hex or base58, and a Stellar
+  `S…` secret. Export adds "Show as Stellar Secret".
+- StrKey: on Thruput, `G…` is the StrKey of the Ed25519 public key, `S…` of the seed, and `C…` is
+  only the 32 address bytes (no network). So the natural secondary identity is the `G…` key. The
+  Wallet page shows it under the base58 address ("The same Ed25519 key in Stellar G... form"),
+  and the backup file carries `stellarPublicKey`. A Stellar user who imports the `S…` secret sees
+  the same `G…`. Leaderboard search and `/leaderboard/:address` accept `C…` and hex, and redirect
+  to the base58 URL.
+- The browser never sends transactions; the JSON-RPC guide's admission/commitment rules apply to
+  the Worker relay. Browser reads go through the SDK views only.
+
+### Browser checks this round (agent-browser, mock API on base58)
+
+Endless mode as above; profile save (signed base58 message); replay; export of the backup string
+and the `S…` secret, each imported into a fresh profile → same address
+`BGqA46RJ…QMG8BRC1` and same `G…` key; hex player URL → redirect to base58; search by `C…` StrKey
+→ "Your Rank: #1"; Wallet page at 375 px, no horizontal overflow.
+
+Mobile (`38267a9`): at 375 and 768 px every page has 0 px horizontal overflow (game, result card,
+wallet, `/runs`, leaderboard, player page, replay, header menu).
+
+### Requests
+
+- **kt-worker:** `worker/profile.ts` lowercases `networkHash` and `playerAddress`. Base58 is
+  case-sensitive, so please use the canonical base58 strings unchanged (the browser signs them
+  unchanged). Accept base58 addresses in `normalizeAddress`, return base58 for addresses and tx
+  hashes. Tell me when a migrated local Worker runs, so I can repeat the real pass.
+- **kt-contract:** `deployments/devnet.json` still has the old hex ids; the browser accepts both.
+- **core:** `src/game/math.ts` and `src/game/Autopilot.ts` comments still mention ZK/Stellar.
+
+## Round 1 (STOP point A)
 
 **STOP point A reached.** The wallet and submit flow works against the local Worker (port 5174),
 which talks to the live devnet contracts. A browser run confirmed on devnet:
