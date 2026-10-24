@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { JsonRpcError, NativeRpcError, toBase58 } from "@thruputchain/client";
 import { classifySendError, toChainReceipt, toChainStatus } from "../../worker/chain/relay-wallet";
-import { normalizeId, parseId32 } from "../../worker/ids";
+import { addressToStrkey } from "@thruputchain/client";
+import { normalizeAddressInput, normalizeId, parseId32 } from "../../worker/ids";
 
 const hash = new Uint8Array(32).fill(7);
 
@@ -61,5 +62,8 @@ describe("wire-14 mapping", () => {
     expect(normalizeId(`0x${"07".repeat(32)}`)).toBe(b58);
     expect(parseId32("not-an-id")).toBeNull();
     expect(parseId32(toBase58(new Uint8Array(16).fill(1)))).toBeNull();
+    // Legacy C StrKey addresses come out as base58; case is kept.
+    expect(normalizeAddressInput(addressToStrkey(hash as never))).toBe(b58);
+    expect(normalizeAddressInput(b58.toLowerCase())).not.toBe(b58);
   });
 });

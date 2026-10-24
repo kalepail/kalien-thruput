@@ -1,4 +1,4 @@
-import { fromBase58, toBase58 } from "@thruputchain/client";
+import { fromBase58, parseAddress, toBase58 } from "@thruputchain/client";
 import { hexToBytes } from "./hex";
 
 const HEX32 = /^(?:0x)?[0-9a-f]{64}$/iu;
@@ -36,4 +36,22 @@ export function id58(bytes: Uint8Array): string {
 export function normalizeId(raw: string | null | undefined): string | null {
   const bytes = parseId32(raw);
   return bytes ? id58(bytes) : null;
+}
+
+const STRKEY_CONTRACT = /^C[A-Z2-7]{55}$/u;
+
+/**
+ * Normalizes address input to base58: base58, 64 hex chars, or a legacy
+ * C StrKey. Null when invalid. Base58 is case-sensitive; it is kept as is.
+ */
+export function normalizeAddressInput(raw: string | null | undefined): string | null {
+  const value = raw?.trim();
+  if (value && STRKEY_CONTRACT.test(value)) {
+    try {
+      return toBase58(parseAddress(value));
+    } catch {
+      return null;
+    }
+  }
+  return normalizeId(value);
 }

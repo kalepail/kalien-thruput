@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { WorkerEnv } from "../env";
-import { normalizeId } from "../ids";
+import { normalizeAddressInput } from "../ids";
 
 export type AppEnv = { Bindings: WorkerEnv };
 export type AppContext = Context<AppEnv>;
@@ -19,9 +19,9 @@ export function clientIp(c: AppContext): string {
   return c.req.raw.headers.get("cf-connecting-ip") ?? "unknown";
 }
 
-/** A 32-byte Thruput address (base58, or 64 hex chars) as base58, or null. */
+/** A Thruput address (base58, 64 hex chars, or C StrKey) as base58, or null. */
 export function normalizeAddress(raw: string | undefined | null): string | null {
-  return normalizeId(raw);
+  return normalizeAddressInput(raw);
 }
 
 /** Fixed-window counters per key; in memory, per isolate. */
