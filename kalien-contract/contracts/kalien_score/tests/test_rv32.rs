@@ -143,3 +143,12 @@ fn rv32_rejection_gas() {
     report("NotImproved", &world.submit(&player, T0_SEED_ID, &tape), ScoreError::NotImproved);
     report("AlreadyClaimed", &world.submit(&other, T0_SEED_ID, &tape), ScoreError::AlreadyClaimed);
 }
+
+#[test]
+#[ignore = "requires RV32 build — run via `thruput test`"]
+fn rv32_accepts_former_strict_rule_false_positives() {
+    for (name, frames, score) in STRICT_REGRESSIONS {
+        let gas = accept_on_fresh_world(setup_rv32(), &strict_regression_tape(name), frames, score);
+        println!("GAS regression {name}: frames={frames} score={score} gas={gas}");
+    }
+}

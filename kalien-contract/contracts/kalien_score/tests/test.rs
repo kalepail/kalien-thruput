@@ -78,6 +78,13 @@ fn replays_max_game_fixture() {
     submit_fixture(MAX_GAME);
 }
 
+#[test]
+fn accepts_former_strict_rule_false_positives() {
+    for (name, frames, score) in STRICT_REGRESSIONS {
+        accept_on_fresh_world(setup(), &strict_regression_tape(name), frames, score);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Best score and mint deltas.
 

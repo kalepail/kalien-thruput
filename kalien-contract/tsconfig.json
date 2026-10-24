@@ -6,5 +6,12 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["scripts/**/*.ts", "../shared/thruput/**/*.ts"]
+  "include": [
+    "scripts/bun-shim.d.ts",
+    "scripts/kalien.ts",
+    "scripts/gen-claim-vectors.ts",
+    "../shared/thruput/kalien.ts",
+    "../shared/thruput/claim.ts",
+    "../shared/thruput/claim.test.ts"
+  ]
 }

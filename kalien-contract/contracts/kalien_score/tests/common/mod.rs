@@ -338,3 +338,33 @@ pub fn child_gas(result: &TransactResult) -> u64 {
         .map(|call| call.gas_remaining_at_start - call.gas_remaining_at_end)
         .sum()
 }
+
+/// kt-core's honest tapes that the old strict rules rejected
+/// (`asteroids-core/tests/fixtures/strict-regressions/`): (file, frames, score).
+pub const STRICT_REGRESSIONS: [(&str, u32, u32); 4] = [
+    ("ship-position-step-runs-01135.tape", 3_956, 90),
+    ("ship-position-step-pattern-00683.tape", 4_515, 3_240),
+    ("mode-lives-uniform-01029.tape", 9_400, 10_010),
+    ("mode-lives-uniform-01104.tape", 10_757, 10_670),
+];
+
+pub fn strict_regression_tape(name: &str) -> Vec<u8> {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../asteroids-core/tests/fixtures/strict-regressions")
+        .join(name);
+    std::fs::read(path).unwrap()
+}
+
+/// Seed field of a tape header.
+pub fn tape_seed(tape: &[u8]) -> u32 {
+    u32::from_le_bytes([tape[8], tape[9], tape[10], tape[11]])
+}
+
+/// Submit one tape on a fresh world whose current epoch has the tape's seed.
+pub fn accept_on_fresh_world(world: World, tape: &[u8], frames: u32, score: u32) -> u64 {
+    world.set_seed(T0_SEED_ID, tape_seed(tape));
+    let player = Player::new(0x5A);
+    let (result, receipt) = world.submit_ok(&player, T0_SEED_ID, tape);
+    assert_eq!((receipt.frame_count, receipt.final_score), (frames, score));
+    child_gas(&result)
+}

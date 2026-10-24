@@ -6,7 +6,8 @@
 # 1. Builds both RV32 artifacts and the TS bindings.
 # 2. Creates the stored keys kalien-deployer / kalien-test-player / the relay lanes
 #    (kalien-relay, kalien-relay-2..4) if they are missing (keys stay in ~/.config/thruput/keys, never in git).
-# 3. Funds deployer and relays from the faucet when they hold < 100 HOG.
+# 3. Funds deployer and relays from the faucet (faucet_requestAirdrop, ~1,000 HOG) when they
+#    hold < 100 HOG.
 # 4. Deploys the token and the score contract, links them, and writes
 #    shared/thruput/deployments/devnet.json.
 # 5. Creates the current seed, then (unless --skip-fixtures) fixes fixture seeds
@@ -35,7 +36,7 @@ for key in kalien-deployer kalien-test-player ${RELAY_KEYS//,/ }; do
   fi
 done
 
-hog_of() { thruput balance "$1" --profile devnet --json 2>/dev/null | bun -e 'const j=JSON.parse(await Bun.stdin.text()); console.log(Math.floor(Number(j.data?.rawBalance ?? 0)/1e7))' || echo 0; }
+hog_of() { "${TOOL[@]}" balance --rpc "$RPC" --key "$1" 2>/dev/null || echo 0; }
 for key in kalien-deployer ${RELAY_KEYS//,/ }; do
   if (( $(hog_of "$key") < 100 )); then
     "${TOOL[@]}" fund --rpc "$RPC" --key "$key"
