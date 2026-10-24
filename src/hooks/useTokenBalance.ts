@@ -54,7 +54,12 @@ export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
         return;
       }
       const detail = err instanceof Error ? err.message : "failed to load token balance";
-      setError(detail);
+      // A devnet reset changes the network hash; the pinned client then refuses it.
+      setError(
+        /network identity|network mismatch/i.test(detail)
+          ? "the network changed (devnet reset?); reload the page"
+          : detail,
+      );
     } finally {
       if (requestId === refreshRequestIdRef.current) {
         setIsRefreshing(false);

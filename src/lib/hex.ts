@@ -24,10 +24,6 @@ export function strip0x(hex: string): string {
   return hex.startsWith("0x") || hex.startsWith("0X") ? hex.slice(2) : hex;
 }
 
-export function with0x(hex: string): string {
-  return `0x${strip0x(hex).toLowerCase()}`;
-}
-
 export function isHexOfLength(value: string, byteLength: number): boolean {
   const normalized = strip0x(value.trim());
   return normalized.length === byteLength * 2 && /^[0-9a-fA-F]+$/.test(normalized);
