@@ -16,8 +16,7 @@ import { PageHero } from "@/components/shared/PageHero";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
-import { Link } from "@/components/shared/Link";
-import { AddressExplorerLink } from "@/components/runs/TxLink";
+import { AddressLinks } from "@/components/runs/TxLink";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 
 const sectionTitle =
@@ -312,12 +311,7 @@ export function WalletPage() {
                   )}
                 </button>
                 <div className="mt-1 flex flex-wrap gap-3 text-xs">
-                  <AddressExplorerLink address={wallet.address}>
-                    View on explorer
-                  </AddressExplorerLink>
-                  <Link href={`/leaderboard/${wallet.address}`} className="text-link">
-                    Player page
-                  </Link>
+                  <AddressLinks address={wallet.address} />
                 </div>
               </div>
               <div>

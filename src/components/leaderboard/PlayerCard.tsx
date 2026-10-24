@@ -7,7 +7,7 @@ import { isSafeUrl } from "@/lib/validation";
 import { Card } from "@/components/ui/card";
 import { StatCard, StatGrid } from "@/components/shared/StatCard";
 import { RelativeTime } from "./RelativeTime";
-import { AddressExplorerLink } from "@/components/runs/TxLink";
+import { AddressLinks } from "@/components/runs/TxLink";
 
 export interface PlayerCardProps {
   player: LeaderboardPlayer;
@@ -41,7 +41,7 @@ export function PlayerCard({ player }: PlayerCardProps) {
         <p className="m-0">
           <strong className="text-xs uppercase tracking-[0.04em] text-text-dim">Address:</strong>{" "}
           <code className="break-all text-text-soft">{player.playerAddress}</code>{" "}
-          <AddressExplorerLink address={player.playerAddress} className="text-xs" />
+          <AddressLinks address={player.playerAddress} showPlayerPage={false} className="text-xs" />
         </p>
         {player.profile?.linkUrl && isSafeUrl(player.profile.linkUrl) ? (
           <p className="m-0 flex items-center gap-1.5">

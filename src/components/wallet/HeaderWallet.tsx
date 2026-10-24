@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { useBalanceState, useWalletState } from "@/contexts/WalletContext";
 import { abbreviateAddress } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { AddressExplorerLink } from "@/components/runs/TxLink";
+import { AddressLinks } from "@/components/runs/TxLink";
 import { navigate } from "@/hooks/useLocation";
 
 export function HeaderWallet() {
@@ -131,9 +131,7 @@ export function HeaderWallet() {
                 <Copy className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
               )}
             </button>
-            <AddressExplorerLink address={wallet.address} className="mt-1 text-[0.7rem]">
-              View on explorer
-            </AddressExplorerLink>
+            <AddressLinks address={wallet.address} className="mt-1 text-[0.7rem]" />
           </div>
 
           {/* Balance */}

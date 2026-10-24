@@ -13,7 +13,7 @@ export function PageHero({ title, subtitle, children }: PageHeroProps) {
         <h1 className="m-0 font-display text-[clamp(1.75rem,4.2vw,2.4rem)] tracking-[0.09em] uppercase [overflow-wrap:anywhere] [text-shadow:0_0_16px_rgba(79,196,255,0.26)]">
           {title}
         </h1>
-        <p className="m-0 mt-1 text-[rgba(205,238,226,0.92)]">{subtitle}</p>
+        <p className="m-0 mt-1 text-[rgba(205,238,226,0.92)] [overflow-wrap:anywhere]">{subtitle}</p>
       </div>
       {children ? <div className="w-full min-w-0 sm:w-auto">{children}</div> : null}
     </header>

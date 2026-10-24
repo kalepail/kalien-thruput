@@ -12,6 +12,12 @@ const LazyLeaderboardPage = lazy(() =>
   })),
 );
 
+const LazyTxPage = lazy(() =>
+  import("./components/runs/TxPage").then((mod) => ({
+    default: mod.TxPage,
+  })),
+);
+
 const LazyRunsPage = lazy(() =>
   import("./components/runs/RunsPage").then((mod) => ({
     default: mod.RunsPage,
@@ -40,20 +46,27 @@ function App() {
   const pathname = useLocation();
   const isLegacyProofsPath = pathname === "/proofs" || pathname.startsWith("/proofs/");
 
-  // Old proof pages became the run history.
+  const addressPath = pathname.match(/^\/address\/([^/]+)/u)?.[1] ?? null;
+
+  // Old proof pages became the run history; explorer-style address URLs open the player page.
   useEffect(() => {
     if (isLegacyProofsPath) {
       navigate("/runs", { replace: true });
+    } else if (addressPath) {
+      navigate(`/leaderboard/${addressPath}`, { replace: true });
     }
-  }, [isLegacyProofsPath]);
+  }, [addressPath, isLegacyProofsPath]);
 
-  const RoutePage = pathname.startsWith("/leaderboard")
-    ? LazyLeaderboardPage
-    : pathname === "/runs" || isLegacyProofsPath
-      ? LazyRunsPage
-      : pathname === "/wallet"
-        ? LazyWalletPage
-        : LazyGamePage;
+  const RoutePage =
+    pathname.startsWith("/leaderboard") || addressPath
+      ? LazyLeaderboardPage
+      : pathname.startsWith("/tx/")
+        ? LazyTxPage
+        : pathname === "/runs" || isLegacyProofsPath
+          ? LazyRunsPage
+          : pathname === "/wallet"
+            ? LazyWalletPage
+            : LazyGamePage;
 
   return (
     <WalletProvider>
