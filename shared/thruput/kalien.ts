@@ -380,12 +380,13 @@ export type ScoreSubmittedQuery = ScoreSubmittedFilter & {
 const ScoreSubmitted = kalien_score.v0_1.implementation.ScoreSubmitted;
 
 function eventFilter(config: KalienConfig, filter: ScoreSubmittedFilter) {
-  const topics: Record<string, unknown> = {};
-  if (filter.player) topics.player = parseAddress(filter.player);
-  if (filter.seedId !== undefined) topics.seed_id = BigInt(filter.seedId);
+  const topics: kalien_score.v0_1.implementation.ScoreSubmittedFilter = {
+    ...(filter.player ? { player: parseAddress(filter.player) } : {}),
+    ...(filter.seedId !== undefined ? { seed_id: BigInt(filter.seedId) } : {}),
+  };
   return {
     addresses: [score(config)],
-    ...(Object.keys(topics).length ? { topics: topics as never } : {}),
+    ...(Object.keys(topics).length ? { topics } : {}),
   };
 }
 
@@ -660,7 +661,7 @@ export function decodeSubmitReceipt(config: KalienConfig, receipt: TransactionRe
     executionResult: execution.result,
   };
   if (execution.result === "return") {
-    const events = ScoreSubmitted.allFromReceipt(receipt, { contractAddress: score(config) } as never);
+    const events = ScoreSubmitted.allFromReceipt(receipt, { address: score(config) });
     if (events.length !== 1) {
       return { ...base, status: "failed", errorCode: null, errorName: null, run: null, detail: `expected 1 ScoreSubmitted event, got ${events.length}` };
     }

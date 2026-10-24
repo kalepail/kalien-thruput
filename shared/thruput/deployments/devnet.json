@@ -1,25 +1,25 @@
 {
   "network": "devnet",
-  "networkHash": "0xb69ec9c688b3936b5bcbfc4eebc355d39aa9e5c6f6f072cc4a05564a07435047",
+  "networkHash": "DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj",
   "rpcUrl": "https://rpc.thruput.network",
   "explorerUrl": "https://explorer.thruput.network/",
-  "scoreContract": "0x94204675c7a31180d05a494de80679ea9be84adee0ffaac1f2dcd03f4e5216bc",
-  "tokenContract": "0xddf7dd05230d877cb3635392f5fde0af3f9eb0cf406f1a05146403710f98c0d8",
-  "admin": "0xa5fdc7005f99e06d3c8c869e811d08b9a2fe7145627b4d9d31e81fd58528a100",
-  "deployedAt": "2026-10-23T22:37:39.867Z",
+  "scoreContract": "8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT",
+  "tokenContract": "AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87",
+  "admin": "5y9nbDvLXhF87vezDQQKKfHd9DccibjUutkHrhE5UojK",
+  "deployedAt": "2026-10-24T10:15:33.743Z",
   "deployTxs": {
-    "deployToken": "0xbc753fb3571a2e8576d729fc5a895f3b51a1117db7d304ef1bba5f9480db98d7",
-    "deployScore": "0x986ea82abfdb6d76834cf0e819f64eb80332485fd65102f90da8ce8c24b24a63",
-    "setTokenAdministrator": "0x05a2723ba4817deae405aa951a12cd27d153920ca305067e445a5ecec3707ee2"
+    "deployToken": "3nHJYy3YmCD76g1cT5PNjUWxvWbNDrk6nc2MAibgUzmE",
+    "deployScore": "5aRwEVTD89GSCkRcdvrFVxwGoQfVakQfyWCMtQsBjY9j",
+    "setTokenAdministrator": "7omh79J7atpisv16Li867Htzw3wMdrghxRfc5aqEVr6i"
   },
   "artifacts": {
     "kalien_token": {
-      "sha256": "0xc3dfcf07916214ee88154552e60ef786c4f84d0c435aa083040eb61f86688a80",
-      "bytes": 27248
+      "sha256": "0xa43d2e9c73e01fae18e57db4e41233cd54f533ae0cb1d693364a3f4dbf7f8ece",
+      "bytes": 27252
     },
     "kalien_score": {
-      "sha256": "0xafbff258ab0c4630651f00fc9a6dbef1b5ec0402471fac1a596771675edd517e",
-      "bytes": 54788
+      "sha256": "0x7503a8d512163fc72f4979ef54ed845bdc84c3a0b6dd7660015cf657eb6627f8",
+      "bytes": 64400
     }
   }
 }
