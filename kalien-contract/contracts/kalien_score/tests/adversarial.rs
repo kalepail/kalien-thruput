@@ -12,9 +12,9 @@ use kalien_score::{
     KalienScoreClient, MAX_FRAMES, RelayChanged, ScoreError, ScoreSubmitted, SettingsChanged,
     UNITS_PER_POINT,
 };
-use sdk::*;
+use thruput_sdk::*;
 
-static SECOND_SCORE_NONCE: SHA256Hash = sdk::sha256_static!("KALIEN_SCORE_SECOND_NONCE");
+static SECOND_SCORE_NONCE: SHA256Hash = thruput_sdk::sha256_static!("KALIEN_SCORE_SECOND_NONCE");
 
 fn admin_ok(world: &World, f: impl FnOnce(KalienScoreClient) + std::panic::UnwindSafe) {
     world.score_call(&world.admin, f).assert_success();

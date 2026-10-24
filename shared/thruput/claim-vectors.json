@@ -1,49 +1,63 @@
 {
-  "comment": "Test vectors for shared/thruput/claim.ts and kalien_score claim.rs. Tapes live in kalien-contract/fixtures/. Regenerate with: bun kalien-contract/scripts/gen-claim-vectors.ts",
+  "comment": "Test vectors (wire 14) for shared/thruput/claim.ts and kalien_score claim.rs. Tapes live in kalien-contract/fixtures/. Regenerate with: bun kalien-contract/scripts/gen-claim-vectors.ts",
   "addresses": [
     {
       "secretKey": "0x0101010101010101010101010101010101010101010101010101010101010101",
       "pubkey": "0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-      "address": "0x08812b1d184f3a6a04af6f3f51a231d98ae5c68bd2b6378d905f746162be87c6"
+      "pubkeyHash": "0xdf1c499a73441337e1e87136aaa0c7e4fb4bb1620f05aca022aebd2f73de635d",
+      "address": "3zzuGnogcQY5C9QCmGiFSJXU2iX9iaJqLjYGRmSLPvQ5",
+      "addressHex": "0x2c92f2f954065941f875f36b90c0841b5b0c31412675d04b6e8979dc084a55ee"
     },
     {
       "secretKey": "0x0707070707070707070707070707070707070707070707070707070707070707",
       "pubkey": "0xea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
-      "address": "0xf3a401514067c752608f45293e4b393d58fbaeb070afe0270c956db732e550be"
+      "pubkeyHash": "0xa051c14bb1b734e371502fe711cd39e97f7766391a5c79b753c5b560f086569d",
+      "address": "BUKU1bmMRNyAiB79PNn5jBZe11KuQYYc3TGVdC6hiAny",
+      "addressHex": "0x9b946e2a8f8a2814f881fd95f0c73b36d8ab817f9964f24aee25ca807ffbd076"
     },
     {
       "secretKey": "0xabababababababababababababababababababababababababababababababab",
       "pubkey": "0x248acbdbaf9e050196de704bea2d68770e519150d103b587dae2d9cad53dd930",
-      "address": "0x15c09b9c0ec7b2e412f55e09c97d8272bc3d19bc265a623deba18972cf3b5f6b"
+      "pubkeyHash": "0x0e5a8ac84963130646c16e5bacf00e19b69a73be39f335d868cd2a5461b61403",
+      "address": "bkHZZDLFfRdd78xCM9rvv6ZxNEw4SBiT7h1fRrZf2kh",
+      "addressHex": "0x08e6b0ccc08aa3aac9edf13b8f07d4e05659cabb28da0e6153bbe75a57f98b9a"
     },
     {
       "secretKey": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       "pubkey": "0x76a1592044a6e4f511265bca73a604d90b0529d1df602be30a19a9257660d1f5",
-      "address": "0x3fcf1384fb5edb35e52407bf34163d1c504f3572ffcda6b4cad69f4f5ea0b3ae"
+      "pubkeyHash": "0x0828314d3e74296bc705f16420fa27db66b1d374a649c589644391dfe2596abb",
+      "address": "BPPpuqoRu34zMzYsVqnWpeMuxTN81f3HuTnocXzja5G6",
+      "addressHex": "0x9a5174e154c3ec3835847da14dd33162a1480eb9e00f708f3f91fd0777f97f63"
     },
     {
       "secretKey": "",
       "pubkey": "0x0707070707070707070707070707070707070707070707070707070707070707",
-      "address": "0x1d746055b3cfd220f10f54a917b03bc7b103080988962c91f6621f0cf693af47"
+      "pubkeyHash": "0x7b5c0a12a539ccb97bcc5620bf13abc25c1a5b8265af6f08dd6f72efa7a06923",
+      "address": "C7m5Tu7JR47GMmXT2B1WCsYP4i81WrmW9jTRdBZ1ik7W",
+      "addressHex": "0xa52be107b02204ba1cee78c9019d28a1aed31355c7dd1a8677c78a60bcdf276d"
     }
   ],
   "claims": [
     {
       "tape": "test-short.tape",
-      "networkHash": "0xb69ec9c688b3936b5bcbfc4eebc355d39aa9e5c6f6f072cc4a05564a07435047",
-      "scoreContract": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "networkHash": "DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj",
+      "networkHashHex": "0xb9c92c610c00c32eeb10d2c33d974c6e1e6728f086c0a2041fa1ed1c3acb3066",
+      "scoreContract": "29d2S7vB453rNYFdR5Ycwt7y9haRT5fwVwL9zTmBhfV2",
+      "scoreContractHex": "0x1111111111111111111111111111111111111111111111111111111111111111",
       "seedId": 2999999,
       "tapeHash": "0xedeb1bb0d05e69eabddf0bde5d95d635f18bb3fbb332f6b6d6f7841538dc91c4",
-      "preimage": "0x6b616c69656e2d636c61696d2d7631b69ec9c688b3936b5bcbfc4eebc355d39aa9e5c6f6f072cc4a05564a074350471111111111111111111111111111111111111111111111111111111111111111bfc62d00edeb1bb0d05e69eabddf0bde5d95d635f18bb3fbb332f6b6d6f7841538dc91c4",
-      "digest": "0x56c01761d9ccbadc647c5d26ad659f012a9980af941fad9cc1e69103e3765a8a",
+      "preimage": "0x6b616c69656e2d636c61696d2d7631b9c92c610c00c32eeb10d2c33d974c6e1e6728f086c0a2041fa1ed1c3acb30661111111111111111111111111111111111111111111111111111111111111111bfc62d00edeb1bb0d05e69eabddf0bde5d95d635f18bb3fbb332f6b6d6f7841538dc91c4",
+      "digest": "0x56bf27e6a04dfa676e53448213408e5568f598e2e9465921bee7248929f95032",
       "secretKey": "0x0101010101010101010101010101010101010101010101010101010101010101",
       "pubkey": "0x8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
-      "signature": "0x3433a4cf06fa24d5c05c4d8a56d6df362ba85bd36c641923a4f2c6dcc58c08ee34237e57e6332676eb929c4d3653040459a7793ff194687f7c78d0ecb61c8507"
+      "signature": "0xab90fb4ae7297ddefda2e86264a3ad75c390e07408b9a9a05745ce96264eef10347085542dd5ccaa8030a83b1bfecbe829f632d46ee112830a1c6162b735770d"
     },
     {
       "tape": "test-medium.tape",
-      "networkHash": "0x4242424242424242424242424242424242424242424242424242424242424242",
-      "scoreContract": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
+      "networkHash": "5TeWSsjg2gbxCyWVniXeCmwM7UtHTCK7svzJr5xYJzHf",
+      "networkHashHex": "0x4242424242424242424242424242424242424242424242424242424242424242",
+      "scoreContract": "1G9spZjaDkgYURAhMVL27fsA2b9cSkQFAUvFVp5Axra",
+      "scoreContractHex": "0x00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",
       "seedId": 4294967295,
       "tapeHash": "0xee4a145acc60cd12bb9f2e501cc9436d5a757d9f03fcbf3659837caf97715b6b",
       "preimage": "0x6b616c69656e2d636c61696d2d7631424242424242424242424242424242424242424242424242424242424242424200112233445566778899aabbccddeeff00112233445566778899aabbccddeeffffffffffee4a145acc60cd12bb9f2e501cc9436d5a757d9f03fcbf3659837caf97715b6b",

@@ -8,7 +8,7 @@ mod common;
 
 use common::*;
 use kalien_score::{ScoreError, ScoreSubmitted, UNITS_PER_POINT};
-use sdk::TransactResult;
+use thruput_sdk::TransactResult;
 
 fn submit_fixture_rv32(fixture: Fixture) -> u64 {
     let world = setup_rv32();
@@ -121,7 +121,7 @@ fn rv32_rejection_gas() {
     let player = Player::new(0x24);
     let other = Player::new(0x25);
     let tape = LONG.bytes();
-    let mut report = |name: &str, result: &TransactResult, expected: ScoreError| {
+    let report = |name: &str, result: &TransactResult, expected: ScoreError| {
         assert_eq!(result.assert_abort_as::<ScoreError>(), expected, "{name}");
         println!("GAS reject {name}: gas={}", child_gas(result));
     };

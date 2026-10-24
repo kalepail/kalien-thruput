@@ -8,7 +8,7 @@ use kalien_score::{
     UNITS_PER_POINT, ZERO_SEED_FALLBACK, claim, derive_seed,
 };
 use kalien_token::{ERC20Client, ERC20Error, KalienTokenAdminClient, KalienTokenError, MintEvent};
-use sdk::*;
+use thruput_sdk::*;
 
 // ---------------------------------------------------------------------------
 // Replay of the fixture tapes, end to end through submit_score.
@@ -460,9 +460,10 @@ fn claim_and_address_vectors_match_shared_ts() {
 
     for case in json["addresses"].as_array().unwrap() {
         let pubkey = hex32(&case["pubkey"]);
-        let preimage = claim::pubkey_account_preimage(&pubkey);
-        let address = sha256_bytes(&preimage);
-        assert_eq!(address, hex32(&case["address"]), "address for {}", case["pubkey"]);
+        let key_hash = sha256_bytes(&claim::public_key_preimage(&pubkey));
+        assert_eq!(key_hash, hex32(&case["pubkeyHash"]), "key hash for {}", case["pubkey"]);
+        let address = sha256_bytes(&claim::pubkey_account_preimage(&key_hash));
+        assert_eq!(address, hex32(&case["addressHex"]), "address for {}", case["pubkey"]);
     }
 
     for case in json["claims"].as_array().unwrap() {
@@ -470,8 +471,8 @@ fn claim_and_address_vectors_match_shared_ts() {
         let tape_hash = sha256_bytes(&tape);
         assert_eq!(tape_hash, hex32(&case["tapeHash"]));
         let preimage = claim::claim_preimage(
-            &hex32(&case["networkHash"]),
-            &hex32(&case["scoreContract"]),
+            &hex32(&case["networkHashHex"]),
+            &hex32(&case["scoreContractHex"]),
             case["seedId"].as_u64().unwrap() as u32,
             &tape_hash,
         );

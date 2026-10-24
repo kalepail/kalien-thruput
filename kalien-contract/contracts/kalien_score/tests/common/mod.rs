@@ -9,10 +9,10 @@ use sha2::{Digest, Sha256};
 
 use kalien_score::{KalienScoreClient, ScoreError, ScoreReceipt, claim};
 use kalien_token::{ERC20Client, KalienTokenAdminClient};
-use sdk::*;
+use thruput_sdk::*;
 
-pub static TOKEN_NONCE: SHA256Hash = sdk::sha256_static!("KALIEN_TOKEN_TEST_NONCE");
-pub static SCORE_NONCE: SHA256Hash = sdk::sha256_static!("KALIEN_SCORE_TEST_NONCE");
+pub static TOKEN_NONCE: SHA256Hash = thruput_sdk::sha256_static!("KALIEN_TOKEN_TEST_NONCE");
+pub static SCORE_NONCE: SHA256Hash = thruput_sdk::sha256_static!("KALIEN_SCORE_TEST_NONCE");
 
 /// 2027-01-15T08:00:00Z, at the start of an epoch.
 pub const T0_SECONDS: u64 = 1_800_000_000 - (1_800_000_000 % 600);
@@ -92,7 +92,8 @@ impl Player {
     }
 
     pub fn address(&self) -> ContractAddress {
-        ContractAddress::from(sha256_bytes(&claim::pubkey_account_preimage(&self.pubkey())))
+        let key_hash = sha256_bytes(&claim::public_key_preimage(&self.pubkey()));
+        ContractAddress::from(sha256_bytes(&claim::pubkey_account_preimage(&key_hash)))
     }
 
     /// Sign the claim exactly as the browser does: sha256 over the claim

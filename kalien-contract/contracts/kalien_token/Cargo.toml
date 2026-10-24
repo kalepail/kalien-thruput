@@ -22,18 +22,18 @@ bench = false
 # Feature names are contracts with the toolchain; do not rename them.
 [features]
 entrypoints = []
-dev = ["sdk/dev", "thruput-erc20-if/dev", "thruput-erc20-metadata-if/dev"]
+dev = ["thruput-sdk/dev", "thruput-erc20-if/dev", "thruput-erc20-metadata-if/dev"]
 thruput-integration-test = []
 
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-sdk = { version = "=0.51.1", registry = "thruput" }
+thruput-sdk = { version = "=0.54.0", registry = "thruput" }
 
 [target.'cfg(not(target_arch = "riscv32"))'.dependencies]
-sdk = { version = "=0.51.1", registry = "thruput", features = ["std"] }
+thruput-sdk = { version = "=0.54.0", registry = "thruput", features = ["std"] }
 
 [dependencies]
-thruput-erc20-if = { version = "=0.1.56", registry = "thruput" }
-thruput-erc20-metadata-if = { version = "=0.1.56", registry = "thruput" }
+thruput-erc20-if = { version = "=0.1.65", registry = "thruput" }
+thruput-erc20-metadata-if = { version = "=0.1.65", registry = "thruput" }
 
 [dev-dependencies]
 kalien_token = { path = ".", features = ["dev"] }

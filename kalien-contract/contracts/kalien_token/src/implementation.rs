@@ -4,9 +4,9 @@
 //! the score contract, and then hands administration to the score contract
 //! with `set_administrator`. After that only score submissions can mint.
 
-use sdk::storage::deletable::Deletable;
-use sdk::storage::{Balance, Map, Value};
-use sdk::*;
+use thruput_sdk::storage::deletable::Deletable;
+use thruput_sdk::storage::{Balance, Map, Value};
+use thruput_sdk::*;
 use thruput_erc20_if::*;
 use thruput_erc20_metadata_if::{ERC20Metadata, Name, Symbol};
 
@@ -17,7 +17,7 @@ pub const SYMBOL: &str = "KALIEN";
 
 type Allowance = Balance;
 
-#[sdk::storage]
+#[thruput_sdk::storage]
 #[cfg_attr(feature = "dev", derive(Debug))]
 pub struct KalienToken {
     config: Value<Config>,

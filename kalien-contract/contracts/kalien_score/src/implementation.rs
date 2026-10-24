@@ -1,9 +1,9 @@
 //! Kalien score contract: replays Asteroids tapes on-chain, keeps the best
 //! score per player per seed epoch, and mints the KALIEN improvement.
 
-use sdk::storage::{Map, Value};
-use sdk::*;
-use sdk::crypto::{sha256, verify_signature_ed25519};
+use thruput_sdk::storage::{Map, Value};
+use thruput_sdk::*;
+use thruput_sdk::crypto::{sha256, verify_signature_ed25519};
 use kalien_token::KalienTokenAdminClient;
 use thruput_erc20_if::ERC20Client;
 
@@ -25,7 +25,7 @@ pub const ZERO_SEED_FALLBACK: u32 = 0xDEAD_BEEF;
 
 const NANOS_PER_SECOND: u64 = 1_000_000_000;
 
-#[sdk::storage]
+#[thruput_sdk::storage]
 #[cfg_attr(feature = "dev", derive(Debug))]
 pub struct KalienScore {
     config: Value<Config>,
