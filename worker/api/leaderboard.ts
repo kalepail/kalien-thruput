@@ -27,10 +27,12 @@ import {
   normalizeAddress,
   RateLimiter,
   rateLimited,
+  readBodyLimited,
   type AppEnv,
 } from "./http";
 
 const readLimiter = new RateLimiter(120, 60_000);
+const MAX_PROFILE_BODY_BYTES = 4_096;
 const writeLimiter = new RateLimiter(10, 60_000);
 
 function clampInt(raw: string | undefined, fallback: number, min: number, max: number): number {
@@ -153,7 +155,11 @@ export function createLeaderboardRouter(): Hono<AppEnv> {
     }
     let body: Record<string, unknown>;
     try {
-      body = (await c.req.json()) as Record<string, unknown>;
+      const raw = await readBodyLimited(c.req.raw, MAX_PROFILE_BODY_BYTES);
+      if (!raw) {
+        return jsonError(c, 413, `profile body is larger than ${MAX_PROFILE_BODY_BYTES} bytes`);
+      }
+      body = JSON.parse(new TextDecoder().decode(raw)) as Record<string, unknown>;
     } catch {
       return jsonError(c, 400, "body must be JSON");
     }

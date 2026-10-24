@@ -43,6 +43,7 @@ describe("syncScoreEvents", () => {
     const score = chain.scoreContract();
     const blockTimes = { blockTimeMs: async (h: bigint) => chain.blockTimeMs(h) };
 
+    chain.height = 15n;
     const first = event(chain, 1, 10n);
     for (let i = 2; i <= 5; i += 1) {
       event(chain, i, BigInt(10 + i));
@@ -71,6 +72,7 @@ describe("syncScoreEvents", () => {
     expect(state).toMatchObject({ fromHeight: "15", cursor: "", totalEvents: 5 });
 
     // A new walk restarts inclusively at the last height and finds new rows.
+    chain.height = 20n;
     event(chain, 6, 15n);
     event(chain, 7, 20n);
     const second = await syncScoreEvents(env, score, blockTimes, { maxPages: 10, pageLimit: 2 });
@@ -101,6 +103,7 @@ describe("syncScoreEvents", () => {
   it("restarts the walk when the score contract changes", async () => {
     const chain = new FakeChain();
     const env = { LEADERBOARD_DB: d1() } as unknown as WorkerEnv;
+    chain.height = 50n;
     event(chain, 1, 50n);
     const blockTimes = { blockTimeMs: async (h: bigint) => chain.blockTimeMs(h) };
     await syncScoreEvents(env, chain.scoreContract(), blockTimes, { maxPages: 10, pageLimit: 10 });
@@ -111,6 +114,40 @@ describe("syncScoreEvents", () => {
     const result = await syncScoreEvents(env, other, blockTimes, { maxPages: 10, pageLimit: 10 });
     expect(result).toMatchObject({ inserted: 1, lastHeight: "3" });
     expect((await getIndexerState(env))?.contractAddress).toBe(other.address);
+  });
+});
+
+describe("indexer recovery", () => {
+  it("starts the next walk just below the head its first page saw", async () => {
+    const chain = new FakeChain();
+    const env = { LEADERBOARD_DB: d1() } as unknown as WorkerEnv;
+    chain.height = 500n;
+    event(chain, 1, 10n);
+    const blockTimes = { blockTimeMs: async (h: bigint) => chain.blockTimeMs(h) };
+    await syncScoreEvents(env, chain.scoreContract(), blockTimes, { maxPages: 5, pageLimit: 10 });
+    expect((await getIndexerState(env))?.fromHeight).toBe("480");
+  });
+
+  it("can be reset to a height after a bad cursor", async () => {
+    const { resetIndexer } = await import("../../worker/leaderboard/indexer");
+    const chain = new FakeChain();
+    const env = { LEADERBOARD_DB: d1() } as unknown as WorkerEnv;
+    chain.height = 30n;
+    event(chain, 1, 5n);
+    event(chain, 2, 25n);
+    const score = chain.scoreContract();
+    const blockTimes = { blockTimeMs: async (h: bigint) => chain.blockTimeMs(h) };
+    // A stuck walk: a cursor the RPC refuses.
+    const broken = {
+      ...score,
+      scoreEvents: async () => Promise.reject(new Error("invalidCursor")),
+    };
+    await syncScoreEvents(env, broken, blockTimes, { maxPages: 1, pageLimit: 1 }).catch(() => null);
+    expect((await getIndexerState(env))?.lastError).toBe("invalidCursor");
+    await resetIndexer(env, score.address, 0n);
+    const result = await syncScoreEvents(env, score, blockTimes, { maxPages: 5, pageLimit: 10 });
+    expect(result).toMatchObject({ inserted: 2, exhausted: true });
+    expect((await getIndexerState(env))?.lastError).toBeNull();
   });
 });
 

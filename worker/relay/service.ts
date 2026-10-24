@@ -22,6 +22,10 @@ export class RelayService {
   private address: string | null = null;
   private ticking: Promise<void> | null = null;
   private lastError: string | null = null;
+  private readonly touching = new Map<
+    number,
+    Promise<{ seed: number | null; txHash: string | null }>
+  >();
 
   constructor(
     sql: SqlLike,
@@ -69,15 +73,29 @@ export class RelayService {
     };
   }
 
-  /** Ops: queue a failed run again (same signed claim). Null if not failed. */
-  async retryFailed(runId: string): Promise<RunView | null> {
+  /**
+   * Ops: queue a run again with the same signed claim. A `failed` run that is
+   * not final qualifies; an `unknown` run only when its transaction is proven
+   * dead or failed (`canRedispatch`). Returns the run or a refusal reason.
+   */
+  async retryRun(runId: string): Promise<{ run: RunView } | { refused: string }> {
     const run = this.store.getRun(runId);
-    if (!run || run.status !== "failed") {
-      return null;
+    if (!run) {
+      return { refused: "run not found" };
     }
-    const { run: queued } = this.store.enqueue(run, this.now());
+    if (run.status === "unknown") {
+      const check = await (await this.getEngine()).canRedispatch(run);
+      if (!check.ok) {
+        return { refused: check.reason };
+      }
+      this.store.requeue(runId, `re-dispatched by ops: ${check.reason}`, this.now(), this.now());
+    } else if (run.status === "failed" && !run.final) {
+      this.store.enqueue(run, this.now());
+    } else {
+      return { refused: `run is ${run.status}${run.final ? " (final)" : ""}` };
+    }
     await this.schedule(this.now());
-    return runView(queued);
+    return { run: runView(this.store.requireRun(runId)) };
   }
 
   /** Recent runs with these statuses (ops), newest first. */
@@ -85,13 +103,27 @@ export class RelayService {
     return this.store.listByStatus(statuses, limit).map(runView);
   }
 
-  async touchSeed(seedId: number): Promise<{ seed: number | null; txHash: string | null }> {
-    const engine = await this.getEngine();
-    const result = await engine.touchSeed(seedId);
-    if (result.txHash) {
-      await this.schedule(this.now());
+  /**
+   * One seed touch at a time per relay object: a cron call and a public seed
+   * read that overlap share the first call instead of signing twice.
+   */
+  touchSeed(seedId: number): Promise<{ seed: number | null; txHash: string | null }> {
+    const pending = this.touching.get(seedId);
+    if (pending) {
+      return pending;
     }
-    return result;
+    const call = (async () => {
+      const engine = await this.getEngine();
+      const result = await engine.touchSeed(seedId);
+      if (result.txHash) {
+        await this.schedule(this.now());
+      }
+      return result;
+    })().finally(() => {
+      this.touching.delete(seedId);
+    });
+    this.touching.set(seedId, call);
+    return call;
   }
 
   async status(): Promise<RelayStatus> {

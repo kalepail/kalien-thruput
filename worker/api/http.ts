@@ -62,7 +62,59 @@ export function rateLimited(c: AppContext, retryAfter: number): Response {
   return jsonError(c, 429, "rate limit exceeded", { retryAfterSeconds: retryAfter });
 }
 
+/** Compares in time that does not depend on where the strings differ. */
+function constantTimeEqual(a: string, b: string): boolean {
+  const left = new TextEncoder().encode(a);
+  const right = new TextEncoder().encode(b);
+  let diff = left.length ^ right.length;
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    diff |= (left[index] ?? 0) ^ (right[index] ?? 0);
+  }
+  return diff === 0;
+}
+
 export function isAdmin(c: AppContext): boolean {
   const key = c.env.DEV_API_KEY;
-  return Boolean(key) && c.req.header("authorization") === `Bearer ${key}`;
+  return Boolean(key) && constantTimeEqual(c.req.header("authorization") ?? "", `Bearer ${key}`);
+}
+
+/**
+ * Reads a request body but stops after `maxBytes`, also without a
+ * Content-Length (chunked upload). Null when the body is larger.
+ */
+export async function readBodyLimited(
+  request: Request,
+  maxBytes: number,
+): Promise<Uint8Array | null> {
+  const declared = Number(request.headers.get("content-length") ?? "0");
+  if (declared > maxBytes) {
+    return null;
+  }
+  if (!request.body) {
+    return new Uint8Array();
+  }
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    // eslint-disable-next-line no-await-in-loop -- stream chunks in order
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    total += value.length;
+    if (total > maxBytes) {
+      // eslint-disable-next-line no-await-in-loop -- stop the upload once
+      await reader.cancel().catch(() => {});
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
 }

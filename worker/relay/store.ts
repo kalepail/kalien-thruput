@@ -12,7 +12,12 @@ export interface SqlLike {
   ): SqlCursorLike<T>;
 }
 
-export type RunStatus = "queued" | "submitting" | "confirmed" | "rejected" | "failed";
+/**
+ * `unknown`: the relay could not settle the transaction in time (for example
+ * a commitment without a receipt). It frees the lane slot, is re-checked with
+ * backoff, and is never re-sent automatically (wire-14 guide).
+ */
+export type RunStatus = "queued" | "submitting" | "confirmed" | "rejected" | "failed" | "unknown";
 
 export interface RunRecord {
   runId: string;
@@ -37,6 +42,12 @@ export interface RunRecord {
   gasOverride: string | null;
   /** Out-of-gas retries used (at most one). */
   oogRetries: number;
+  /** When the current transaction was signed (ms). */
+  attemptAt: number | null;
+  /** True for a failure that repeats for the same input; a re-POST does not queue it. */
+  final: boolean;
+  /** Reconcile checks of an `unknown` run so far. */
+  checks: number;
   nextAttemptAt: number;
   score: number | null;
   previousBest: number | null;
@@ -95,6 +106,9 @@ const SCHEMA = [
     gas_limit TEXT,
     gas_override TEXT,
     oog_retries INTEGER NOT NULL DEFAULT 0,
+    attempt_at INTEGER,
+    final INTEGER NOT NULL DEFAULT 0,
+    checks INTEGER NOT NULL DEFAULT 0,
     next_attempt_at INTEGER NOT NULL DEFAULT 0,
     score INTEGER,
     previous_best INTEGER,
@@ -149,6 +163,9 @@ function toRun(row: Row): RunRecord {
     gasLimit: str(row.gas_limit),
     gasOverride: str(row.gas_override),
     oogRetries: num(row.oog_retries),
+    attemptAt: row.attempt_at === null || row.attempt_at === undefined ? null : num(row.attempt_at),
+    final: num(row.final) === 1,
+    checks: num(row.checks),
     nextAttemptAt: num(row.next_attempt_at),
     score: row.score === null ? null : num(row.score),
     previousBest: row.previous_best === null ? null : num(row.previous_best),
@@ -177,6 +194,9 @@ export class RelayStore {
       ["gas_limit", "TEXT"],
       ["gas_override", "TEXT"],
       ["oog_retries", "INTEGER NOT NULL DEFAULT 0"],
+      ["attempt_at", "INTEGER"],
+      ["final", "INTEGER NOT NULL DEFAULT 0"],
+      ["checks", "INTEGER NOT NULL DEFAULT 0"],
     ]) {
       if (!columns.has(name ?? "")) {
         sql.exec(`ALTER TABLE runs ADD COLUMN ${name} ${type}`);
@@ -204,7 +224,7 @@ export class RelayStore {
   enqueue(run: NewRun, now: number): { run: RunRecord; created: boolean } {
     const existing = this.getRun(run.runId);
     if (existing) {
-      if (existing.status === "failed") {
+      if (existing.status === "failed" && !existing.final) {
         this.sql.exec(
           `UPDATE runs SET status = 'queued', attempts = 0, error = NULL, next_attempt_at = ?,
              updated_at = ? WHERE run_id = ?`,
@@ -291,6 +311,7 @@ export class RelayStore {
       confirmed: 0,
       rejected: 0,
       failed: 0,
+      unknown: 0,
     };
     for (const row of this.sql
       .exec<Row>(`SELECT status, COUNT(*) AS n FROM runs GROUP BY status`)
@@ -303,7 +324,9 @@ export class RelayStore {
   /** Next time a queued run becomes due, or null. */
   nextQueuedAt(): number | null {
     const [row] = this.sql
-      .exec<Row>(`SELECT MIN(next_attempt_at) AS at FROM runs WHERE status = 'queued'`)
+      .exec<Row>(
+        `SELECT MIN(next_attempt_at) AS at FROM runs WHERE status IN ('queued', 'unknown')`,
+      )
       .toArray();
     return row && row.at !== null ? num(row.at) : null;
   }
@@ -327,12 +350,13 @@ export class RelayStore {
     this.sql.exec(
       `UPDATE runs SET status = 'submitting', attempts = attempts + 1, tx_hash = ?, signed_tx = ?,
          expiry_height = ?, gas_limit = ?, last_broadcast_at = NULL, committed_height = NULL,
-         updated_at = ?
+         attempt_at = ?, checks = 0, updated_at = ?
        WHERE run_id = ?`,
       attempt.txHash,
       attempt.signedTx,
       attempt.expiryHeight,
       attempt.gasLimit,
+      now,
       now,
       runId,
     );
@@ -428,13 +452,50 @@ export class RelayStore {
     reason: string,
     blockHeight: string | null,
     now: number,
+    final = false,
   ): void {
     this.sql.exec(
-      `UPDATE runs SET status = ?, error = ?, block_height = ?, signed_tx = NULL, updated_at = ?
+      `UPDATE runs SET status = ?, error = ?, block_height = ?, signed_tx = NULL, final = ?,
+         updated_at = ?
        WHERE run_id = ?`,
       status,
       reason,
       blockHeight,
+      final ? 1 : 0,
+      now,
+      runId,
+    );
+  }
+
+  /** Needs attention: frees the lane slot; re-checked at `nextCheckAt`. */
+  markUnknown(runId: string, reason: string, nextCheckAt: number, now: number): void {
+    this.sql.exec(
+      `UPDATE runs SET status = 'unknown', error = ?, next_attempt_at = ?, updated_at = ?
+       WHERE run_id = ?`,
+      reason,
+      nextCheckAt,
+      now,
+      runId,
+    );
+  }
+
+  /** `unknown` runs whose next check is due, oldest first. */
+  dueUnknown(now: number, limit: number): RunRecord[] {
+    return this.sql
+      .exec<Row>(
+        `SELECT * FROM runs WHERE status = 'unknown' AND next_attempt_at <= ?
+         ORDER BY next_attempt_at ASC LIMIT ?`,
+        now,
+        limit,
+      )
+      .toArray()
+      .map(toRun);
+  }
+
+  scheduleCheck(runId: string, nextCheckAt: number, now: number): void {
+    this.sql.exec(
+      `UPDATE runs SET checks = checks + 1, next_attempt_at = ?, updated_at = ? WHERE run_id = ?`,
+      nextCheckAt,
       now,
       runId,
     );

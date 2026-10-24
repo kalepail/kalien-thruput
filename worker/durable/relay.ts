@@ -101,9 +101,9 @@ export class RelayDO extends DurableObject<WorkerEnv> {
     return this.service.listRuns(playerAddress, options);
   }
 
-  retryFailed(lane: number, runId: string) {
+  retryRun(lane: number, runId: string) {
     this.bind(lane);
-    return this.service.retryFailed(runId);
+    return this.service.retryRun(runId);
   }
 
   runsByStatus(lane: number, statuses: RunStatus[], limit: number) {
@@ -116,9 +116,12 @@ export class RelayDO extends DurableObject<WorkerEnv> {
     return this.service.touchSeed(seedId);
   }
 
-  async status(lane: number) {
+  /** Lane status; `kick` also re-arms a lost alarm (cron and admin only). */
+  async status(lane: number, kick = false) {
     this.bind(lane);
-    await this.service.kick();
+    if (kick) {
+      await this.service.kick();
+    }
     return this.service.status();
   }
 

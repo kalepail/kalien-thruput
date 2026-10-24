@@ -26,6 +26,8 @@ function scoreOf(tape: Uint8Array): number {
   return view.getUint32(tape.length - 8, true);
 }
 
+type RelayChainLike = { status: (txHash: string) => Promise<unknown> };
+
 describe("RelayEngine", () => {
   let chain: FakeChain;
   let store: RelayStore;
@@ -158,6 +160,65 @@ describe("RelayEngine", () => {
     await chain.mine();
     await engine.tick();
     expect(store.requireRun(run.runId).status).toBe("confirmed");
+  });
+
+  it("moves a committed run without a receipt to unknown, frees the slot, and reconciles it", async () => {
+    const run = await newRun(shortTape);
+    engine.enqueue(run);
+    await engine.tick();
+    await chain.mine();
+    const txHash = store.requireRun(run.runId).txHash ?? "";
+    const receipt = chain.receipts.get(txHash);
+    chain.receipts.delete(txHash);
+    chain.claimed.clear(); // as if the claim read cannot see it either
+    const relay = (engine as unknown as { deps: { chain: RelayChainLike } }).deps.chain;
+    const committedAt = chain.height;
+    relay.status = async () => ({ status: "committed", blockHeight: committedAt });
+    await engine.tick();
+    expect(store.requireRun(run.runId).status).toBe("submitting");
+    await chain.mine(DEFAULT_RELAY_POLICY.receiptGraceBlocks + 1n);
+    await engine.tick();
+    const stuck = store.requireRun(run.runId);
+    expect(stuck.status).toBe("unknown");
+    expect(stuck.error).toContain("no receipt");
+    expect(store.submitting()).toHaveLength(0);
+    expect(chain.signed.size).toBe(1);
+    // A later check finds the receipt and settles the run; it never re-sent.
+    if (receipt) chain.receipts.set(txHash, receipt);
+    now += DEFAULT_RELAY_POLICY.reconcileBaseMs;
+    await engine.tick();
+    expect(store.requireRun(run.runId).status).toBe("confirmed");
+    expect(chain.signed.size).toBe(1);
+  });
+
+  it("moves a long-pending transaction to unknown and backs off its checks", async () => {
+    const run = await newRun(shortTape);
+    engine.enqueue(run);
+    await engine.tick();
+    const relay = (engine as unknown as { deps: { chain: RelayChainLike } }).deps.chain;
+    relay.status = async () => ({ status: "pending" });
+    now += DEFAULT_RELAY_POLICY.attentionAfterMs + 1;
+    await engine.tick();
+    expect(store.requireRun(run.runId).status).toBe("unknown");
+    const first = store.requireRun(run.runId).nextAttemptAt;
+    now = first;
+    await engine.tick();
+    const second = store.requireRun(run.runId);
+    expect(second.checks).toBe(1);
+    expect(second.nextAttemptAt - now).toBe(DEFAULT_RELAY_POLICY.reconcileBaseMs * 2);
+    // Ops may re-dispatch only once the transaction is provably dead.
+    expect((await engine.canRedispatch(second)).ok).toBe(false);
+  });
+
+  it("keeps a deterministic fault final: a re-POST does not queue it", async () => {
+    chain.forceFault = true;
+    const run = await newRun(shortTape);
+    engine.enqueue(run);
+    await engine.tick();
+    await chain.mine();
+    await engine.tick();
+    expect(store.requireRun(run.runId)).toMatchObject({ status: "failed", final: true });
+    expect(engine.enqueue(run).run.status).toBe("failed");
   });
 
   it("never replaces a transaction once its commitment is known", async () => {

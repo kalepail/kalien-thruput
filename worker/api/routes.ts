@@ -3,6 +3,7 @@ import { chainContext } from "../chain/context";
 import { chainSettings } from "../chain/network";
 import { CONFIG_CACHE_CONTROL, HEALTH_CACHE_CONTROL, SEED_CACHE_CONTROL } from "../cache-control";
 import { getIndexerState } from "../leaderboard/store";
+import { resetIndexer } from "../leaderboard/indexer";
 import { runLeaderboardSync } from "../leaderboard/sync";
 import type { RunStatus } from "../relay/store";
 import { allLanes, allowedLanes, findRun, relayLane } from "../relay/stub";
@@ -11,6 +12,9 @@ import { safeErrorMessage } from "../utils";
 import { isAdmin, jsonError, type AppEnv } from "./http";
 import { createLeaderboardRouter } from "./leaderboard";
 import { createRunsRouter } from "./runs";
+
+const HEALTH_TTL_MS = 15_000;
+let healthCache: { at: number; body: unknown } | null = null;
 
 export function createApiRouter(): Hono<AppEnv> {
   const api = new Hono<AppEnv>();
@@ -73,7 +77,15 @@ export function createApiRouter(): Hono<AppEnv> {
   });
 
   // GET /api/health
+  // GET /api/health — public: cached per isolate for 15 s and never kicks the
+  // relay. With the admin key: fresh, and it re-arms lanes that have work.
   api.get("/health", async (c) => {
+    const admin = isAdmin(c);
+    const now = Date.now();
+    if (!admin && healthCache && now - healthCache.at < HEALTH_TTL_MS) {
+      c.header("Cache-Control", HEALTH_CACHE_CONTROL);
+      return c.json(healthCache.body);
+    }
     const allowed = await chainContext(c.env)
       .then((chain) => allowedLanes(c.env, chain.score))
       .catch(() => null);
@@ -81,15 +93,19 @@ export function createApiRouter(): Hono<AppEnv> {
       Promise.all(
         allLanes(c.env).map((lane) =>
           relayLane(c.env, lane)
-            .status(lane)
+            .status(lane, admin)
             .then((status) => ({ lane, allowed: allowed?.includes(lane) ?? null, ...status }))
             .catch((error: unknown) => ({ lane, error: safeErrorMessage(error) })),
         ),
       ),
       getIndexerState(c.env).catch(() => null),
     ]);
-    c.header("Cache-Control", HEALTH_CACHE_CONTROL);
-    return c.json({ success: true, lanes, indexer });
+    const body = { success: true, lanes, indexer };
+    if (!admin) {
+      healthCache = { at: now, body };
+    }
+    c.header("Cache-Control", admin ? "no-store" : HEALTH_CACHE_CONTROL);
+    return c.json(body);
   });
 
   // Admin routes need `Authorization: Bearer <DEV_API_KEY>`.
@@ -109,8 +125,8 @@ export function createApiRouter(): Hono<AppEnv> {
     if (!isAdmin(c)) {
       return jsonError(c, 404, "not found");
     }
-    const known = new Set(["queued", "submitting", "confirmed", "rejected", "failed"]);
-    const statuses = (c.req.query("status") ?? "failed,rejected")
+    const known = new Set(["queued", "submitting", "confirmed", "rejected", "failed", "unknown"]);
+    const statuses = (c.req.query("status") ?? "failed,rejected,unknown")
       .split(",")
       .map((value) => value.trim())
       .filter((value): value is RunStatus => known.has(value));
@@ -132,7 +148,8 @@ export function createApiRouter(): Hono<AppEnv> {
     return c.json({ success: true, statuses, runs });
   });
 
-  // POST /api/admin/runs/:id/retry — queue a failed run again in its lane.
+  // POST /api/admin/runs/:id/retry — queue a failed (not final) or a provably
+  // dead `unknown` run again in its lane.
   api.post("/admin/runs/:id/retry", async (c) => {
     if (!isAdmin(c)) {
       return jsonError(c, 404, "not found");
@@ -142,11 +159,32 @@ export function createApiRouter(): Hono<AppEnv> {
     if (!found) {
       return jsonError(c, 404, "run not found");
     }
-    const run = await relayLane(c.env, found.lane).retryFailed(found.lane, runId);
-    if (!run) {
-      return jsonError(c, 409, `run is ${found.run.status}, not failed`);
+    const result = await relayLane(c.env, found.lane).retryRun(found.lane, runId);
+    if ("refused" in result) {
+      return jsonError(c, 409, result.refused);
     }
-    return c.json({ success: true, lane: found.lane, ...run });
+    return c.json({ success: true, lane: found.lane, ...result.run });
+  });
+
+  // POST /api/admin/indexer/reset?fromHeight=N — recover from a bad cursor or a
+  // history gap. Rows dedupe, so re-reading a range is safe.
+  api.post("/admin/indexer/reset", async (c) => {
+    if (!isAdmin(c)) {
+      return jsonError(c, 404, "not found");
+    }
+    const raw = c.req.query("fromHeight") ?? "";
+    if (!/^\d{1,19}$/u.test(raw)) {
+      return jsonError(c, 400, "fromHeight must be a block height");
+    }
+    try {
+      const chain = await chainContext(c.env);
+      return c.json({
+        success: true,
+        state: await resetIndexer(c.env, chain.score.address, BigInt(raw)),
+      });
+    } catch (error) {
+      return jsonError(c, 502, safeErrorMessage(error));
+    }
   });
 
   api.post("/admin/seed/touch", async (c) => {

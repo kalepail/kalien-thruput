@@ -84,9 +84,11 @@ export function testApp(options: { lanes?: number } = {}) {
         opts: Parameters<RelayService["listRuns"]>[1],
       ) => (check(lane), service.listRuns(player, opts)),
       touchSeed: async (lane: number, seedId: number) => (check(lane), service.touchSeed(seedId)),
-      status: async (lane: number) => (check(lane), await service.kick(), service.status()),
+      status: async (lane: number, kick = false) => (
+        check(lane), kick ? await service.kick() : null, service.status()
+      ),
       kick: async (lane: number) => (check(lane), service.kick()),
-      retryFailed: async (lane: number, runId: string) => (check(lane), service.retryFailed(runId)),
+      retryRun: async (lane: number, runId: string) => (check(lane), service.retryRun(runId)),
       runsByStatus: async (lane: number, statuses: never[], limit: number) => (
         check(lane), service.runsByStatus(statuses, limit)
       ),

@@ -21,6 +21,7 @@ import {
   clientIp,
   isAdmin,
   jsonError,
+  readBodyLimited,
   normalizeAddress,
   RateLimiter,
   rateLimited,
@@ -73,12 +74,7 @@ function runResponse(c: AppContext, run: RunView, status: 200 | 202 = 200): Resp
 }
 
 async function readBody(c: AppContext): Promise<Uint8Array | null> {
-  const declared = Number(c.req.header("content-length") ?? "0");
-  if (declared > MAX_TAPE_BYTES) {
-    return null;
-  }
-  const body = new Uint8Array(await c.req.arrayBuffer());
-  return body.length > MAX_TAPE_BYTES ? null : body;
+  return readBodyLimited(c.req.raw, MAX_TAPE_BYTES);
 }
 
 /** A confirmed run known only from the leaderboard (for example, submitted by another relay). */
@@ -134,11 +130,6 @@ export function createRunsRouter(): Hono<AppEnv> {
     if (retryIp > 0) {
       return rateLimited(c, retryIp);
     }
-    const retryPlayer = submitByPlayer.take(pubkeyHex);
-    if (retryPlayer > 0) {
-      return rateLimited(c, retryPlayer);
-    }
-
     const tape = await readBody(c);
     if (!tape) {
       return jsonError(c, 413, `tape is larger than ${MAX_TAPE_BYTES} bytes`, {
@@ -186,6 +177,12 @@ export function createRunsRouter(): Hono<AppEnv> {
     });
     if (!(await verifyEd25519(pubkey, message, signature))) {
       return jsonError(c, 400, "claim signature does not verify", { code: "bad_signature" });
+    }
+    // Only a valid signature spends the player's budget, so nobody can lock
+    // a player out with junk requests for their key.
+    const retryPlayer = submitByPlayer.take(pubkeyHex);
+    if (retryPlayer > 0) {
+      return rateLimited(c, retryPlayer);
     }
 
     const replay = replayTape(tape);
@@ -259,7 +256,9 @@ export function createRunsRouter(): Hono<AppEnv> {
     }
     const player = normalizeAddress(c.req.query("player"));
     if (!player) {
-      return jsonError(c, 400, "player must be a 32-byte hex address", { code: "bad_address" });
+      return jsonError(c, 400, "player must be an address (base58 or 64 hex chars)", {
+        code: "bad_address",
+      });
     }
     const limitRaw = Number.parseInt(c.req.query("limit") ?? "25", 10);
     const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 25, 1), 100);

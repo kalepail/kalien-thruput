@@ -14,6 +14,9 @@ export interface IndexerChain {
   blockTimeMs(height: bigint): Promise<number>;
 }
 
+/** Blocks below a walk's first head height where the next walk starts. */
+const WATERMARK_MARGIN_BLOCKS = 20n;
+
 export interface SyncResult {
   pages: number;
   events: number;
@@ -83,6 +86,8 @@ export async function syncScoreEvents(
   let events = 0;
   let inserted = 0;
   let exhausted = false;
+  // Set when this sync starts a new walk: the head height its first page saw.
+  let walkWatermark: bigint | null = state.cursor ? null : -1n;
 
   try {
     while (pages < options.maxPages) {
@@ -93,6 +98,9 @@ export async function syncScoreEvents(
         limit: options.pageLimit,
       });
       pages += 1;
+      if (walkWatermark === -1n) {
+        walkWatermark = page.latestIndexedBlockHeight;
+      }
       if (
         BigInt(state.lastHeight) > 0n &&
         page.oldestIndexedBlockHeight > BigInt(state.lastHeight)
@@ -106,10 +114,17 @@ export async function syncScoreEvents(
       const cursor = page.nextCursor ?? "";
       exhausted = page.nextCursor === null;
       const lastHeight = last ? last.blockHeight.toString() : state.lastHeight;
+      // An exhausted walk restarts inclusively at the last stored row, or, when
+      // this whole walk ran in this sync, just below the head its first page
+      // saw (no re-scan of quiet ranges; rows dedupe, so overlap is safe).
+      let nextFrom = lastHeight;
+      if (exhausted && walkWatermark !== null && walkWatermark > WATERMARK_MARGIN_BLOCKS) {
+        const skip = walkWatermark - WATERMARK_MARGIN_BLOCKS;
+        if (skip > BigInt(lastHeight)) nextFrom = skip.toString();
+      }
       const next: IndexerState = {
         ...state,
-        // An exhausted walk restarts inclusively at the last stored row.
-        fromHeight: exhausted ? lastHeight : state.fromHeight,
+        fromHeight: exhausted ? nextFrom : state.fromHeight,
         cursor,
         lastHeight,
         latestBlock: page.latestIndexedBlockHeight.toString(),
@@ -171,4 +186,22 @@ async function rowsForPage(
       source: "indexer",
     }),
   );
+}
+
+/** Ops: restart the walk at `fromHeight` (inclusive) and clear a bad cursor. */
+export async function resetIndexer(
+  env: WorkerEnv,
+  contractAddress: string,
+  fromHeight: bigint,
+): Promise<IndexerState> {
+  const saved = await getIndexerState(env);
+  const state: IndexerState = {
+    ...(saved && saved.contractAddress === contractAddress ? saved : freshState(contractAddress)),
+    fromHeight: fromHeight.toString(),
+    cursor: "",
+    lastHeight: fromHeight.toString(),
+    lastError: null,
+  };
+  await indexerStateStatement(env, state).run();
+  return state;
 }

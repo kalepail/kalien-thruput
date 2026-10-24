@@ -116,6 +116,36 @@ describe("POST /api/runs", () => {
     expect(t.relay.store.countByStatus().queued).toBe(0);
   });
 
+  it("does not let junk signatures use up a player's rate limit", async () => {
+    const t = testApp();
+    t.chain.seeds.set(currentSeedId(), seedOf(mediumTape));
+    for (let i = 0; i < 35; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      const junk = await submit(t, mediumTape, { playerByte: 4, sig: "ab".repeat(64) });
+      expect(junk.response.status).toBe(400);
+    }
+    const real = await submit(t, mediumTape, { playerByte: 4 });
+    expect(real.response.status).toBe(202);
+  });
+
+  it("refuses an oversized body sent without Content-Length", async () => {
+    const t = testApp();
+    const big = new Uint8Array(20_000);
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(big.slice(0, 10_000));
+        controller.enqueue(big.slice(10_000));
+        controller.close();
+      },
+    });
+    const player = await testPlayer(7);
+    const response = await t.request(
+      `/api/runs?pubkey=${bytesToHex(player.pubkey)}&seed_id=${currentSeedId()}&sig=${"ab".repeat(64)}`,
+      { method: "POST", body: stream, duplex: "half" } as RequestInit,
+    );
+    expect(response.status).toBe(413);
+  });
+
   it("rejects a bad signature", async () => {
     const t = testApp();
     t.chain.seeds.set(currentSeedId(), seedOf(shortTape));
@@ -241,23 +271,50 @@ describe("GET /api/admin/runs", () => {
 });
 
 describe("POST /api/admin/runs/:id/retry", () => {
-  it("queues a failed run again and it confirms", async () => {
+  it("refuses a final failure and queues a non-final one again", async () => {
     const t = testApp();
     t.chain.seeds.set(currentSeedId(), seedOf(shortTape));
     t.chain.forceFault = true;
     const { body } = await submit(t, shortTape);
     await t.settle();
     const runId = String(body.runId);
-    const failed = (await (await t.request(`/api/runs/${runId}`)).json()) as { status: string };
-    expect(failed.status).toBe("failed");
-    t.chain.forceFault = false;
     const admin = { method: "POST", headers: { authorization: "Bearer test-key" } };
+    // A deterministic fault is final.
+    expect((await t.request(`/api/admin/runs/${runId}/retry`, admin)).status).toBe(409);
+    // A relay-side failure is not final: ops can queue it again.
+    t.chain.forceFault = false;
+    t.relay.store.finish(runId, "failed", "relay transaction refused", null, Date.now(), false);
     const retry = await t.request(`/api/admin/runs/${runId}/retry`, admin);
     expect(retry.status).toBe(200);
     await t.settle();
     const done = (await (await t.request(`/api/runs/${runId}`)).json()) as { status: string };
     expect(done.status).toBe("confirmed");
     expect((await t.request(`/api/admin/runs/${runId}/retry`, admin)).status).toBe(409);
+  });
+});
+
+describe("GET /api/health", () => {
+  it("caches the public view and gives the admin a fresh one", async () => {
+    const t = testApp();
+    const counts = async (headers: Record<string, string> = {}) =>
+      (
+        (await (await t.request("/api/health", { headers })).json()) as {
+          lanes: Array<{ counts: { queued: number } }>;
+        }
+      ).lanes[0]?.counts.queued;
+    const before = await counts();
+    t.chain.seeds.set(currentSeedId(), seedOf(shortTape));
+    await submit(t, shortTape);
+    expect(await counts()).toBe(before);
+    expect(await counts({ authorization: "Bearer test-key" })).toBe(1);
+  });
+});
+
+describe("seed touch", () => {
+  it("signs one touch when two calls overlap", async () => {
+    const t = testApp();
+    await Promise.all([t.relay.touchSeed(currentSeedId()), t.relay.touchSeed(currentSeedId())]);
+    expect(t.chain.signed.size).toBe(1);
   });
 });
 

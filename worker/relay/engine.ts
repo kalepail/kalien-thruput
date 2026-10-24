@@ -48,6 +48,13 @@ export interface RelayPolicy {
   maxAttempts: number;
   rebroadcastAfterMs: number;
   retryDelayMs: number;
+  /** A transaction still unsettled this long after signing becomes `unknown`. */
+  attentionAfterMs: number;
+  /** Blocks after a known commitment to wait for its receipt. */
+  receiptGraceBlocks: bigint;
+  /** Re-check backoff for `unknown` runs: first wait, then doubling up to the max. */
+  reconcileBaseMs: number;
+  reconcileMaxMs: number;
 }
 
 export const DEFAULT_RELAY_POLICY: RelayPolicy = {
@@ -68,6 +75,10 @@ export const DEFAULT_RELAY_POLICY: RelayPolicy = {
   maxAttempts: 5,
   rebroadcastAfterMs: 15_000,
   retryDelayMs: 5_000,
+  attentionAfterMs: 15 * 60_000,
+  receiptGraceBlocks: 30n,
+  reconcileBaseMs: 60_000,
+  reconcileMaxMs: 60 * 60_000,
 };
 
 export interface ConfirmedRun {
@@ -138,6 +149,14 @@ export class RelayEngine {
       // eslint-disable-next-line no-await-in-loop -- one relay key; observe in order
       await this.observe(run, getTip).catch((error: unknown) => {
         this.log(`observe ${run.runId.slice(0, 12)} failed: ${safeErrorMessage(error)}`);
+      });
+    }
+
+    for (const run of store.dueUnknown(this.deps.now(), 10)) {
+      // eslint-disable-next-line no-await-in-loop -- one relay key; check in order
+      await this.reconcile(run).catch((error: unknown) => {
+        this.log(`reconcile ${run.runId.slice(0, 12)} failed: ${safeErrorMessage(error)}`);
+        this.backoff(run);
       });
     }
 
@@ -310,9 +329,34 @@ export class RelayEngine {
     const status = await chain.status(txHash);
     if (status.status === "committed") {
       store.markCommitted(run.runId, status.blockHeight.toString(), this.deps.now());
+    }
+    const committed =
+      status.status === "committed"
+        ? status.blockHeight
+        : run.committedHeight !== null
+          ? BigInt(run.committedHeight)
+          : null;
+    if (committed !== null) {
+      // Known commitment: wait for the receipt, but not forever (an RPC can
+      // lose it). Past the grace, a claimed tape proves success; otherwise
+      // the run needs attention.
+      if ((await getTip()) <= committed + policy.receiptGraceBlocks) {
+        return;
+      }
+      if (await score.isClaimed(run.runId, committed)) {
+        this.confirmWithoutEvent(run);
+        return;
+      }
+      this.markUnknown(
+        run,
+        `committed at block ${committed} but no receipt, and the tape is not claimed`,
+      );
       return;
     }
-    if (status.status === "pending" || run.committedHeight !== null) {
+    if (status.status === "pending") {
+      if (this.deps.now() - (run.attemptAt ?? this.deps.now()) > policy.attentionAfterMs) {
+        this.markUnknown(run, "transaction still pending after the attention timeout");
+      }
       return;
     }
     const expiry = BigInt(run.expiryHeight ?? "0");
@@ -325,14 +369,88 @@ export class RelayEngine {
       return;
     }
     if (await score.isClaimed(run.runId, expiry + 1n)) {
-      store.confirm(
-        run.runId,
-        { score: run.claimedScore, previousBest: null, minted: null, blockHeight: null },
-        this.deps.now(),
-      );
+      this.confirmWithoutEvent(run);
       return;
     }
     this.retryOrFail(run.runId, `transaction ${shortHash(txHash)} expired without a receipt`);
+  }
+
+  /** The tape is claimed on chain; the indexer fills in the event details. */
+  private confirmWithoutEvent(run: RunRecord): void {
+    this.deps.store.confirm(
+      run.runId,
+      { score: run.claimedScore, previousBest: null, minted: null, blockHeight: null },
+      this.deps.now(),
+    );
+  }
+
+  private markUnknown(run: RunRecord, reason: string): void {
+    this.log(`run ${run.runId.slice(0, 12)} needs attention: ${reason}`);
+    this.deps.store.markUnknown(
+      run.runId,
+      reason,
+      this.deps.now() + this.deps.policy.reconcileBaseMs,
+      this.deps.now(),
+    );
+  }
+
+  private backoff(run: RunRecord): void {
+    const { policy } = this.deps;
+    const wait = Math.min(
+      policy.reconcileBaseMs * 2 ** Math.min(run.checks + 1, 20),
+      policy.reconcileMaxMs,
+    );
+    this.deps.store.scheduleCheck(run.runId, this.deps.now() + wait, this.deps.now());
+  }
+
+  /**
+   * Re-checks an `unknown` run: a receipt settles it; a claimed tape confirms
+   * it; else check again later. It never signs a new transaction.
+   */
+  private async reconcile(run: RunRecord): Promise<void> {
+    const { chain, score } = this.deps;
+    if (run.txHash) {
+      const receipt = await chain.receipt(run.txHash);
+      if (receipt) {
+        await this.settle(run, run.txHash, receipt);
+        return;
+      }
+    }
+    const floor = run.committedHeight ? BigInt(run.committedHeight) : undefined;
+    if (await score.isClaimed(run.runId, floor)) {
+      this.confirmWithoutEvent(run);
+      return;
+    }
+    this.backoff(run);
+  }
+
+  /**
+   * Ops: may an `unknown` run get a new transaction? Only when its current
+   * transaction is provably dead or failed: no receipt, the tape not claimed,
+   * and either a known commitment (a committed failure; claim reads at that
+   * height) or the tip past its expiry plus the margin with no commitment.
+   */
+  async canRedispatch(run: RunRecord): Promise<{ ok: boolean; reason: string }> {
+    const { chain, score, policy } = this.deps;
+    if (run.txHash && (await chain.receipt(run.txHash))) {
+      return { ok: false, reason: "a receipt exists; the next check settles the run" };
+    }
+    const committed = run.committedHeight ? BigInt(run.committedHeight) : null;
+    if (await score.isClaimed(run.runId, committed ?? undefined)) {
+      return { ok: false, reason: "the tape is claimed; the next check confirms the run" };
+    }
+    if (committed !== null) {
+      return { ok: true, reason: "committed without success (tape not claimed at that height)" };
+    }
+    const status = run.txHash ? await chain.status(run.txHash) : { status: "unknown" as const };
+    if (status.status === "committed" || status.status === "pending") {
+      return { ok: false, reason: `transaction is ${status.status}` };
+    }
+    const tip = await chain.tip();
+    if (tip <= BigInt(run.expiryHeight ?? "0") + policy.expiryMarginBlocks) {
+      return { ok: false, reason: "transaction has not expired yet" };
+    }
+    return { ok: true, reason: "expired without commitment and the tape is not claimed" };
   }
 
   /**
@@ -363,6 +481,8 @@ export class RelayEngine {
           `execution fault (gas used ${receipt.gasUsed})`,
           height,
           now,
+          // Repeats for the same input: final, a re-POST does not queue it again.
+          true,
         );
       } else {
         this.log(`run ${run.runId.slice(0, 12)} relay fault: ${reason}`);
@@ -379,6 +499,7 @@ export class RelayEngine {
         `out of gas: used ${receipt.gasUsed} of ${limit}`,
         height,
         now,
+        true,
       );
       return;
     }

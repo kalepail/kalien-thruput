@@ -140,7 +140,9 @@ describe("allowlist routing", () => {
     expect(counts[1]).toBe(0);
     expect(counts[3]).toBe(0);
     expect((counts[0] ?? 0) + (counts[2] ?? 0)).toBe(6);
-    const health = (await (await t.request("/api/health")).json()) as {
+    const health = (await (
+      await t.request("/api/health", { headers: { authorization: "Bearer test-key" } })
+    ).json()) as {
       lanes: Array<{ lane: number; allowed: boolean | null }>;
     };
     expect(health.lanes.map((lane) => lane.allowed)).toEqual([true, false, true, false]);
