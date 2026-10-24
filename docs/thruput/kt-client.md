@@ -3,6 +3,50 @@
 Agent: `kt-client`. Scope: `src/` (not `src/game/`), `index.html`, `public/`, `vite.config.ts`,
 `.env.example`, browser deps in root `package.json`, and the `tests/src/` tests for those modules.
 
+## Round 6 (2026-10-24): review items 3 and 6
+
+**Status: fixed and tested; not deployed.** Commit `b33ab18`. I did not run `worker/ops/deploy.sh`:
+the lead asked me to deploy only after kt-worker reports its deploy is done. The fix ships with
+the next Worker deploy (kt-worker, or me on the lead's go).
+
+### Item 3: key import accepted public values as a secret
+
+- `parseBackup(input, { current })` rejects the current address or public key in every form
+  (base58, `0x` hex, bare hex, `C…` StrKey of the address, base58 and `G…` StrKey of the public
+  key). It also rejects a seed that equals its own address or public key. Message: "this is an
+  address or public key, not a secret key. Paste the backup string, the S... secret, or the
+  backup file".
+- Checksummed or self-checking formats import directly: the backup string (sha256 checksum), the
+  `S…` StrKey (CRC), the browser backup JSON and the CLI key JSON (address check).
+- A bare 32-byte hex or base58 value is `checked: false`. The Import card then shows "This is a
+  bare 32-byte key with no checksum. It gives this address: …" and imports only after "Import
+  This Key" (the backup checkbox must also be ticked). Editing the input clears the prompt.
+- Tests (`tests/src/key-wallet.test.ts`): 7 rejection cases (one per form), the real secret still
+  imports, checked/raw flags per format, and a pasted address without a current key stays raw and
+  gives a different address.
+- Browser (local Vite → deployed API): own address → error, address unchanged; own `G…` key →
+  error; random raw hex → confirm panel, address unchanged; after confirm → imported.
+
+### Item 6: seed depended on the local clock
+
+- `src/hooks/useSeed.ts` keeps `serverOffsetMs` (Worker time minus local time). Each
+  `/api/seed/current` answer gives the Worker time as `((seedId + 1) * 600 - secondsLeft) s`
+  (+0.5 s); the offset changes only when a sample differs by more than 1.5 s. All epoch math
+  (current `seed_id`, countdown, epoch roll-over) uses the corrected clock, and the server
+  `seedId` is trusted even without `secondsLeft`.
+- Tests (`tests/src/use-seed.test.ts`): local clocks −25…+25 min off map to the server epoch
+  within 1 s; jitter handling; the real store loads the seed with `Date.now` 15 min behind.
+- Browser: an init script set the page clock 17 min behind (page 16:24, real 16:41 UTC). The
+  seed loaded (`0xB6B5426E`, the server's), the countdown matched real time (8:14 left), and a run
+  submitted and confirmed (1,160 points, +1,160 KALIEN, tx `Dewz1ruA…bRytAFXD`).
+
+Checks: typecheck, lint, format clean for `src`; `bun test tests/src` 67 pass, 0 fail.
+
+Screenshots (`/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/c5af48fa-61eb-44a6-b03d-e26eb2b4d2c5/scratchpad/review/`): `import-raw-confirm.png`, `skew-17min-playing.png`,
+`skew-17min-confirmed.png`.
+
+Processes: local Vite and both agent-browser sessions are stopped.
+
 ## Round 5 (2026-10-24): in-app transaction view
 
 **Status: done, deployed, tested on the deployed site.** Commit `f216ada`. I deployed with
