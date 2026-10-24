@@ -3,6 +3,45 @@
 Agent: `kt-client`. Scope: `src/` (not `src/game/`), `index.html`, `public/`, `vite.config.ts`,
 `.env.example`, browser deps in root `package.json`, and the `tests/src/` tests for those modules.
 
+## Round 4 (2026-10-24): real pass on the deployed Worker
+
+**Status: done, all green.** Site: `https://kalien-thruput.sdf-ecosystem.workers.dev` (Worker API
+on wire-14 devnet `DWELtFbb…48uj`, v3 contracts: score `8fFcXcMD…ktjTT`, token `AZGTgZfo…Hk87`).
+The deployed bundle is the current client (base58 address, `G…` key on the Wallet page).
+No bug found in client paths; no code change this round.
+
+| Check | Result |
+|---|---|
+| Fresh key | Made on first visit; base58 address, `G…` StrKey, balance view `0 KALIEN` from devnet |
+| Manual-ish run (autopilot 15 s, then off) | 1,880 points, 2,446 frames; Submit → `submitting` → `confirmed` in about 6 s |
+| Confirmed card | Score 1,880, previous best 0, `+1,880` KALIEN, tx `4J5JPfWX767wfi1jVWSRZ1ytuJbeRq4tzMcxUvQh8uAg` |
+| On-chain check | `getTransactionReceipt`: block 17,863, `execution.result: "return"`, events present |
+| Header balance | 0 → 1,880 KALIEN right after confirmation |
+| `/runs` | Row `confirmed`, minted, seed, base58 tx link, replay, tape |
+| Leaderboard | Entry #4 with base58 address and tx |
+| Player page + profile | Saved "kt-client" + link; survives reload (Worker accepts the base58-signed message) |
+| Replay | `/replay/<runId>` plays the stored tape (2,446 frames) |
+| Endless mode | New key, 7 min: auto-submitted 15,820 (seed 2988096) and 34,210 (seed 2988097, "Any score" after the epoch change); both confirmed; balance 50,030 KALIEN; no reload |
+| Export → import | Backup string from the endless key imported in a fresh browser profile: same address `8szzsYYZ…q23cMZSd`, same balance 50,030 KALIEN, same run history |
+| Seed gate on import | A 1,930 run on the same seed shows "Not a new best … 34,210" (contract `best_score` view) |
+| Mobile 375 / 768 | Game, wallet, `/runs`, leaderboard, player page, replay: 0 px horizontal overflow; result card is a full-screen sheet on phones |
+| Explorer link format | `https://explorer.thruput.network/tx/<base58>` and `/address/<base58>`. This matches the explorer source (`src/app/api/search/route.ts`, `hashFromBase58`). The explorer returns **HTTP 401 on every path** (even `/`), so the page did not open (`04-explorer-tx.png` is blank) |
+
+Screenshots (`/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/c5af48fa-61eb-44a6-b03d-e26eb2b4d2c5/scratchpad/deployed/`):
+`01-wallet-fresh.png`, `02-game-over.png`, `03-confirmed.png`, `05-runs.png`, `06-leaderboard.png`,
+`07-player-profile.png`, `08-replay.png`, `09-endless-start.png`, `10-endless-running.png`,
+`11-wallet-source.png`, `12-wallet-imported.png`, `m375-{game,wallet,runs,leaderboard,player,replay,result-card}.png`,
+`m768-{game,wallet,runs,leaderboard,player,replay}.png`.
+
+Notes:
+
+- Closing an agent-browser session drops its browser profile, so the round-3 key is gone. Players
+  are not affected; this is only the test harness.
+- **Report to lead (not my paths):** `explorer.thruput.network` is behind auth (401). Players who
+  click a tx or address link see an error until it is public.
+- All processes I started are stopped: both agent-browser sessions closed; no Vite or mock server
+  runs.
+
 ## Round 3 (2026-10-24): wire-14 migration, endless fix, mobile, cleanup
 
 **Status: green on the mock API.** Typecheck, lint, format clean for `src`; `bun test tests/src`
