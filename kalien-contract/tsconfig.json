@@ -12,6 +12,7 @@
     "scripts/gen-claim-vectors.ts",
     "../shared/thruput/kalien.ts",
     "../shared/thruput/claim.ts",
-    "../shared/thruput/claim.test.ts"
+    "../shared/thruput/claim.test.ts",
+    "../shared/thruput/kalien.test.ts"
   ]
 }
