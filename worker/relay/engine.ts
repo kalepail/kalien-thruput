@@ -35,6 +35,8 @@ export interface RelayPolicy {
   gasMax: bigint;
   /** Child gas cap for the one retry after an out-of-gas fault. */
   gasRetryMax: bigint;
+  /** Multiplier (in tenths) for that retry: 25 = 2.5x. */
+  gasRetryTenths: bigint;
   /** Root gas on top of the child call, for the DefaultWallet wrapper. */
   walletGasOverhead: bigint;
   seedTouchGas: bigint;
@@ -49,13 +51,15 @@ export interface RelayPolicy {
 }
 
 export const DEFAULT_RELAY_POLICY: RelayPolicy = {
-  // Measured 1,758–2,472 gas per frame (kt-cli round 4) and up to 74.5M for
-  // a 36,000-frame tape. Gas is reserved, not burned, so keep a wide margin:
-  // 36,000 frames -> 113M (11.3 HOG free per in-flight transaction).
+  // Measured up to 110.9M for a searched worst-case 36,000-frame tape
+  // (kt-core round 6, asteroids-core/tests/fixtures/gas-worst/); normal games
+  // use 1,758–2,501 per frame. Gas is reserved, not burned: 36,000 frames ->
+  // 167M (16.7 HOG free per in-flight transaction).
   gasBase: 5_000_000n,
-  gasPerFrame: 3_000n,
-  gasMax: 113_000_000n,
-  gasRetryMax: 150_000_000n,
+  gasPerFrame: 4_500n,
+  gasMax: 167_000_000n,
+  gasRetryMax: 400_000_000n,
+  gasRetryTenths: 25n,
   walletGasOverhead: 100_000n,
   seedTouchGas: 1_000_000n,
   expiryBlocks: 120n,
@@ -333,7 +337,8 @@ export class RelayEngine {
 
   /**
    * A committed failure that is not a contract `ScoreError` changed no state.
-   * Out of gas gets exactly one new transaction with 1.5x child gas:
+   * Out of gas gets exactly one new transaction with more child gas
+   * (RELAY_GAS_RETRY_TENTHS, default 2.5x, capped at RELAY_GAS_RETRY_MAX):
    * - a root `fault` whose gas used reached the root limit, or
    * - a root `abort` (the wallet re-throws a failed child call) whose gas used
    *   reached the child limit (root limit minus the wallet overhead).
@@ -365,7 +370,7 @@ export class RelayEngine {
       }
       return;
     }
-    const boosted = (child * 3n) / 2n;
+    const boosted = (child * policy.gasRetryTenths) / 10n;
     const next = boosted > policy.gasRetryMax ? policy.gasRetryMax : boosted;
     if (run.oogRetries >= 1 || next <= child) {
       store.finish(

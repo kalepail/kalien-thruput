@@ -217,7 +217,7 @@ describe("RelayEngine", () => {
     expect(store.requireRun(run.runId).status).toBe("confirmed");
     expect(chain.gasSeen).toEqual([
       first,
-      (scoreGas(DEFAULT_RELAY_POLICY, 5000) * 3n) / 2n + DEFAULT_RELAY_POLICY.walletGasOverhead,
+      (scoreGas(DEFAULT_RELAY_POLICY, 5000) * 25n) / 10n + DEFAULT_RELAY_POLICY.walletGasOverhead,
     ]);
   });
 
