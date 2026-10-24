@@ -199,6 +199,7 @@ pub struct WorldSnapshot {
     pub saucer_bullets: Vec<BulletSnapshot>,
 }
 
+#[derive(Clone)]
 pub struct LiveGame {
     game: Game,
 }

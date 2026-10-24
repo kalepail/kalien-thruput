@@ -1,8 +1,63 @@
 # kt-core report: simulation core and gas measurement
 
-Agent: `kt-core`. Branch: `thruput-devnet`. Status: **round 5 done (2026-10-24)**: shared/stellar
-removal, leftover sweep, full test run. Round 4: docs update for the upgraded devnet. Round 3: strict-rule fix, gas probe on `thruput-sdk =0.54.0` / CLI
+Agent: `kt-core`. Branch: `thruput-devnet`. Status: **round 6 done (2026-10-24)**: independent
+review (`docs/thruput/review.md`), copycat decision recorded, worst-case replay gas. Round 5:
+shared/stellar removal, sweep, full test run. Round 3: strict-rule fix, gas probe on `thruput-sdk =0.54.0` / CLI
 0.36.0 / hog-devnode rc.14. Rounds 1–2 below.
+
+## Round 6: worst-case replay gas (2026-10-24)
+
+Question: what gas limit is safe for any valid tape? Method: RV32 executor (`gas-probe`, new test
+`rv32_gas_sweep` over a directory of tapes) plus a host-side search (`parity gas-search`) that
+mutates valid tapes to maximise per-frame work. The search scores frames by entity updates,
+possible collision pairs, and spawn-point grid searches (`parity gas-proxy`, `gas-stats`).
+Every tape below is valid: strict `verify_tape` accepts it with its claimed score.
+
+| Tapes | Count | Max gas | Max gas/frame |
+|---|---:|---:|---:|
+| Parity corpus (valid, all lengths) | 1,502 | 63,690,168 (36,000 f) | 2,716 (`pattern-01028`, 17,368 f, 47.18M) |
+| Parity corpus, 36,000 frames | 350 | 63,690,168 | 1,769 |
+| Search round 1 (15 starts × 20,000 mutations) | 15 | 84,638,668 | 2,351 |
+| Search round 2 (3 × 3 × 60,000) | 9 | 92,442,391 | 2,568 |
+| Search round 3 (6 × 150,000) | 6 | **110,640,874** | **3,073** |
+| "Die early in a late wave" constructions | 142 | 62.2M range | 1,708 (estimate) |
+
+- The worst tape (`asteroids-core/tests/fixtures/gas-worst/gas-worst-110m-seed7f80916e-score43290.tape`,
+  36,000 frames, score 43,290) keeps 20–25 asteroids, up to 3 saucers, and saucer bullets on screen
+  from wave 5 on. It reaches game over at frame 19,348 in wave 7; the field then keeps running
+  (saucer bullets split asteroids; 3 saucers stay) until frame 36,000.
+- **The search had not converged** (each round raised the maximum: 84.6M → 92.4M → 110.6M).
+- Upper bound from the entity caps (33 asteroid slots, 4 bullets, 3 saucers, 2 saucer bullets
+  every frame): about 10,000 gas per frame, about 372M for a full tape. This is loose (collisions
+  break up such a field), but it is below the chain's `maxTxGas` of 1,000,000,000.
+- A two-term model fits all 2,016 measured tapes: `gas ≈ 293 × frames + 1.111 × proxy`, with
+  actual/predicted between 0.90 and 1.27.
+
+Gas-limit recommendation (gas is reserved against the relay's free HOG, not burned):
+
+| Policy | Full tape limit | Covers the measured worst (110.9M incl. contract overhead)? |
+|---|---:|---|
+| Old: 3M + 2,300 × frames | 85.8M | no |
+| Plan: 5M + 3,000 × frames | 113.0M | only by about 2% |
+| Plan + one out-of-gas retry at 1.5× (cap `RELAY_GAS_RETRY_MAX` 150M) | 150M on retry | yes, by 35% on the retry |
+| **Recommended: 5M + 4,500 × frames**, out-of-gas retry 2.5× capped at 400M | 167M, retry 400M | yes (1.5× the worst measured); the retry covers the loose bound |
+| Better later: per-tape limit from the Worker's TS replay (`1.35 × (293 × frames + 1.111 × proxy)` + 1M) | per tape | needs the proxy ported to TS |
+
+Cost of the recommendation: 16.7 HOG of free balance per in-flight full-length run (4 in flight
+per lane = about 67 HOG per lane). Also update `submitGasLimit` in `shared/thruput/kalien.ts`
+(still 3M + 2,200 × frames).
+
+Reproduce:
+
+```bash
+cd asteroids-core/gas-probe
+GAS_SWEEP_DIR=../tests/fixtures/gas-worst thruput test --show-output --match-test rv32_gas_sweep
+asteroids-core/parity/target/release/asteroids-parity gas-search <out-dir> 150000 0x90001 <start.tape>
+asteroids-core/parity/target/release/asteroids-parity gas-stats <tape>
+```
+
+Also changed: `LiveGame` derives `Clone` (the search resumes from checkpoints). No behavior change;
+golden and all core tests pass.
 
 ## Round 5: cleanup and full test run (2026-10-24)
 

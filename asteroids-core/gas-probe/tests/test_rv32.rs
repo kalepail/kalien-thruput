@@ -111,3 +111,52 @@ fn rv32_memory_table() {
         }
     });
 }
+
+/// Measures replay gas for every `.tape` in `$GAS_SWEEP_DIR` and writes
+/// `file,frames,score,gas,gas_per_frame` lines to `$GAS_SWEEP_OUT` (default stdout).
+/// Rejected tapes get `rejected:<code>` in the score column and are not counted.
+/// Run: `GAS_SWEEP_DIR=<dir> GAS_SWEEP_OUT=<csv> thruput test --match-test rv32_gas_sweep`.
+#[test]
+#[ignore = "requires RV32 build — run via `thruput test`"]
+fn rv32_gas_sweep() {
+    let Some(dir) = std::env::var_os("GAS_SWEEP_DIR") else {
+        eprintln!("GAS_SWEEP_DIR not set; nothing to measure");
+        return;
+    };
+    let out = std::env::var_os("GAS_SWEEP_OUT");
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .expect("read GAS_SWEEP_DIR")
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "tape"))
+        .collect();
+    paths.sort();
+    with_probe("gas_probe_rv32_sweep", move |client| {
+        let mut lines = vec!["file,frames,score,gas,gas_per_frame".to_string()];
+        for path in &paths {
+            let tape = std::fs::read(path).unwrap();
+            let frames = if tape.len() >= 16 {
+                u32::from_le_bytes([tape[12], tape[13], tape[14], tape[15]])
+            } else {
+                0
+            };
+            let (result, gas, _) = gas_of(|| client.try_replay(&tape));
+            let name = path.file_name().unwrap().to_string_lossy();
+            let line = match result {
+                Ok(score) => format!(
+                    "{name},{frames},{score},{gas},{:.1}",
+                    gas as f64 / frames.max(1) as f64
+                ),
+                Err(err) => {
+                    let code = err.try_as::<ReplayFailed>().map(|f| f.code).unwrap_or(0);
+                    format!("{name},{frames},rejected:{code},{gas},")
+                }
+            };
+            lines.push(line);
+        }
+        let text = lines.join("\n") + "\n";
+        match &out {
+            Some(path) => std::fs::write(path, text).expect("write GAS_SWEEP_OUT"),
+            None => print!("{text}"),
+        }
+    });
+}

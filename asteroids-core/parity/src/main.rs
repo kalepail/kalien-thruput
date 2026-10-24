@@ -30,10 +30,21 @@ fn main() {
         }
         Some("eval") if args.len() == 3 => evaluate(Path::new(&args[2])),
         Some("explain") if args.len() == 3 => explain(Path::new(&args[2])),
+        Some("gas-proxy") if args.len() == 3 => gas_proxy(Path::new(&args[2])),
+        Some("gas-stats") if args.len() == 3 => gas_stats(Path::new(&args[2])),
+        Some("gas-search") if args.len() >= 5 => {
+            let out = PathBuf::from(&args[2]);
+            let iters: u32 = args[3].parse().expect("iters");
+            let seed = parse_u32(&args[4]);
+            let starts: Vec<PathBuf> = args[5..].iter().map(PathBuf::from).collect();
+            gas_search(&out, iters, seed, &starts);
+        }
         _ => {
             eprintln!("usage: parity gen <out-dir> <count> <seed> [fixture-dir...]");
             eprintln!("       parity eval <dir>");
             eprintln!("       parity explain <tape>");
+            eprintln!("       parity gas-proxy <dir>");
+            eprintln!("       parity gas-search <out-dir> <iters> <seed> [start-tape...]");
             std::process::exit(2);
         }
     }
@@ -457,4 +468,227 @@ fn explain(path: &Path) {
             break;
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Worst-case gas search
+// ---------------------------------------------------------------------------------------------
+
+/// Host-side estimate of one frame's replay work: entity updates, the collision pairs that
+/// `handle_collisions` can test, and the spawn-point grid search (117 points × entities) that
+/// runs when the ship respawns or a wave starts. Only used to rank tapes; RV32 gas is measured
+/// with `gas-probe` (`rv32_gas_sweep`).
+fn frame_cost(prev: &WorldSnapshot, s: &WorldSnapshot) -> u64 {
+    let a = s.asteroids.len() as u64;
+    let b = s.bullets.len() as u64;
+    let sb = s.saucer_bullets.len() as u64;
+    let sc = s.saucers.len() as u64;
+    let entities = a + b + sb + sc;
+    let pairs = b * a + sb * a + b * sc + sc * a + a + sb + sc;
+    let mut cost = 300 + 40 * entities + 25 * pairs;
+    let respawned = !prev.ship.can_control && s.ship.can_control;
+    if respawned || s.wave != prev.wave {
+        cost += 117 * (entities + 1) * 30;
+    }
+    cost
+}
+
+struct Scored {
+    total: u64,
+    /// `(game, cumulative cost)` at the start of every `CHECKPOINT_FRAMES` block.
+    checkpoints: Vec<(LiveGame, u64)>,
+}
+
+const SEARCH_FRAMES: usize = MAX_FRAMES_DEFAULT as usize;
+const CHECKPOINT_FRAMES: usize = 1_000;
+
+/// Scores `inputs`, reusing `base` checkpoints for the unchanged prefix before `from`.
+fn score(seed: u32, inputs: &[u8], base: Option<(&Scored, usize)>) -> Scored {
+    let (mut game, mut total, start_block, mut checkpoints) = match base {
+        Some((scored, from)) => {
+            let block = from / CHECKPOINT_FRAMES;
+            let (game, total) = scored.checkpoints[block].clone();
+            (game, total, block, scored.checkpoints[..block].to_vec())
+        }
+        None => (LiveGame::new(seed), 0, 0, Vec::new()),
+    };
+    let mut prev = game.snapshot();
+    for (index, input) in inputs.iter().enumerate().skip(start_block * CHECKPOINT_FRAMES) {
+        if index % CHECKPOINT_FRAMES == 0 {
+            checkpoints.push((game.clone(), total));
+        }
+        game.step(*input);
+        let next = game.snapshot();
+        total += frame_cost(&prev, &next);
+        prev = next;
+    }
+    Scored { total, checkpoints }
+}
+
+fn gas_proxy(dir: &Path) {
+    let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)
+        .expect("read dir")
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|ext| ext == "tape"))
+        .collect();
+    paths.sort();
+    println!("file,frames,proxy,proxy_per_frame");
+    for path in paths {
+        let bytes = std::fs::read(&path).unwrap();
+        let Ok(tape) = parse_tape_ref(&bytes, MAX_FRAMES_DEFAULT) else {
+            continue;
+        };
+        let inputs: Vec<u8> = tape.inputs().collect();
+        let scored = score(tape.seed, &inputs, None);
+        println!(
+            "{},{},{},{:.1}",
+            path.file_name().unwrap().to_string_lossy(),
+            tape.frame_count,
+            scored.total,
+            scored.total as f64 / tape.frame_count as f64
+        );
+    }
+}
+
+fn mutate(rng: &mut SeededRng, inputs: &mut [u8]) -> usize {
+    let len_cap = 1usize << (rng.next() % 12); // 1..2048 frames
+    let len = 1 + (rng.next() as usize) % len_cap;
+    let start = (rng.next() as usize) % inputs.len();
+    let end = (start + len).min(inputs.len());
+    match rng.next() % 5 {
+        0 => {
+            let byte = (rng.next() & 0x0F) as u8;
+            inputs[start..end].fill(byte);
+        }
+        1 => {
+            for input in &mut inputs[start..end] {
+                *input = (rng.next() & 0x0F) as u8;
+            }
+        }
+        2 => {
+            // Fire on alternate frames (fastest legal fire rate) with a random movement mask.
+            let movement = (rng.next() & 0x07) as u8;
+            for (i, input) in inputs[start..end].iter_mut().enumerate() {
+                *input = movement | if i % 2 == 0 { 0x08 } else { 0 };
+            }
+        }
+        3 => {
+            // Clear fire: let entities accumulate.
+            for input in &mut inputs[start..end] {
+                *input &= 0x07;
+            }
+        }
+        _ => {
+            let flip = (1 + rng.next() % 15) as u8;
+            inputs[start] ^= flip;
+        }
+    }
+    start
+}
+
+fn gas_search(out: &Path, iters: u32, seed: u32, starts: &[PathBuf]) {
+    std::fs::create_dir_all(out).expect("create out dir");
+    let mut rng = SeededRng::new(seed);
+    let mut jobs: Vec<(String, u32, Vec<u8>)> = Vec::new();
+    for path in starts {
+        let bytes = std::fs::read(path).expect("read start tape");
+        let tape = parse_tape(&bytes, MAX_FRAMES_DEFAULT).expect("start tape parses");
+        let mut inputs = tape.inputs;
+        while inputs.len() < SEARCH_FRAMES {
+            inputs.push((rng.next() & 0x0F) as u8);
+        }
+        let name = path.file_stem().unwrap().to_string_lossy().to_string();
+        jobs.push((name, tape.header.seed, inputs));
+    }
+    if jobs.is_empty() {
+        let inputs = (0..SEARCH_FRAMES).map(|_| (rng.next() & 0x0F) as u8).collect();
+        jobs.push((format!("random-{seed:08x}"), rng.next(), inputs));
+    }
+
+    for (name, game_seed, mut inputs) in jobs {
+        let mut best = score(game_seed, &inputs, None);
+        let first = best.total;
+        for _ in 0..iters {
+            let mut candidate = inputs.clone();
+            let from = mutate(&mut rng, &mut candidate);
+            let scored = score(game_seed, &candidate, Some((&best, from)));
+            if scored.total >= best.total {
+                inputs = candidate;
+                best = scored;
+            }
+        }
+        let result = replay(game_seed, &inputs);
+        let bytes = serialize_tape(game_seed, &inputs, result.final_score);
+        let file = out.join(format!("gas-{name}.tape"));
+        std::fs::write(&file, &bytes).unwrap();
+        eprintln!(
+            "{}: proxy/frame {:.0} -> {:.0}, score {}, strict {:?}",
+            file.display(),
+            first as f64 / SEARCH_FRAMES as f64,
+            best.total as f64 / SEARCH_FRAMES as f64,
+            result.final_score,
+            verify_tape(&bytes, MAX_FRAMES_DEFAULT).map(|v| v.final_score)
+        );
+    }
+}
+
+/// Prints what drives the cost of one tape: spawn searches, deaths, waves, entity averages.
+fn gas_stats(path: &Path) {
+    let bytes = std::fs::read(path).expect("read tape");
+    let tape = parse_tape_ref(&bytes, MAX_FRAMES_DEFAULT).expect("tape parses");
+    let mut game = LiveGame::new(tape.seed);
+    let mut prev = game.snapshot();
+    let (mut spawns, mut deaths, mut sum_a, mut sum_b, mut sum_s, mut sum_sb) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
+    let mut max_a = 0usize;
+    let mut game_over_at = None;
+    let mut costs: Vec<u64> = Vec::with_capacity(tape.frame_count as usize);
+    let mut block = [0u64; 4];
+    for (i, input) in tape.inputs().enumerate() {
+        game.step(input);
+        let s = game.snapshot();
+        if (!prev.ship.can_control && s.ship.can_control) || s.wave != prev.wave {
+            spawns += 1;
+        }
+        if prev.ship.can_control && !s.ship.can_control {
+            deaths += 1;
+        }
+        if s.is_game_over && game_over_at.is_none() {
+            game_over_at = Some(i + 1);
+        }
+        sum_a += s.asteroids.len() as u64;
+        sum_b += s.bullets.len() as u64;
+        sum_s += s.saucers.len() as u64;
+        sum_sb += s.saucer_bullets.len() as u64;
+        max_a = max_a.max(s.asteroids.len());
+        costs.push(frame_cost(&prev, &s));
+        block[0] += s.asteroids.len() as u64;
+        block[1] += s.saucers.len() as u64;
+        block[2] += s.saucer_bullets.len() as u64;
+        block[3] += s.bullets.len() as u64;
+        if (i + 1) % 3_000 == 0 {
+            println!(
+                "frames {:>5}-{:>5}: wave {} lives {} over {} avg asteroids {:.1} saucers {:.2} saucer_bullets {:.2} bullets {:.2}",
+                i + 1 - 2_999, i + 1, s.wave, s.lives, s.is_game_over,
+                block[0] as f64 / 3_000.0, block[1] as f64 / 3_000.0, block[2] as f64 / 3_000.0, block[3] as f64 / 3_000.0
+            );
+            block = [0; 4];
+        }
+        prev = s;
+    }
+    let n = tape.frame_count as f64;
+    costs.sort_unstable();
+    println!(
+        "frames {} score {} wave {} lives {} game_over_at {:?} spawns {} deaths {}",
+        tape.frame_count, prev.score, prev.wave, prev.lives, game_over_at, spawns, deaths
+    );
+    println!(
+        "avg asteroids {:.1} (max {max_a}) bullets {:.2} saucers {:.2} saucer_bullets {:.2}",
+        sum_a as f64 / n, sum_b as f64 / n, sum_s as f64 / n, sum_sb as f64 / n
+    );
+    println!(
+        "proxy per frame: median {} p99 {} max {}",
+        costs[costs.len() / 2],
+        costs[costs.len() * 99 / 100],
+        costs[costs.len() - 1]
+    );
 }

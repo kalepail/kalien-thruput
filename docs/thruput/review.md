@@ -18,7 +18,7 @@ Severity: **High** = honest users lose runs or funds, or an attacker gains value
 
 | # | Severity | Area | Finding | Status |
 |---|---|---|---|---|
-| 1 | High | Worker gas / shared | Valid dense tapes need up to 2,716 gas per frame; old relay limits (2,300 and 2,200 per frame) run them out of gas | Worker fixed in `88a0476` (needs a deployed check); `shared/thruput/kalien.ts` still 2,200 |
+| 1 | High | Worker gas / shared | Valid dense tapes need up to 2,716 gas per frame (corpus) and 3,073 (searched worst, 110.6M); old relay limits (2,300 and 2,200 per frame) run them out of gas | Worker raised in `88a0476` (thin margin, see below); `shared/thruput/kalien.ts` still 2,200 |
 | 2 | Medium (time-limited) | Deploy | Fixture epoch 2988058 (seed `0x5F41772E`) is live, and an unclaimed 911,260-point tape for it is public in the repo | Open until about 2026-10-25 09:40 UTC |
 | 3 | Medium | Browser wallet | "Import a Key" accepts the player's own address or public key as a secret | Open |
 | 4 | Medium | Worker relay | A run seen `committed` whose receipt never arrives stays `submitting` forever and holds an in-flight slot | Open |
@@ -42,8 +42,12 @@ Severity: **High** = honest users lose runs or funds, or an attacker gains value
 - **Failure:** an honest player with a busy game gets `failed`. Before `88a0476` the relay also
   retried that fault as a relay fault up to five times at the same gas.
 - **Status:** `88a0476` / `7822745` moved the Worker to 5M + 3,000 × frames (max 113M) with one
-  out-of-gas retry at 1.5×. For `pattern-01028` that gives 57.1M, which is enough.
+  out-of-gas retry at 1.5× (cap 150M). For `pattern-01028` that gives 57.1M, which is enough.
   TODO(lead): confirm the deployed Worker runs these commits.
+- **Worst case (measured after the review, `kt-core.md` round 6):** a searched valid 36,000-frame
+  tape needs 110.64M gas (3,073 per frame), and the search had not converged. 5M + 3,000 × frames
+  covers it by only about 2%; the 1.5× retry rescues it. Recommended: 5M + 4,500 × frames with a
+  2.5× retry capped at 400M (chain `maxTxGas` is 1,000,000,000).
 - **Still open:** `submitGasLimit` in `shared/thruput/kalien.ts` (used by the contract scripts and
   by any caller of `submitScore` without an explicit `gasLimit`).
 - **Fix:** use the same bound as the Worker in `submitGasLimit`. The worst-case search requested
