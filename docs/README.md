@@ -5,8 +5,11 @@ KALIEN for new best scores. There is no zero-knowledge proof in this version.
 
 ## Start here
 
-- [ARCHITECTURE.md](ARCHITECTURE.md): components, the life of one run, trust model, open items.
-- [OPERATIONS.md](OPERATIONS.md): setup, tests, deploy, devnet reset, relay funding.
+- [ARCHITECTURE.md](ARCHITECTURE.md): components, game core and tape, contracts and gas,
+  Worker relay lanes and API, key wallet, leaderboard, CLI, devnet operations, trust model, and
+  the open copycat decision.
+- [OPERATIONS.md](OPERATIONS.md): versions, setup, tests, deploy, devnet reset after a wipe,
+  funding, secrets.
 - [games/asteroids/](games/asteroids/README.md): game rules, tape format, verification, and the
   tape reuse policy.
 
@@ -15,8 +18,10 @@ KALIEN for new best scores. There is no zero-knowledge proof in this version.
 `thruput/` holds the port plan and one report per port agent, with measured numbers and the
 exact test commands:
 
-- [thruput/PORT-PLAN.md](thruput/PORT-PLAN.md): goal, environment rules, and the contract and
-  Worker interfaces (Interface v1, Worker API v0).
+- [thruput/PORT-PLAN.md](thruput/PORT-PLAN.md): goal, the 2026-10-24 devnet upgrade, environment
+  rules, and the contract and Worker interfaces.
+- [thruput/reference/json-rpc-alpha-guide.md](thruput/reference/json-rpc-alpha-guide.md): the
+  official wire-14 JSON-RPC migration guide (follow it for every RPC call).
 - [thruput/kt-core.md](thruput/kt-core.md): game core, gas and memory, TS/Rust parity.
 - [thruput/kt-contract.md](thruput/kt-contract.md): contracts and devnet deployment.
 - [thruput/kt-worker.md](thruput/kt-worker.md): Worker, relay, leaderboard indexer.

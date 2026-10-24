@@ -1,7 +1,22 @@
 # kt-core report: simulation core and gas measurement
 
-Agent: `kt-core`. Branch: `thruput-devnet`. Status: **round 3 done (2026-10-24)**: strict-rule
-fix, gas probe on `thruput-sdk =0.54.0` / CLI 0.36.0 / hog-devnode rc.14. Rounds 1–2 below.
+Agent: `kt-core`. Branch: `thruput-devnet`. Status: **round 4 done (2026-10-24)**: docs update
+for the upgraded devnet. Round 3: strict-rule fix, gas probe on `thruput-sdk =0.54.0` / CLI
+0.36.0 / hog-devnode rc.14. Rounds 1–2 below.
+
+## Round 4: docs update (2026-10-24)
+
+Root `README.md` and `docs/` (not `docs/thruput/`) now describe the current system: wire 14 and
+base58, `thruput-sdk =0.54.0`, contract v2 rules (relay-only, `TapeBadPadding`, seed lock, seed
+from block height and time), Worker relay lanes and deploy scripts, devnet reset after a wipe,
+funding, secrets, and the strict-rule fix. `docs/ARCHITECTURE.md` ends with the copycat-tape
+decision for the user; `docs/games/asteroids/04-TAPE-REUSE-AND-REPLAY-POLICY.md` has the
+options, including kt-contract's per-player seed. Facts in flux are marked `TODO(lead)`: v3
+contract details, final devnet addresses (`devnet.json` still holds pre-wipe v2 addresses), the
+deployed Worker URL, lane count and funding, browser/CLI address cross-check, rate limits.
+ZK, RISC Zero, Boundless, Soroban, and Stellar-ingestion docs were already archived in round 2
+(`docs/archive/zk/`). Not changed (other owners): `shared/README.md` still describes the
+Soroban-only `shared/stellar/`.
 
 ## Round 3 summary (2026-10-24)
 

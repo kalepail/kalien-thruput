@@ -13,8 +13,8 @@ A tape is valid only if all of these hold:
 3. After every frame, the strict rule checks pass (see "Rule checks").
 4. The replayed final score equals the footer's claimed score.
 
-The contract adds its own checks around the replay (seed, epoch window, signature, best score,
-duplicate tape). See `docs/ARCHITECTURE.md` and `docs/thruput/PORT-PLAN.md`.
+The contract adds its own checks around the replay (relay, seed, epoch window, padding nibble,
+signature, best score, duplicate tape). See `docs/ARCHITECTURE.md` and `docs/thruput/PORT-PLAN.md`.
 
 ## Tape format (version 4, rules tag AST4)
 
@@ -35,8 +35,10 @@ All integers are little-endian.
 
 - `ceil(frame_count / 2)` bytes. Low nibble = frame `2i`, high nibble = frame `2i + 1`.
 - Each nibble: bit 0 = left, bit 1 = right, bit 2 = thrust, bit 3 = fire.
-- If `frame_count` is odd, the writers set the last high nibble to 0. The parsers do **not**
-  check it today (see `04-TAPE-REUSE-AND-REPLAY-POLICY.md`).
+- If `frame_count` is odd, the last high nibble is padding and must be 0. The score contract
+  rejects a non-zero padding nibble (`TapeBadPadding`, since contract v2), and the Worker
+  pre-check (`tapePaddingOk` in `shared/thruput/kalien.ts`) does the same. `asteroids-core`'s
+  `verify_tape` and `src/game/tape.ts` do not check it themselves.
 
 ### Footer (8 bytes)
 
@@ -114,4 +116,5 @@ checks both.
 
 On success `verify_tape` returns `VerifiedTape { seed, frame_count, final_score }`. On failure it
 returns a `VerifyError`: a container error, `RuleViolation { frame, rule }`,
-`FrameCountMismatch`, or `ScoreMismatch`. The contract maps these to `ScoreError` codes 20–32.
+`FrameCountMismatch`, or `ScoreMismatch`. The contract maps these to `ScoreError` codes 20–32
+(28 = `TapeBadPadding` is the contract's own check).

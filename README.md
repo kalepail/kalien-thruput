@@ -9,10 +9,12 @@ KALIEN for each improvement.
 There is no zero-knowledge proof and no wallet setup. The browser makes an Ed25519 key on your
 first visit. A relay pays the transaction, and your signature binds the run to your address.
 
-- App (TODO: not deployed yet): `https://kalien-thruput.sdf-ecosystem.workers.dev`
-- Chain: Thruput devnet, RPC `https://rpc.thruput.network`, explorer
-  `https://explorer.thruput.network/`
-- Contract addresses: `shared/thruput/deployments/devnet.json`
+- App: `https://kalien-thruput.sdf-ecosystem.workers.dev` (TODO(lead): confirm it is live on
+  the new devnet)
+- Chain: Thruput devnet (wire format 14, base58 identifiers), RPC `https://rpc.thruput.network`,
+  explorer `https://explorer.thruput.network/`
+- Contract addresses: `shared/thruput/deployments/devnet.json` (TODO(lead): the file still holds
+  the addresses from before the 2026-10-24 devnet wipe until kt-contract redeploys)
 
 ## Components
 
@@ -20,9 +22,9 @@ first visit. A relay pays the transaction, and your signature binds the run to y
 |---|---|
 | [`asteroids-core/`](asteroids-core/README.md) | Rust game core and strict tape verifier (`no_std`, used on chain) |
 | [`src/game/`](src/game/) | TypeScript twin of the game core (browser play, Worker pre-check) |
-| [`kalien-contract/`](kalien-contract/README.md) | Thruput contracts: `kalien_score` (on-chain replay, best scores, mint) and `kalien_token` (KALIEN) |
+| [`kalien-contract/`](kalien-contract/README.md) | Thruput contracts (`thruput-sdk =0.54.0`): `kalien_score` (on-chain replay, best scores, mint) and `kalien_token` (KALIEN) |
 | [`shared/thruput/`](shared/thruput/README.md) | Claim digest helper, generated TS bindings, devnet deployment record |
-| [`worker/`](worker/README.md) | Cloudflare Worker: API, relay Durable Object, seed cron, leaderboard indexer |
+| [`worker/`](worker/README.md) | Cloudflare Worker: API, relay lanes (Durable Objects), seed cron, leaderboard indexer |
 | [`src/`](src/) | React client: key wallet, play, submit, run history, leaderboard, replay |
 | [`cli/`](cli/README.md) | `kalien` terminal client: key file, bots, submit, status |
 | [`autopilot/`](autopilot/README.md) | Rust bot lab for tape generation and benchmarks |
@@ -47,7 +49,11 @@ cargo test --release --manifest-path asteroids-core/Cargo.toml  # with CARGO_HOM
 bun run asteroids-core/parity/parity.ts                         # TS/Rust replay parity
 ```
 
-Contracts, Worker deploy, devnet reset, and every test command: [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Deploy the Worker with `bun run deploy` (see `worker/ops/deploy.sh`). Contracts, devnet reset
+after a wipe, funding, secrets, and every test command: [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+Open decision: copied tapes can earn the same reward under another key. See
+[docs/games/asteroids/04-TAPE-REUSE-AND-REPLAY-POLICY.md](docs/games/asteroids/04-TAPE-REUSE-AND-REPLAY-POLICY.md).
 
 ## Docs
 
