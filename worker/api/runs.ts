@@ -7,7 +7,7 @@ import { replayTape } from "../replay";
 import { allLanes, allowedLanes, findRun, pickLane, relayLane } from "../relay/stub";
 import type { RunCursor } from "../relay/store";
 import type { RunView } from "../relay/view";
-import { isSeedIdActive, lookupSeed } from "../seed";
+import { blockedSeedIds, isSeedIdActive, lookupSeed } from "../seed";
 import { parseAndValidateTape } from "../tape";
 import { getTape, putTape } from "../tapes";
 import { getScoreEvent } from "../leaderboard/store";
@@ -124,6 +124,9 @@ export function createRunsRouter(): Hono<AppEnv> {
     const seedId = /^\d{1,10}$/u.test(seedIdRaw) ? Number(seedIdRaw) : Number.NaN;
     if (!Number.isSafeInteger(seedId) || seedId > 0xffffffff) {
       return jsonError(c, 400, "seed_id must be a u32", { code: "bad_seed_id" });
+    }
+    if (blockedSeedIds(c.env).has(seedId)) {
+      return jsonError(c, 403, `seed ${seedId} is closed for claims`, { code: "seed_blocked" });
     }
 
     const pubkeyHex = bytesToHex(pubkey);

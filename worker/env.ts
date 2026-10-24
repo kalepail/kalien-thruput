@@ -22,6 +22,8 @@ export interface WorkerEnv {
   RELAY_SEED_GAS?: string;
   RELAY_EXPIRY_BLOCKS?: string;
   RELAY_MAX_IN_FLIGHT?: string;
+  // Seed epochs the Worker refuses (comma-separated), e.g. fixture epochs
+  BLOCKED_SEED_IDS?: string;
   // Leaderboard indexer
   LEADERBOARD_SYNC_ENABLED?: string;
   LEADERBOARD_SYNC_MAX_PAGES?: string;

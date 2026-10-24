@@ -104,6 +104,18 @@ describe("POST /api/runs", () => {
     expect(other.body.code).toBe("already_claimed");
   });
 
+  it("refuses a blocked (fixture) seed epoch before any chain call", async () => {
+    const t = testApp();
+    const seedId = currentSeedId();
+    t.chain.seeds.set(seedId, seedOf(shortTape));
+    (t.env as { BLOCKED_SEED_IDS?: string }).BLOCKED_SEED_IDS = `1,${seedId}`;
+    const { response, body } = await submit(t, shortTape);
+    expect(response.status).toBe(403);
+    expect(body.code).toBe("seed_blocked");
+    expect(t.chain.signed.size).toBe(0);
+    expect(t.relay.store.countByStatus().queued).toBe(0);
+  });
+
   it("rejects a bad signature", async () => {
     const t = testApp();
     t.chain.seeds.set(currentSeedId(), seedOf(shortTape));

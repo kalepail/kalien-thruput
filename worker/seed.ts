@@ -1,5 +1,6 @@
 import type { ChainContext } from "./chain/context";
 import { SEED_ACTIVE_EPOCHS, SEED_EPOCH_SECONDS } from "./constants";
+import deployment from "../shared/thruput/deployments/devnet.json";
 import type { WorkerEnv } from "./env";
 import { getSeed, recordSeed } from "./leaderboard/store";
 
@@ -37,4 +38,23 @@ export async function lookupSeed(
     await recordSeed(env, seedId, seed);
   }
   return seed;
+}
+
+/**
+ * Epochs the Worker refuses: BLOCKED_SEED_IDS (comma-separated) plus the
+ * deploy record's `fixtureSeedIds`. Fixture epochs have seeds the admin set
+ * to match public tapes, so a valid claim needs no play.
+ */
+export function blockedSeedIds(env: Pick<WorkerEnv, "BLOCKED_SEED_IDS">): Set<number> {
+  const out = new Set<number>();
+  const fromRecord = (deployment as { fixtureSeedIds?: unknown }).fixtureSeedIds;
+  if (Array.isArray(fromRecord)) {
+    for (const id of fromRecord) {
+      if (Number.isSafeInteger(id)) out.add(id as number);
+    }
+  }
+  for (const part of (env.BLOCKED_SEED_IDS ?? "").split(/[\s,]+/u)) {
+    if (/^\d{1,10}$/u.test(part)) out.add(Number(part));
+  }
+  return out;
 }

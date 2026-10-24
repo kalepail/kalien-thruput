@@ -36,6 +36,10 @@
     "RELAY_SEED_GAS": "1000000",
     "RELAY_EXPIRY_BLOCKS": "120",
     "RELAY_MAX_IN_FLIGHT": "4",
+    // Fixture epochs of the v3 devnet deploy (admin-set seeds that match public tapes;
+    // kalien-contract/deployments/devnet-fixture-runs.json). They leave the 24 h window
+    // about 2026-10-25 10:00 UTC. The deploy record's fixtureSeedIds are added to these.
+    "BLOCKED_SEED_IDS": "2988058,2988059,2988060",
     // Leaderboard indexer (ScoreSubmitted events → D1), every minute.
     "LEADERBOARD_SYNC_ENABLED": "1",
     "LEADERBOARD_SYNC_MAX_PAGES": "10",
