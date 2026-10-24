@@ -1,8 +1,51 @@
 # kt-core report: simulation core and gas measurement
 
-Agent: `kt-core`. Branch: `thruput-devnet`. Status: **round 4 done (2026-10-24)**: docs update
-for the upgraded devnet. Round 3: strict-rule fix, gas probe on `thruput-sdk =0.54.0` / CLI
+Agent: `kt-core`. Branch: `thruput-devnet`. Status: **round 5 done (2026-10-24)**: shared/stellar
+removal, leftover sweep, full test run. Round 4: docs update for the upgraded devnet. Round 3: strict-rule fix, gas probe on `thruput-sdk =0.54.0` / CLI
 0.36.0 / hog-devnode rc.14. Rounds 1–2 below.
+
+## Round 5: cleanup and full test run (2026-10-24)
+
+Commits: `236e1f0` (remove `shared/stellar/`, its only importer `tests/shared/strkey.test.ts`,
+rewrite `shared/README.md`), `d2be500` (`journal` naming in `asteroids-core/tests/replay_fixtures.rs`,
+`src/game/Autopilot.ts` header), `eb42826` (ZK/proof wording in `src/game/` comments, relayed by
+kt-client). `package.json` and `bun.lock` no longer reference `asteroids-score`.
+
+Sweep (tracked files outside `docs/archive/` and `docs/thruput/`; terms: risc0, risczero,
+boundless, vast, soroban, stellar(-sdk), smart-account, passkey, webauthn, seal, journal, kale,
+soroswap, channels, openzeppelin, galexie, kalien.xyz, mainnet, testnet, old Stellar env vars,
+G/C StrKeys). Root configs (`.gitignore`, `tsconfig*`, `vite.config.ts`, `bunfig.toml`,
+`components.json`, `.env.example`, `.dev.vars.example`, `.oxlintrc.json`, `.oxfmtrc.json`,
+`.npmrc`, `wrangler.jsonc`, `package.json`, `index.html`, `.vscode/`, `public/`) are clean.
+There is no `.github/`. Remaining hits, by owner, all left as is:
+
+| Where | Hit | Owner | Note |
+|---|---|---|---|
+| `autopilot/archive/claude-autopilot/` | path dependency `../../kalien-verifier/asteroids-core`, `journal.rules_digest` | none (archive) | Dead crate: the path was already wrong before the port, and the API is gone. Suggest deleting it. |
+| `autopilot/src/bots/roster.rs` | bot ids `record-mainnet-911140`, `record-mainnet-911260-single-mutation` | autopilot | Names of the historical record tapes; records refer to these ids. |
+| `src/components/wallet/WalletPage.tsx`, `src/wallet/keyWallet.ts`, `src/hooks/useWallet.ts` | Stellar `G...` / `S...` StrKey export | kt-client | Intended interop feature. |
+| `worker/relay/*`, `worker/README.md` | "journal" | kt-worker | The relay's own transaction journal (not ZK). |
+| `autopilot/evolve/*`, `autopilot/.gitignore` | "journal" | autopilot | The evolve lab's notes directory (not ZK). |
+| `tests/worker/api-runs.test.ts` | username "kale" | kt-worker | Test data. |
+| `test-fixtures/README.md`, docs | removal notes, archive pointers | — | Intended. |
+
+Full test run (all pass; I changed no other agent's code):
+
+| Suite | Command | Result |
+|---|---|---|
+| Root checks | `bun run check` (typegen, 6 × tsc, oxlint, oxfmt) | pass (exit 0) |
+| Root bun tests | `bun test tests/` | 115 pass, 0 fail |
+| asteroids-core | `cargo test --release` | 65 passed, 0 failed |
+| asteroids-core no_std | `cargo build --release --no-default-features` | ok |
+| parity crate | `cargo clippy --release` | ok, no warnings |
+| gas-probe native | `cargo test --release` | 2 passed, 4 ignored (RV32 and integration) |
+| gas-probe RV32 | `thruput test` | 3 passed |
+| autopilot | `cargo test --release` | 5 passed |
+| kalien-contract native | `cargo test --workspace --release` | 37 passed, 7 ignored (RV32) |
+| kalien-contract RV32 | `thruput build -p kalien_token && thruput test -p kalien_score` | 7 passed |
+
+`kalien_score` depends on `asteroids-core` by path, so these runs already include the
+strict-rule fix (`c8d6644`).
 
 ## Round 4: docs update (2026-10-24)
 
