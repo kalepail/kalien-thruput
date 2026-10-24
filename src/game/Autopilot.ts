@@ -10,7 +10,7 @@ import { shortestDelta } from "./torus";
 import type { Asteroid, Bullet, Saucer, Ship, Vec2 } from "./types";
 
 /**
- * AI Autopilot Engine for Stellar ZK Asteroids
+ * AI Autopilot Engine for Kalien Asteroids
  *
  * This class provides intelligent ship control by analyzing the game state
  * and generating appropriate inputs. It's designed to be modular and easy
