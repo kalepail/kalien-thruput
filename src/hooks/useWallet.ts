@@ -35,10 +35,19 @@ export interface UseWalletReturn {
   exportBackupString: () => Promise<string>;
   exportBackupFile: () => Promise<WalletBackupFile>;
   exportStrkeySecret: () => string;
-  importBackup: (input: string) => Promise<boolean>;
+  /**
+   * Import a backup. A bare 32-byte value (no checksum) is not imported until it is
+   * confirmed: the first call returns `confirm` with the address it would give.
+   */
+  importBackup: (input: string, options?: { confirmRaw?: boolean }) => Promise<ImportResult>;
   resetKey: () => Promise<boolean>;
   clearError: () => void;
 }
+
+export type ImportResult =
+  | { status: "imported"; address: string }
+  | { status: "confirm"; address: string }
+  | { status: "error" };
 
 interface WalletState {
   stored: StoredWallet | null;
@@ -120,21 +129,27 @@ export function useWallet(): UseWalletReturn {
     return encodeStrkeySecret(state.stored);
   }, [state.stored]);
 
-  const importBackup = useCallback(async (input: string) => {
-    setAction("importing");
-    setError(null);
-    try {
-      const stored = await parseBackup(input);
-      writeStoredWallet(stored);
-      setState({ stored, ephemeral: false });
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "failed to import key");
-      return false;
-    } finally {
-      setAction("idle");
-    }
-  }, []);
+  const importBackup = useCallback(
+    async (input: string, options?: { confirmRaw?: boolean }): Promise<ImportResult> => {
+      setAction("importing");
+      setError(null);
+      try {
+        const parsed = await parseBackup(input, { current: wallet });
+        if (!parsed.checked && !options?.confirmRaw) {
+          return { status: "confirm", address: parsed.address };
+        }
+        writeStoredWallet(parsed.stored);
+        setState({ stored: parsed.stored, ephemeral: false });
+        return { status: "imported", address: parsed.address };
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "failed to import key");
+        return { status: "error" };
+      } finally {
+        setAction("idle");
+      }
+    },
+    [wallet],
+  );
 
   const resetKey = useCallback(async () => {
     setAction("resetting");

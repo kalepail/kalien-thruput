@@ -157,23 +157,34 @@ function ImportCard() {
   const [input, setInput] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [imported, setImported] = useState(false);
+  // Address a raw 32-byte key would give; set until the player confirms or edits the input.
+  const [rawAddress, setRawAddress] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onFile = useCallback(async (file: File | undefined) => {
     if (!file) return;
     setInput((await file.text()).trim());
     setImported(false);
+    setRawAddress(null);
   }, []);
 
-  const onImport = useCallback(async () => {
-    setImported(false);
-    const ok = await wallet.importBackup(input);
-    if (ok) {
-      setImported(true);
-      setInput("");
-      setConfirmed(false);
-    }
-  }, [input, wallet]);
+  const onImport = useCallback(
+    async (confirmRaw: boolean) => {
+      setImported(false);
+      const result = await wallet.importBackup(input, { confirmRaw });
+      if (result.status === "confirm") {
+        setRawAddress(result.address);
+        return;
+      }
+      setRawAddress(null);
+      if (result.status === "imported") {
+        setImported(true);
+        setInput("");
+        setConfirmed(false);
+      }
+    },
+    [input, wallet],
+  );
 
   const busy = wallet.action === "importing";
 
@@ -183,12 +194,13 @@ function ImportCard() {
         className="grid gap-4 p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          void onImport();
+          void onImport(false);
         }}
       >
         <h2 className={sectionTitle}>Import a Key</h2>
         <p className="m-0 text-sm text-text-soft">
-          Paste a backup string or choose a backup file from another browser.
+          Paste the backup string or the Stellar S... secret, or choose a backup file from another
+          browser.
         </p>
         <Warning>
           <p className="m-0">
@@ -209,6 +221,7 @@ function ImportCard() {
             onChange={(event) => {
               setInput(event.target.value);
               setImported(false);
+              setRawAddress(null);
             }}
             disabled={busy}
             className="w-full resize-none rounded-md border border-border/40 bg-surface-dim px-3 py-2 font-mono text-xs break-all text-card-foreground focus:border-primary/60 focus:outline-none disabled:opacity-50"
@@ -257,6 +270,36 @@ function ImportCard() {
             Choose File
           </Button>
         </div>
+        {rawAddress ? (
+          <div
+            className="grid gap-2 rounded-lg border border-warning/40 bg-[rgba(42,22,15,0.42)] p-3"
+            data-testid="import-raw-confirm"
+          >
+            <p className="m-0 text-sm text-warning">
+              This is a bare 32-byte key with no checksum. It gives this address:
+            </p>
+            <code className="font-mono text-xs break-all text-card-foreground">{rawAddress}</code>
+            <p className="m-0 text-xs text-text-soft">
+              Import only if this is the address you expect. If it is not, you pasted an address or
+              public key, not a secret key.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="active"
+                size="sm"
+                onClick={() => void onImport(true)}
+                disabled={busy || !confirmed}
+              >
+                <KeyRound className="size-3.5" />
+                Import This Key
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setRawAddress(null)}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {imported && <p className="m-0 text-sm text-secondary">Key imported.</p>}
         <ErrorMessage message={wallet.action === "idle" ? wallet.error : null} />
       </form>

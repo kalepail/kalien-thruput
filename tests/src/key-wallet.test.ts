@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { verifyAsync as verify } from "@noble/ed25519";
 import {
+  addressToStrkey,
   createPubkeyAccount,
   Ed25519Signer,
   parseSecretSeed,
@@ -13,11 +14,12 @@ import {
   encodeBackupString,
   encodeStrkeySecret,
   generateStoredWallet,
+  isPublicValueOf,
   parseBackup,
   pubkeyAccountAddress,
   walletFromSecret,
 } from "../../src/wallet/keyWallet";
-import { isHex32 } from "../../src/thruput/ids";
+import { idBytes, isHex32 } from "../../src/thruput/ids";
 import { hexToBytes, strip0x } from "../../src/lib/hex";
 
 const VECTORS_PATH = new URL("../../shared/thruput/claim-vectors.json", import.meta.url);
@@ -79,7 +81,7 @@ describe("key backup", () => {
     const stored = generateStoredWallet();
     const backup = await encodeBackupString(stored);
     expect(backup).toMatch(/^kalien-key-v1:[0-9a-f]{64}:[0-9a-f]{8}$/);
-    expect((await parseBackup(backup)).secretKey).toBe(stored.secretKey);
+    expect((await parseBackup(backup)).stored.secretKey).toBe(stored.secretKey);
   });
 
   it("rejects a backup string with a typo", async () => {
@@ -93,8 +95,8 @@ describe("key backup", () => {
     const stored = generateStoredWallet();
     const file = await encodeBackupFile(stored);
     const parsed = await parseBackup(JSON.stringify(file));
-    expect(parsed.secretKey).toBe(stored.secretKey);
-    expect(parsed.createdAt).toBe(stored.createdAt);
+    expect(parsed.stored.secretKey).toBe(stored.secretKey);
+    expect(parsed.stored.createdAt).toBe(stored.createdAt);
   });
 
   it("rejects a backup file whose address does not match the secret", async () => {
@@ -108,7 +110,7 @@ describe("key backup", () => {
   it("accepts the kalien CLI export (0x hex seed) and key file", async () => {
     const stored = generateStoredWallet();
     const wallet = walletFromSecret(stored.secretKey, stored.createdAt);
-    expect((await parseBackup(`0x${stored.secretKey}`)).secretKey).toBe(stored.secretKey);
+    expect((await parseBackup(`0x${stored.secretKey}`)).stored.secretKey).toBe(stored.secretKey);
     const cliKeyFile = {
       version: 1,
       secretKey: `0x${stored.secretKey}`,
@@ -117,8 +119,8 @@ describe("key backup", () => {
       createdAt: "2026-10-01T00:00:00.000Z",
     };
     const parsed = await parseBackup(JSON.stringify(cliKeyFile));
-    expect(parsed.secretKey).toBe(stored.secretKey);
-    expect(parsed.createdAt).toBe("2026-10-01T00:00:00.000Z");
+    expect(parsed.stored.secretKey).toBe(stored.secretKey);
+    expect(parsed.stored.createdAt).toBe("2026-10-01T00:00:00.000Z");
   });
 
   it("shows the key as a Stellar G StrKey and round-trips the S StrKey secret", async () => {
@@ -129,7 +131,7 @@ describe("key backup", () => {
     const strkey = encodeStrkeySecret(stored);
     expect(strkey).toMatch(/^S[A-Z2-7]{55}$/);
     expect(parseSecretSeed(strkey)).toEqual(hexToBytes(stored.secretKey));
-    expect((await parseBackup(strkey)).secretKey).toBe(stored.secretKey);
+    expect((await parseBackup(strkey)).stored.secretKey).toBe(stored.secretKey);
   });
 
   it("imports a pre-upgrade backup file that holds a hex address", async () => {
@@ -142,7 +144,7 @@ describe("key backup", () => {
       createdAt: "2026-10-23T00:00:00.000Z",
       network: "thruput-devnet",
     };
-    expect((await parseBackup(JSON.stringify(legacy))).secretKey).toBe(stored.secretKey);
+    expect((await parseBackup(JSON.stringify(legacy))).stored.secretKey).toBe(stored.secretKey);
   });
 
   it("rejects input that is not a key", async () => {
@@ -150,4 +152,57 @@ describe("key backup", () => {
     await expect(parseBackup("hello!")).rejects.toThrow(/32-byte/);
     await expect(parseBackup('{"foo":1}')).rejects.toThrow(/not a Kalien key backup/);
   });
+
+  it("marks checksummed formats as checked and bare 32-byte values as raw", async () => {
+    const stored = generateStoredWallet();
+    const wallet = walletFromSecret(stored.secretKey, stored.createdAt);
+    const string = await parseBackup(await encodeBackupString(stored));
+    expect(string.checked).toBe(true);
+    expect(string.address).toBe(wallet.address);
+    expect((await parseBackup(encodeStrkeySecret(stored))).checked).toBe(true);
+    expect((await parseBackup(JSON.stringify(await encodeBackupFile(stored)))).checked).toBe(true);
+    const rawHex = await parseBackup(stored.secretKey);
+    expect(rawHex.checked).toBe(false);
+    expect(rawHex.address).toBe(wallet.address);
+    expect((await parseBackup(toBase58(hexToBytes(stored.secretKey)))).checked).toBe(false);
+  });
 });
+
+describe("key import refuses public values (review item 3)", () => {
+  const stored = generateStoredWallet();
+  const wallet = walletFromSecret(stored.secretKey, stored.createdAt);
+  const current = { address: wallet.address, pubkeyHex: wallet.pubkeyHex };
+  const addressBytes = idBytes(wallet.address);
+  const forms = {
+    "address base58": wallet.address,
+    "address hex": `0x${bytesToHexLocal(addressBytes)}`,
+    "address hex, no 0x": bytesToHexLocal(addressBytes),
+    "address C StrKey": addressToStrkey(addressBytes),
+    "pubkey hex": wallet.pubkeyHex,
+    "pubkey base58": toBase58(hexToBytes(wallet.pubkeyHex)),
+    "pubkey G StrKey": wallet.publicKeyStrkey,
+  };
+
+  for (const [name, value] of Object.entries(forms)) {
+    it(`rejects the current ${name}`, async () => {
+      expect(isPublicValueOf(value, [current])).toBe(true);
+      await expect(parseBackup(value, { current })).rejects.toThrow(/not a secret key/);
+    });
+  }
+
+  it("still accepts the real secret of the current key", async () => {
+    expect(isPublicValueOf(stored.secretKey, [current])).toBe(false);
+    const parsed = await parseBackup(await encodeBackupString(stored), { current });
+    expect(parsed.address).toBe(wallet.address);
+  });
+
+  it("without a current key, a pasted public value gives an unexpected address and stays raw", async () => {
+    const parsed = await parseBackup(wallet.address);
+    expect(parsed.checked).toBe(false);
+    expect(parsed.address).not.toBe(wallet.address);
+  });
+});
+
+function bytesToHexLocal(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}

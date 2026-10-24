@@ -8,6 +8,8 @@
 import {
   derivePubkeyAccountAddress,
   Ed25519Signer,
+  parseAddress,
+  parsePublicKey,
   parseSecretSeed,
   pubkeyAccountPreimage,
   publicKeyToStrkey,
@@ -16,7 +18,7 @@ import {
 } from "@thruputchain/client";
 import { CryptographicScheme, ed25519PublicKey } from "@thruputchain/protocol";
 import { bytesToHex, hexToBytes, isHexOfLength, sha256, strip0x } from "@/lib/hex";
-import { isHex32 } from "@/thruput/ids";
+import { idBytes, isHex32 } from "@/thruput/ids";
 
 export const WALLET_STORAGE_KEY = "kalien:wallet:v1";
 export const BACKUP_PREFIX = "kalien-key-v1";
@@ -190,16 +192,81 @@ function decodeSecret(text: string): string {
   return hex;
 }
 
+/** A bare 32-byte value: hex or base58, with no checksum to tell a secret from a public value. */
+function isRawSeedText(text: string): boolean {
+  return isHexOfLength(text, 32) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(text);
+}
+
+/** Every 32-byte value a public identifier text can stand for (hex, base58, G / C StrKey). */
+function publicValueBytes(text: string): string[] {
+  const trimmed = text.trim();
+  const out: string[] = [];
+  const attempts = [
+    () => idBytes(trimmed),
+    () => parsePublicKey(trimmed),
+    () => parseAddress(trimmed),
+  ];
+  for (const attempt of attempts) {
+    try {
+      out.push(bytesToHex(attempt()));
+    } catch {
+      // Not this form.
+    }
+  }
+  return out;
+}
+
+export const PUBLIC_VALUE_ERROR =
+  "this is an address or public key, not a secret key. Paste the backup string, the S... secret, or the backup file";
+
+export interface PublicIdentity {
+  address: string;
+  pubkeyHex: string;
+}
+
+/**
+ * True when the input names one of these identities' public values (the
+ * address or the public key, in any format). Those values are on the
+ * leaderboard; importing one as a seed would give a key anyone can use.
+ */
+export function isPublicValueOf(input: string, identities: readonly PublicIdentity[]): boolean {
+  const candidates = new Set(publicValueBytes(input));
+  if (candidates.size === 0) return false;
+  for (const identity of identities) {
+    const known = [bytesToHex(idBytes(identity.address)), identity.pubkeyHex.toLowerCase()];
+    if (known.some((value) => candidates.has(value))) return true;
+  }
+  return false;
+}
+
+export interface ParsedBackup {
+  stored: StoredWallet;
+  /** Base58 address of the imported key. */
+  address: string;
+  /**
+   * False for a bare 32-byte value (hex or base58) with no checksum. The UI shows
+   * the resulting address and asks the player to confirm before it imports.
+   */
+  checked: boolean;
+}
+
 /**
  * Parse a backup the player pasted or uploaded. Accepts the backup string, the
  * JSON backup file, a `kalien` CLI key file, a bare 32-byte seed as hex (with
  * or without `0x`) or base58, and a Stellar `S...` StrKey secret.
  */
-export async function parseBackup(input: string): Promise<StoredWallet> {
+export async function parseBackup(
+  input: string,
+  options: { current?: PublicIdentity | null } = {},
+): Promise<ParsedBackup> {
   const text = input.trim();
   if (text.length === 0) {
     throw new Error("paste a backup string or choose a backup file");
   }
+  if (options.current && isPublicValueOf(text, [options.current])) {
+    throw new Error(PUBLIC_VALUE_ERROR);
+  }
+  let checked = true;
 
   let secretText: string | null = null;
   let checksum: string | null = null;
@@ -237,14 +304,24 @@ export async function parseBackup(input: string): Promise<StoredWallet> {
     }
   } else {
     secretText = text;
+    checked = !isRawSeedText(text);
   }
 
   const normalized = decodeSecret(secretText);
   if (checksum !== null && checksum !== (await backupChecksum(hexToBytes(normalized)))) {
     throw new Error("backup checksum does not match; check for a typo");
   }
-  if (expectedAddress && walletFromSecret(normalized, createdAt).address !== expectedAddress) {
+  const wallet = walletFromSecret(normalized, createdAt);
+  if (expectedAddress && wallet.address !== expectedAddress) {
     throw new Error("backup file address does not match its secret key");
   }
-  return { version: 1, secretKey: normalized, createdAt };
+  // A seed equal to its own public key or address is a pasted public value.
+  if (isPublicValueOf(normalized, [wallet])) {
+    throw new Error(PUBLIC_VALUE_ERROR);
+  }
+  return {
+    stored: { version: 1, secretKey: normalized, createdAt },
+    address: wallet.address,
+    checked,
+  };
 }

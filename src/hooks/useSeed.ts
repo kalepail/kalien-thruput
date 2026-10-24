@@ -3,14 +3,49 @@ import { useSyncExternalStore } from "react";
 const SEED_PERIOD_MS = 600_000; // 10 minutes
 const NULL_SEED_RETRY_MS = 3_000;
 const MAX_NULL_SEED_RETRY_MS = 12_000;
+/** Ignore offset samples closer than this to the current offset (second-level precision). */
+const OFFSET_JITTER_MS = 1_500;
 
-function currentSeedId(nowMs = Date.now()): number {
-  return Math.floor(nowMs / SEED_PERIOD_MS);
+// Epoch math runs on the Worker's clock, not the local one. A local clock that is
+// minutes off would otherwise never match the server seed_id (review item 6).
+// `serverOffsetMs` is the server time minus the local time.
+let serverOffsetMs = 0;
+
+function serverNow(localNowMs = Date.now()): number {
+  return localNowMs + serverOffsetMs;
 }
 
-function getSecondsUntilNext(nowMs = Date.now()): number {
-  const ms = SEED_PERIOD_MS - (nowMs % SEED_PERIOD_MS);
+export function seedIdAt(serverNowMs: number): number {
+  return Math.floor(serverNowMs / SEED_PERIOD_MS);
+}
+
+function currentSeedId(localNowMs = Date.now()): number {
+  return seedIdAt(serverNow(localNowMs));
+}
+
+function getSecondsUntilNext(localNowMs = Date.now()): number {
+  const now = serverNow(localNowMs);
+  const ms = SEED_PERIOD_MS - (now % SEED_PERIOD_MS);
   return Math.ceil(ms / 1000);
+}
+
+/**
+ * Server clock minus local clock, from one `/api/seed/current` answer. The Worker
+ * sends `secondsLeft = 600 - (floor(now_s) % 600)`, so its time is
+ * `((seedId + 1) * 600 - secondsLeft) s` plus less than one second.
+ */
+export function estimateServerOffsetMs(
+  seedId: number,
+  secondsLeft: number,
+  localNowMs: number,
+): number {
+  const serverMs = ((seedId + 1) * (SEED_PERIOD_MS / 1000) - secondsLeft) * 1000 + 500;
+  return serverMs - localNowMs;
+}
+
+/** Keep the current offset unless the new sample differs by more than the jitter. */
+export function nextServerOffsetMs(currentMs: number, sampleMs: number): number {
+  return Math.abs(sampleMs - currentMs) > OFFSET_JITTER_MS ? sampleMs : currentMs;
 }
 
 interface SeedState {
@@ -80,7 +115,7 @@ function scheduleMissingSeedRetry(): void {
 
 async function refreshSeed(): Promise<void> {
   if (fetchPending) return;
-  const seedId = currentSeedId();
+  let seedId = currentSeedId();
 
   // Cache is fresh for this seed_id — no network call needed.
   if (seedCache?.seedId === seedId) {
@@ -104,20 +139,25 @@ async function refreshSeed(): Promise<void> {
     });
 
     const data = (await response.json().catch(() => null)) as SeedCurrentResponse | null;
+    if (response.ok && data) {
+      // Sync to the Worker clock first, so epoch math agrees with the server.
+      const serverSeedId = typeof data.seedId === "number" ? data.seedId : data.seed_id;
+      const serverSecondsLeft =
+        typeof data.secondsLeft === "number" ? data.secondsLeft : data.seconds_left;
+      if (typeof serverSeedId === "number" && typeof serverSecondsLeft === "number") {
+        serverOffsetMs = nextServerOffsetMs(
+          serverOffsetMs,
+          estimateServerOffsetMs(serverSeedId >>> 0, serverSecondsLeft, Date.now()),
+        );
+        observedSeedId = currentSeedId();
+      }
+      if (typeof serverSeedId === "number") {
+        // The server's epoch is the truth, even without `secondsLeft`.
+        seedId = serverSeedId >>> 0;
+      }
+    }
     const current = response.ok ? readSeedResponse(data) : null;
     if (current) {
-      if (current.seedId !== seedId) {
-        // The chain clock has not reached this epoch yet (or our clock is off).
-        // The Worker cron creates each seed; retry until it matches.
-        state = {
-          seed: null,
-          seedId: null,
-          secondsLeft: getSecondsUntilNext(),
-        };
-        notify();
-        scheduleMissingSeedRetry();
-        return;
-      }
       seedCache = { seedId, seed: current.seed };
       const secondsLeft =
         current.secondsLeft !== null
