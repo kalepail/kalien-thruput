@@ -53,8 +53,16 @@ tapes (`deployments/devnet-fixture-runs.json`), allows only `kalien-relay` to su
 (`relay_only`), locks `set_seed` for good, and writes the relay secret for the Worker to
 `~/.config/kalien-thruput/relay.secret` (mode 600).
 
+The script refuses to run when `devnet.json` already names the live network (pass `--force`
+to deploy a second pair anyway). Fixture epochs sit 4 epochs above the oldest active one, so
+they expire within about an hour; every repo tape with a fixture seed is claimed by a
+throwaway key, and `devnet.json` records `fixtureSeedIds` / `fixtureEpochs` for the Worker to
+refuse. Rehearse against an isolated local node with the overrides `KALIEN_RPC_URL`,
+`KALIEN_DEPLOYMENT_FILE`, `KALIEN_FIXTURE_RUNS_FILE`, `KALIEN_SECRETS_DIR`, `KALIEN_FUND_TIMES`
+(and `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` for separate keys and node state).
+
 Other commands of `scripts/kalien.ts`: `fund`, `deploy`, `ensure-seed`, `set-seed`, `submit`,
-`fixtures`, `harden`, `export-secret`. Run it with no command for usage.
+`fixtures`, `harden`, `balance`, `network-hash`, `export-secret`. Run it with no command for usage.
 
 ## Files
 

@@ -191,8 +191,9 @@ Source: `kalien-contract/contracts/kalien_score/`. TS bindings: `shared/thruput/
   `ScoreError` in `abortData` (decode with `KalienScore.v0_1.submitScore.decodeException`).
 - Gas and memory **(v3, measured on sdk 0.54)**: one transaction replays a full tape; no chunked
   replay. Gas ≈ 1.8–2.2k/frame + 0.2M (36,000 frames: 67.6–74.5M). Use wallet root gas limit
-  `3_000_000 + 2_200 * frame_count` (max 82.2M). The sender (relay) must hold free HOG ≥ gas limit
-  (≤ 8.22 HOG); gas is not burned. Peak guest memory with an 18,024-byte tape: 46–47 KiB of
+  `5_000_000 + 4_500 * frame_count` (max 167M; same as the Worker; dense valid tapes reach
+  2,716 gas/frame, a searched worst case 3,073). The sender (relay) must hold free HOG ≥ gas
+  limit (≤ 16.7 HOG); gas is not burned. Peak guest memory with an 18,024-byte tape: 46–47 KiB of
   64 KiB with the 16 KiB guest stack (in `kalien-contract/.cargo/config.toml`); with the default
   30 KiB stack it is 60–61 KiB, so keep the 16 KiB rule.
 
@@ -207,7 +208,9 @@ Deploy order: token `initialize(deployer)`, then score `initialize(admin, token)
 ### Shared TS (`shared/thruput/`, owned by `contract`)
 
 - `deployments/devnet.json`: `{ network, networkHash, rpcUrl, explorerUrl, scoreContract,
-  tokenContract, admin, deployedAt, deployTxs, artifacts }`, identifiers in base58.
+  tokenContract, admin, deployedAt, deployTxs, artifacts, fixtureSeedIds, fixtureEpochs }`,
+  identifiers in base58. `fixtureSeedIds` are the epochs the deploy seeded for public fixture
+  tapes; relays must refuse them (`isFixtureSeedId(config, seedId)`) until `fixtureEpochs[].activeUntil`.
 - `bindings/kalien-score.ts`, `bindings/kalien-token.ts` (from `thruput codegen ts`; do not edit).
 - **(v3)** `kalien.ts` (wire 14, client 0.23): chain helpers for Worker, browser and CLI (fetch only).
   `connectKalien(config)` (pins the network hash), reads (`readPlayerState`, `getBestScore`,

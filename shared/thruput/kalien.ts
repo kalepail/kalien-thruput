@@ -50,6 +50,16 @@ export interface KalienConfig {
   rpcUrl: string;
   scoreContract: string;
   tokenContract: string;
+  /**
+   * Epochs whose seed the deploy fixed for the public fixture tapes. Anyone could post a
+   * copy of a public tape there, so refuse submissions for them until they expire.
+   */
+  fixtureSeedIds?: number[];
+}
+
+/** Whether `seedId` is a fixture epoch of this deployment (refuse it at the relay). */
+export function isFixtureSeedId(config: KalienConfig, seedId: number): boolean {
+  return config.fixtureSeedIds?.includes(seedId) ?? false;
 }
 
 /** KALIEN has 7 decimals: 1 point of score improvement mints 10^7 base units. */
@@ -62,14 +72,24 @@ export const ACTIVE_EPOCHS = 144;
 /** Longest tape the contract accepts. */
 export const MAX_FRAMES = 36_000;
 
+/** Fixed part of the `submit_score` wallet root gas limit (same as the Worker). */
+export const SUBMIT_BASE_GAS = 5_000_000n;
+/** Per-frame part of the `submit_score` gas limit (same as the Worker). */
+export const SUBMIT_GAS_PER_FRAME = 4_500n;
+
 /**
- * Wallet root gas limit for one `submit_score`. Measured on RV32 (thruput-sdk 0.54): about
- * 2,070 gas per frame plus 0.2M fixed (36,000 frames: 67.6-74.5M). The sender must hold at
- * least this much free HOG (1 gas = 1 base unit = 10^-7 HOG); gas is not burned.
+ * Wallet root gas limit for one `submit_score`: `5,000,000 + 4,500 × frames` (36,000 frames:
+ * 167M), the same bound as the Worker relay. Measured: valid dense tapes need up to 2,716 gas
+ * per frame (parity corpus) and a searched worst case 3,073 (110.6M for 36,000 frames), plus
+ * about 0.25M for the rest of the call. The sender must hold at least this much free HOG
+ * (1 gas = 1 base unit = 10^-7 HOG); gas is reserved, not burned. Override either part.
  */
-export function submitGasLimit(frameCount: number): bigint {
+export function submitGasLimit(
+  frameCount: number,
+  override: { baseGas?: bigint; gasPerFrame?: bigint } = {},
+): bigint {
   if (!Number.isInteger(frameCount) || frameCount < 0) throw new Error(`bad frame count ${frameCount}`);
-  return 3_000_000n + 2_200n * BigInt(frameCount);
+  return (override.baseGas ?? SUBMIT_BASE_GAS) + (override.gasPerFrame ?? SUBMIT_GAS_PER_FRAME) * BigInt(frameCount);
 }
 
 /** `seed_id` of a unix time in seconds (the contract uses the block time). */
@@ -512,7 +532,7 @@ export interface SubmitScoreInput {
 }
 
 export interface SubmitScoreOptions {
-  /** Override the computed gas limit. */
+  /** Override the computed gas limit (default `submitGasLimit(frames)`). */
   gasLimit?: bigint;
   /** Blocks until the signed transaction expires (client default: 100). */
   expiryBlocks?: bigint;

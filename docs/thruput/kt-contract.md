@@ -2,6 +2,39 @@
 
 Agent: `kt-contract`. Owns `kalien-contract/`, `shared/thruput/`, devnet keys and deploys.
 
+## Round 4 (2026-10-24): review fixes (gas bound, fixture hygiene) — no redeploy
+
+- **Gas:** `submitGasLimit(frames, { baseGas?, gasPerFrame? })` in `shared/thruput/kalien.ts` is now
+  `5,000,000 + 4,500 × frames` (36,000 frames: 167M), the Worker's bound. It covers the densest
+  corpus tape (2,716 gas/frame) and the searched worst case (3,073, 110.6M). `submitScore` still
+  takes `{ gasLimit }`. Constants `SUBMIT_BASE_GAS`, `SUBMIT_GAS_PER_FRAME`. A relay must hold
+  ≥ 16.7 HOG free for a full tape.
+- **Fixture epochs of the live v3 deploy** (checked on-chain): 2988058 (`0x5F41772E`, active until
+  2026-10-25 09:40 UTC), 2988059 (`0x43C9C6CD`, 09:50), 2988060 (`0xDEADBEEF`, 10:00). They are now
+  in `shared/thruput/deployments/devnet.json` as `fixtureSeedIds` and `fixtureEpochs`. The public
+  tapes `autopilot/fixtures/public/kalien-911260-seed1598125870-single-mutation.tape` and
+  `asteroids-core/tests/fixtures/local/offline-supernova-hunt-seed5f41772e-score35850-frames11390.tape`
+  are still unclaimed for 2988058, so the Worker block (kt-worker) is what protects them. A
+  no-op-mutated copy of any fixture tape would also pass the contract, so the block must cover
+  the whole epoch, not single tapes.
+- `KalienConfig.fixtureSeedIds?` and `isFixtureSeedId(config, seedId)` in `kalien.ts`.
+- **Deploy script (`deploy-devnet.sh`, `kalien.ts fixtures`), for future deploys:**
+  - fixture epochs are 3 unseeded epochs starting 4 epochs above the oldest active one
+    (`--epoch-margin`), so they expire within about 40–60 minutes;
+  - after the fixture runs, every git-tracked `.tape` whose seed matches a fixture epoch is
+    claimed with a throwaway key (results in `devnet-fixture-runs.json` → `claims`);
+  - `fixtureSeedIds` / `fixtureEpochs` are written to `devnet.json`;
+  - review item 13: the script refuses when `devnet.json` already names the live network
+    (`--force` overrides); secret files are written to a temp file and moved (no truncation);
+  - overrides for a rehearsal: `KALIEN_RPC_URL`, `KALIEN_DEPLOYMENT_FILE`, `KALIEN_FIXTURE_RUNS_FILE`,
+    `KALIEN_SECRETS_DIR`, `KALIEN_FUND_TIMES`; new tool commands `balance`, `network-hash`.
+- **Tested:** full rehearsal of `deploy-devnet.sh` on an isolated local node (own `XDG_CONFIG_HOME`
+  and `XDG_CACHE_HOME`, port 9645): fixture epochs 2987961–63 (current 2988100); four fixtures
+  confirmed (gas limits now 8.15M … 167M); both extra `0x5F41772E` tapes claimed; `fixtureSeedIds`
+  written; re-run refused by the guard; `kalien.ts integration` passed on the same node. The node is
+  stopped. `bun test shared/thruput/` 15 pass; `KALIEN_LIVE=1` 7 pass (the event test now checks
+  only the first four rows, because live player runs follow them); tsc clean. Contracts unchanged.
+
 ## Round 3 (2026-10-24): wire-14 migration and v3 deploy — current
 
 ### Devnet v3 (current; wire 14.1.0, implementation 0.36.0)

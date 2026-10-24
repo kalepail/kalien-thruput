@@ -32,21 +32,25 @@ const fixtures = join(import.meta.dir, "../../kalien-contract/fixtures");
 const fixture = (name: string) => new Uint8Array(readFileSync(join(fixtures, name)));
 
 describe("constants and local checks", () => {
-  test("gas limit covers the measured gas with margin", () => {
-    // Measured on RV32 with thruput-sdk 0.54 (devnet adds ~300).
+  test("gas limit matches the Worker and covers the measured worst cases", () => {
+    // Measured on RV32 with thruput-sdk 0.54: fixtures, regression tapes, the densest corpus
+    // tape (2,716 gas/frame) and the searched worst 36,000-frame tape (3,073 gas/frame).
     const measured: [number, number][] = [
       [700, 1_550_301],
       [3_956, 7_221_954],
       [5_000, 9_817_917],
-      [6_643, 14_341_977],
       [10_757, 23_209_327],
+      [17_368, 47_180_000 + 250_000],
       [36_000, 74_515_543],
+      [36_000, 110_640_000 + 250_000],
     ];
     for (const [frames, gas] of measured) {
-      const limit = submitGasLimit(frames);
-      expect(limit > BigInt(gas)).toBe(true);
+      expect(submitGasLimit(frames) > BigInt(gas)).toBe(true);
     }
-    expect(submitGasLimit(36_000)).toBe(82_200_000n);
+    expect(submitGasLimit(0)).toBe(5_000_000n);
+    expect(submitGasLimit(36_000)).toBe(167_000_000n);
+    expect(submitGasLimit(10, { baseGas: 1n, gasPerFrame: 2n })).toBe(21n);
+    expect(submitGasLimit(10, { gasPerFrame: 3_000n })).toBe(5_030_000n);
     expect(() => submitGasLimit(-1)).toThrow();
   });
 
@@ -129,7 +133,8 @@ live("live devnet (wire 14)", () => {
       rest.push(...page.rows);
       cursor = page.nextCursor;
     }
-    expect([...first.rows, ...rest].map((r) => r.finalScore)).toEqual([1480, 11190, 14870, 911140]);
+    // The fixture runs come first; live player runs follow them.
+    expect([...first.rows, ...rest].map((r) => r.finalScore).slice(0, 4)).toEqual([1480, 11190, 14870, 911140]);
 
     // Topic filters.
     const mine = await getScoreSubmittedPage(client, deployment, { start: { order: "descending" }, player: runs.player, seedId: runs.runs[0].seedId });

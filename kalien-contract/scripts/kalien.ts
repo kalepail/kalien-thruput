@@ -7,13 +7,17 @@
  * Commands
  *   fund         --rpc URL --key NAME [--times N]          faucet_requestAirdrop to a stored key
  *   balance      --rpc URL --key NAME                       free HOG of a stored key (whole HOG, for scripts)
+ *   network-hash --rpc URL                                  base58 network hash of the endpoint
  *   deploy       --rpc URL --deployer-key NAME --out FILE [--fund-score HOG] [--fund-token HOG]
  *   ensure-seed  --deployment FILE --key NAME               create the current epoch seed
  *   set-seed     --deployment FILE --key NAME --seed HEX|DEC [--seed-id N]   admin only
  *   submit       --deployment FILE --relay-key NAME --tape FILE
  *                (--player-key NAME | --player-secret-file FILE) [--seed-id N] [--gas N]
  *   fixtures     --deployment FILE --admin-key NAME --relay-key NAME --player-key NAME [--out FILE]
- *                fix fixture seeds on free epochs and submit the fixture tapes
+ *                [--epoch-margin N]
+ *                fix fixture seeds on free epochs near the end of the active window (they expire
+ *                within about an hour), submit the fixture tapes, claim every other repo tape
+ *                with a fixture seed (throwaway keys), and record `fixtureSeedIds` in FILE
  *   harden       --deployment FILE --admin-key NAME --relay-keys NAME,NAME,... [--lock-seeding]
  *                allow the relays, turn on relay-only mode, optionally lock set_seed for good
  *   export-secret --key NAME                               print the 32-byte seed as hex (for the Worker secret file)
@@ -24,6 +28,7 @@
  * output files are base58, as on the wire.
  */
 import { ed25519 } from "@noble/curves/ed25519.js";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -42,6 +47,8 @@ import { KalienScore } from "../../shared/thruput/bindings/kalien-score";
 import { ERC20, KalienTokenAdmin } from "../../shared/thruput/bindings/kalien-token";
 import { claimMessage, fromHex, pubkeyAccountAddress, tapeHash, toHex } from "../../shared/thruput/claim";
 import {
+  ACTIVE_EPOCHS,
+  EPOCH_SECONDS,
   connectKalien,
   ensureCurrentSeed,
   getCurrentSeedId,
@@ -50,6 +57,7 @@ import {
   getScoreConfig,
   getScoreSubmittedPage,
   getSeed,
+  isTapeClaimed,
   jsonReplacer,
   parseAddress,
   submitScore,
@@ -213,6 +221,10 @@ async function cmdFund(args: Record<string, string>) {
   console.log(`${args.key} ${toBase58(wallet.account.address)} balance ${await balanceHog(client, wallet.account.address)} HOG`);
 }
 
+async function cmdNetworkHash(args: Record<string, string>) {
+  console.log(toBase58((await connectRpc(need(args, "rpc"))).network.networkHash));
+}
+
 async function cmdBalance(args: Record<string, string>) {
   const client = await connectRpc(need(args, "rpc"));
   const address = walletFor(client, loadKeySecret(need(args, "key"))).account.address;
@@ -276,17 +288,37 @@ async function cmdSubmit(args: Record<string, string>) {
   if (outcome.status !== "confirmed") process.exitCode = 1;
 }
 
+/** Every `.tape` file in the repo (git-tracked plus kalien-contract/fixtures), deduped by sha256. */
+function repoTapes(): { path: string; bytes: Uint8Array; seed: number }[] {
+  const listed = execFileSync("git", ["-C", REPO, "ls-files", "*.tape"], { encoding: "utf8" }).split("\n").filter(Boolean);
+  const seen = new Set<string>();
+  const out: { path: string; bytes: Uint8Array; seed: number }[] = [];
+  for (const rel of listed) {
+    const bytes = new Uint8Array(readFileSync(join(REPO, rel)));
+    if (bytes.length < 24) continue;
+    const key = toHex(tapeHash(bytes));
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ path: rel, bytes, seed: new DataView(bytes.buffer, bytes.byteOffset).getUint32(8, true) });
+  }
+  return out;
+}
+
 async function cmdFixtures(args: Record<string, string>) {
-  const dep = loadDeployment(need(args, "deployment"));
+  const depPath = need(args, "deployment");
+  const dep = loadDeployment(depPath);
   const client = await connectKalien(dep);
   const admin = walletFor(client, loadKeySecret(need(args, "admin-key")));
   const relay = walletFor(client, loadKeySecret(need(args, "relay-key")));
   const player = loadKeySecret(need(args, "player-key"));
 
-  // Free epochs inside the active window, newest first (the current one is left to the cron).
+  // Fixture seeds are public (their tapes are in the repo), so use unseeded epochs near the old
+  // end of the active window: they expire soon. `--epoch-margin` epochs (10 min each) are kept
+  // in hand so the epochs stay active for the whole run.
+  const margin = Number(args["epoch-margin"] ?? 4);
   const now = await getCurrentSeedId(client, dep);
   const free: number[] = [];
-  for (let id = now - 1; id > now - 144 && free.length < 3; id--) {
+  for (let id = now - (ACTIVE_EPOCHS - 1) + margin; id < now && free.length < 3; id++) {
     if ((await getSeed(client, dep, id)) === null) free.push(id);
   }
   if (free.length < 3) throw new Error("fewer than 3 unseeded epochs in the active window");
@@ -307,9 +339,28 @@ async function cmdFixtures(args: Record<string, string>) {
       if (outcome.status !== "confirmed") throw new Error(`${name} failed: ${json(outcome)}`);
     }
   }
+
+  // Claim every other public tape for a fixture seed, so nobody can mint with it. Each gets a
+  // throwaway key (a lower score than the test player's best would be NotImproved for that key).
+  const seedToEpoch = new Map(plan.map((p) => [p.seed, p.seedId]));
+  const claims: Record<string, unknown>[] = [];
+  for (const tape of repoTapes()) {
+    const seedId = seedToEpoch.get(tape.seed);
+    if (seedId === undefined || (await isTapeClaimed(client, dep, tape.bytes))) continue;
+    const outcome = await submitSigned(relay, dep, crypto.getRandomValues(new Uint8Array(32)), seedId, tape.bytes);
+    console.log(`claim ${tape.path}: ${outcome.status} ${outcome.errorName ?? ""} score ${outcome.run?.finalScore ?? "-"} tx ${outcome.transactionHash}`);
+    claims.push({ tape: tape.path, seedId, seed: tape.seed, status: outcome.status, errorName: outcome.errorName, finalScore: outcome.run?.finalScore ?? null, transactionHash: outcome.transactionHash });
+  }
+
+  // Record the fixture epochs: the Worker refuses them by default.
+  const epochs = plan.map((p) => ({ seedId: p.seedId, seed: p.seed, activeUntil: new Date((p.seedId + ACTIVE_EPOCHS) * EPOCH_SECONDS * 1000).toISOString() }));
+  const updated = { ...loadDeployment(depPath), fixtureSeedIds: epochs.map((e) => e.seedId), fixtureEpochs: epochs };
+  writeFileSync(resolve(depPath), JSON.stringify(updated, null, 2) + "\n");
+  console.log(`recorded fixtureSeedIds ${updated.fixtureSeedIds.join(", ")} in ${depPath}`);
+
   const playerAddress = pubkeyAccountAddress(ed25519.getPublicKey(player));
   const balance = await getKalienBalance(client, dep, playerAddress);
-  const result = { network: dep.networkHash, scoreContract: dep.scoreContract, tokenContract: dep.tokenContract, player: playerAddress, kalienBalance: balance, runs, at: new Date().toISOString() };
+  const result = { network: dep.networkHash, scoreContract: dep.scoreContract, tokenContract: dep.tokenContract, player: playerAddress, kalienBalance: balance, fixtureEpochs: epochs, runs, claims, at: new Date().toISOString() };
   if (args.out) {
     mkdirSync(dirname(resolve(args.out)), { recursive: true });
     writeFileSync(resolve(args.out), json(result) + "\n");
@@ -421,6 +472,7 @@ const args = parseArgs(rest);
 const commands: Record<string, (a: Record<string, string>) => Promise<void>> = {
   fund: cmdFund,
   balance: cmdBalance,
+  "network-hash": cmdNetworkHash,
   deploy: cmdDeploy,
   "ensure-seed": cmdEnsureSeed,
   "set-seed": cmdSetSeed,
