@@ -1,16 +1,16 @@
 import {
-  addressFromHex,
-  ExecResult,
+  addressFromBase58,
   fixedBytes,
   gasAmount,
-  toHex0x,
-  type FixedBytes,
+  toBase58,
   type Invocation,
-  type TransactionReceipt,
+  type RpcTransactionReceipt,
 } from "@thruputchain/client";
-import { hexToBytes } from "../hex";
 import { KalienScore, kalien_score } from "../../shared/thruput/bindings/kalien-score";
+import { bytesToHex, hexToBytes } from "../hex";
+import { parseId32 } from "../ids";
 import type { ChainClient } from "./network";
+import type { ChainReceipt } from "./types";
 
 export interface SubmitScoreArgs {
   playerPubkey: Uint8Array;
@@ -19,7 +19,7 @@ export interface SubmitScoreArgs {
   signature: Uint8Array;
 }
 
-/** Decoded `ScoreSubmitted` event. Addresses and hashes are 0x hex. */
+/** Decoded `ScoreSubmitted` event. Addresses are base58; the tape hash is hex (no 0x). */
 export interface ScoreSubmitted {
   player: string;
   seedId: number;
@@ -31,6 +31,8 @@ export interface ScoreSubmitted {
   /** KALIEN base units (7 decimals). */
   mintedDelta: bigint;
   tapeHash: string;
+  /** Block time from the event, unix seconds. */
+  submittedAt: number;
 }
 
 export interface FailureInfo {
@@ -46,10 +48,10 @@ export interface IndexedScoreSubmitted extends ScoreSubmitted {
 
 export interface ScoreEventPage {
   events: IndexedScoreSubmitted[];
-  /** Empty means this walk is exhausted. */
-  cursor: Uint8Array;
-  latestBlock: bigint;
-  oldestBlock: bigint;
+  /** Null ends the walk; empty pages can still have a cursor. */
+  nextCursor: string | null;
+  latestIndexedBlockHeight: bigint;
+  oldestIndexedBlockHeight: bigint;
 }
 
 /**
@@ -57,25 +59,32 @@ export interface ScoreEventPage {
  * implementation wraps the generated bindings; tests use a fake.
  */
 export interface ScoreContract {
+  /** Base58. */
   readonly address: string;
   submitScoreInvocation(args: SubmitScoreArgs, gas: bigint): Invocation;
   currentSeedInvocation(gas: bigint): Invocation;
   /** Stored seed for an epoch, or null when nothing has touched it yet. */
   seedFor(seedId: number): Promise<number | null>;
   bestScore(playerAddress: string, seedId: number): Promise<number>;
-  isClaimed(tapeHash: string): Promise<boolean>;
+  /** `minStateBlockHeight` makes the read see at least that block. */
+  isClaimed(tapeHash: string, minStateBlockHeight?: bigint): Promise<boolean>;
+  /** Whether a relay address is on the contract's allowlist. */
+  isRelay(address: string): Promise<boolean>;
   /** The `ScoreSubmitted` event this contract emitted in a receipt, if any. */
-  scoreSubmittedFromReceipt(receipt: TransactionReceipt): ScoreSubmitted | null;
+  scoreSubmittedFromReceipt(receipt: ChainReceipt): ScoreSubmitted | null;
   /**
    * Why a receipt failed, and whose fault it is. A relay fault (allowlist,
    * pause, gas, storage conflict) can be retried with a new transaction; a
    * player fault (bad tape, seed, score) cannot.
    */
-  classifyFailure(receipt: TransactionReceipt): FailureInfo;
-  /** One ascending page of `ScoreSubmitted` events from `fromHeight`. */
+  classifyFailure(receipt: ChainReceipt): FailureInfo;
+  /**
+   * One ascending page of `ScoreSubmitted` events: a new walk from
+   * `fromHeight` (inclusive) when `cursor` is null, else its continuation.
+   */
   scoreEvents(query: {
     fromHeight: bigint;
-    cursor: Uint8Array;
+    cursor: string | null;
     limit: number;
   }): Promise<ScoreEventPage>;
 }
@@ -105,18 +114,21 @@ const ERROR_REASONS: Record<string, string> = {
   ScoreMismatch: "the replayed score does not match the tape",
 };
 
-function hex(bytes: Uint8Array): string {
-  return toHex0x(bytes);
-}
+// Contract errors that say nothing about the run itself.
+const RELAY_FAULTS = new Set(["Paused", "NotRelay", "NotAdmin", "AlreadyInitialized"]);
 
-function bytes32(value: string): FixedBytes<32> {
-  return fixedBytes(hexToBytes(value), 32);
+function address(value: string) {
+  const bytes = parseId32(value);
+  if (!bytes) {
+    throw new Error(`not a 32-byte address: ${value}`);
+  }
+  return addressFromBase58(toBase58(bytes));
 }
 
 function toScoreSubmitted(event: kalien_score.v0_1.implementation.ScoreSubmitted): ScoreSubmitted {
   const { fields, topics } = event;
   return {
-    player: hex(topics.player),
+    player: toBase58(topics.player),
     seedId: Number(topics.seed_id),
     seed: Number(fields.seed) >>> 0,
     frameCount: Number(fields.frame_count),
@@ -124,16 +136,14 @@ function toScoreSubmitted(event: kalien_score.v0_1.implementation.ScoreSubmitted
     previousBest: Number(fields.previous_best),
     newBest: Number(fields.new_best),
     mintedDelta: fields.minted_delta,
-    tapeHash: hex(fields.tape_hash),
+    tapeHash: bytesToHex(fields.tape_hash),
+    submittedAt: Number(fields.submitted_at),
   };
 }
 
-// Contract errors that say nothing about the run itself.
-const RELAY_FAULTS = new Set(["Paused", "NotRelay", "NotAdmin", "AlreadyInitialized"]);
-
 /** A failed receipt: the contract error name when the abort data has one. */
-export function classifyScoreFailure(receipt: TransactionReceipt): FailureInfo {
-  if (receipt.abortData && receipt.abortData.length > 0) {
+export function classifyScoreFailure(receipt: ChainReceipt): FailureInfo {
+  if (receipt.outcome === "abort" && receipt.abortData && receipt.abortData.length > 0) {
     try {
       const exception = methods.submitScore.decodeException(receipt.abortData);
       if (exception.kind === "declared") {
@@ -148,28 +158,19 @@ export function classifyScoreFailure(receipt: TransactionReceipt): FailureInfo {
       // Not a ScoreError payload; fall through.
     }
   }
-  // Anything else (wallet revert, gas fault, storage conflict) is not the
-  // player's fault.
-  const status = receipt.executionStatus;
-  if (status?.result === "reverted") {
-    return {
-      reason: status.message ? `reverted: ${status.message}` : "reverted",
-      relayFault: true,
-    };
-  }
-  if (status?.result === "deterministicError") {
-    return { reason: `execution fault: ${status.kind}`, relayFault: true };
-  }
+  // Anything else (wallet abort, fault, storage conflict, gas sponsorship) is
+  // not the player's fault.
   return {
-    reason: `execution failed (${ExecResult[receipt.execResult] ?? receipt.execResult})`,
+    reason:
+      receipt.outcome === "abort" ? "aborted without a ScoreError" : `execution ${receipt.outcome}`,
     relayFault: true,
   };
 }
 
-export const createScoreContract: ScoreContractFactory = (client, address) => {
-  const contract = addressFromHex(address);
+export const createScoreContract: ScoreContractFactory = (client, contractId) => {
+  const contract = address(contractId);
   return {
-    address: hex(contract),
+    address: toBase58(contract),
     submitScoreInvocation(args, gas) {
       return methods.submitScore.invocation(contract, gasAmount(gas), {
         playerPubkey: fixedBytes(args.playerPubkey, 32),
@@ -184,7 +185,7 @@ export const createScoreContract: ScoreContractFactory = (client, address) => {
     async seedFor(seedId) {
       const result = await methods.seed.view({
         client,
-        contract,
+        address: contract,
         args: { seedId: BigInt(seedId) },
       });
       return result.value === null ? null : Number(result.value) >>> 0;
@@ -192,43 +193,58 @@ export const createScoreContract: ScoreContractFactory = (client, address) => {
     async bestScore(playerAddress, seedId) {
       const result = await methods.bestScore.view({
         client,
-        contract,
-        args: { player: addressFromHex(playerAddress), seedId: BigInt(seedId) },
+        address: contract,
+        args: { player: address(playerAddress), seedId: BigInt(seedId) },
       });
       return Number(result.value);
     },
-    async isClaimed(tapeHash) {
+    async isClaimed(tapeHash, minStateBlockHeight) {
       const result = await methods.isClaimed.view({
         client,
-        contract,
-        args: { tapeHash: bytes32(tapeHash) },
+        address: contract,
+        args: { tapeHash: fixedBytes(hexToBytes(tapeHash), 32) },
+        ...(minStateBlockHeight === undefined ? {} : { minStateBlockHeight }),
+      });
+      return result.value;
+    },
+    async isRelay(relay) {
+      const result = await methods.isRelay.view({
+        client,
+        address: contract,
+        args: { relay: address(relay) },
       });
       return result.value;
     },
     scoreSubmittedFromReceipt(receipt) {
-      const [event] = events.ScoreSubmitted.allFromReceipt(receipt, { contractAddress: contract });
+      const raw = receipt.raw as RpcTransactionReceipt | null;
+      if (!raw) {
+        return null;
+      }
+      const [event] = events.ScoreSubmitted.allFromReceipt(raw, { address: contract });
       return event ? toScoreSubmitted(event) : null;
     },
     classifyFailure: classifyScoreFailure,
     async scoreEvents({ fromHeight, cursor, limit }) {
       const page = await client.getContractEvents({
         event: events.ScoreSubmitted,
-        contractAddresses: [contract],
-        order: "ascending",
-        anchor: { height: fromHeight },
-        cursor,
+        addresses: [contract],
         limit,
+        ...(cursor
+          ? { cursor }
+          : {
+              start: { order: "ascending", anchor: { kind: "atHeight", blockHeight: fromHeight } },
+            }),
       });
       return {
         events: page.events.map((event) => ({
           ...toScoreSubmitted(event),
-          txHash: hex(event.txHash),
+          txHash: toBase58(event.transactionHash),
           blockHeight: event.blockHeight,
           sequenceNumber: event.sequenceNumber,
         })),
-        cursor: page.cursor,
-        latestBlock: page.latestBlock,
-        oldestBlock: page.oldestBlock,
+        nextCursor: page.nextCursor,
+        latestIndexedBlockHeight: page.latestIndexedBlockHeight,
+        oldestIndexedBlockHeight: page.oldestIndexedBlockHeight,
       };
     },
   };

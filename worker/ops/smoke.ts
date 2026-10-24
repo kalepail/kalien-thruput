@@ -10,7 +10,7 @@
 /* eslint-disable no-await-in-loop -- operator script: polls and steps in order */
 import { AsteroidsGame } from "../../src/game/AsteroidsGame";
 import type { Autopilot } from "../../src/game/Autopilot";
-import { claimMessage, pubkeyAccountAddress } from "../../shared/thruput/claim";
+import { claimMessage, pubkeyAccountAddress } from "../claim";
 import { bytesToHex, hexToBytes } from "../hex";
 
 const args = process.argv.slice(2);
@@ -54,7 +54,7 @@ const info = (await (
   await fetch(cfg.rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "groundhog_networkInfo", params: [] }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getNetworkInfo", params: {} }),
   })
 ).json()) as { result?: { networkHash?: string } };
 check(

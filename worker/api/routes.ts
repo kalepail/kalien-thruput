@@ -4,7 +4,7 @@ import { chainSettings } from "../chain/network";
 import { CONFIG_CACHE_CONTROL, HEALTH_CACHE_CONTROL, SEED_CACHE_CONTROL } from "../cache-control";
 import { getIndexerState } from "../leaderboard/store";
 import { runLeaderboardSync } from "../leaderboard/sync";
-import { allLanes, relayLane } from "../relay/stub";
+import { allLanes, allowedLanes, relayLane } from "../relay/stub";
 import { currentSeedId, lookupSeed, secondsLeftInEpoch } from "../seed";
 import { safeErrorMessage } from "../utils";
 import { isAdmin, jsonError, type AppEnv } from "./http";
@@ -73,12 +73,15 @@ export function createApiRouter(): Hono<AppEnv> {
 
   // GET /api/health
   api.get("/health", async (c) => {
+    const allowed = await chainContext(c.env)
+      .then((chain) => allowedLanes(c.env, chain.score))
+      .catch(() => null);
     const [lanes, indexer] = await Promise.all([
       Promise.all(
         allLanes(c.env).map((lane) =>
           relayLane(c.env, lane)
             .status(lane)
-            .then((status) => ({ lane, ...status }))
+            .then((status) => ({ lane, allowed: allowed?.includes(lane) ?? null, ...status }))
             .catch((error: unknown) => ({ lane, error: safeErrorMessage(error) })),
         ),
       ),

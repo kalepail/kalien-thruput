@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { WorkerEnv } from "../env";
+import { normalizeId } from "../ids";
 
 export type AppEnv = { Bindings: WorkerEnv };
 export type AppContext = Context<AppEnv>;
@@ -18,15 +19,9 @@ export function clientIp(c: AppContext): string {
   return c.req.raw.headers.get("cf-connecting-ip") ?? "unknown";
 }
 
-const ADDRESS_PATTERN = /^(?:0x)?[0-9a-f]{64}$/iu;
-
-/** Normalizes a 32-byte Thruput address to lowercase 0x hex, or null. */
+/** A 32-byte Thruput address (base58, or 64 hex chars) as base58, or null. */
 export function normalizeAddress(raw: string | undefined | null): string | null {
-  const trimmed = raw?.trim();
-  if (!trimmed || !ADDRESS_PATTERN.test(trimmed)) {
-    return null;
-  }
-  return `0x${trimmed.replace(/^0x/iu, "").toLowerCase()}`;
+  return normalizeId(raw);
 }
 
 /** Fixed-window counters per key; in memory, per isolate. */

@@ -8,7 +8,7 @@
 import { AsteroidsGame } from "../../../src/game/AsteroidsGame";
 import type { Autopilot } from "../../../src/game/Autopilot";
 import { deserializeTape, serializeTape } from "../../../src/game/tape";
-import { claimMessage, pubkeyAccountAddress } from "../../../shared/thruput/claim";
+import { claimMessage, pubkeyAccountAddress } from "../../../worker/claim";
 import { bytesToHex, hexToBytes } from "../../../worker/hex";
 import { replayTape } from "../../../worker/replay";
 

@@ -111,6 +111,42 @@ describe("relay lanes", () => {
   });
 });
 
+describe("allowlist routing", () => {
+  it("sends new runs only to lanes whose key is an allowed relay", async () => {
+    const { relayAddress } = await import("../../worker/chain/relay-wallet");
+    const { relaySecrets } = await import("../../worker/relay/lanes");
+    const { resetAllowlistCache } = await import("../../worker/relay/stub");
+    resetAllowlistCache();
+    const t = testApp({ lanes: 4 });
+    const secrets = relaySecrets(t.env);
+    // Lanes 1 and 3 are not on the allowlist.
+    t.chain.blockedRelays.add(relayAddress(secrets[1] ?? new Uint8Array()));
+    t.chain.blockedRelays.add(relayAddress(secrets[3] ?? new Uint8Array()));
+    const player = await testPlayer(6);
+    const base = currentSeedId();
+    for (const [index, count] of [900, 1300, 1700, 2100, 2500, 2900].entries()) {
+      const seedId = base - index;
+      t.chain.seeds.set(seedId, 0xdeadbeef);
+      const tape = prefixTape(count);
+      const sig = bytesToHex(await signClaim(player, seedId, tape));
+      // eslint-disable-next-line no-await-in-loop
+      const response = await t.request(
+        `/api/runs?pubkey=${bytesToHex(player.pubkey)}&seed_id=${seedId}&sig=${sig}`,
+        { method: "POST", body: tape },
+      );
+      expect(response.status).toBe(202);
+    }
+    const counts = t.lanes.map((lane) => lane.store.countByPlayer(player.address));
+    expect(counts[1]).toBe(0);
+    expect(counts[3]).toBe(0);
+    expect((counts[0] ?? 0) + (counts[2] ?? 0)).toBe(6);
+    const health = (await (await t.request("/api/health")).json()) as {
+      lanes: Array<{ lane: number; allowed: boolean | null }>;
+    };
+    expect(health.lanes.map((lane) => lane.allowed)).toEqual([true, false, true, false]);
+  });
+});
+
 describe("RelayService.kick", () => {
   it("re-arms a lost alarm only when work is pending", async () => {
     const { RelayService } = await import("../../worker/relay/service");

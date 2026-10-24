@@ -29,6 +29,8 @@ export interface RunRecord {
   signedTx: string | null;
   expiryHeight: string | null;
   lastBroadcastAt: number | null;
+  /** Height from a `committed` status of the current transaction, if seen. */
+  committedHeight: string | null;
   nextAttemptAt: number;
   score: number | null;
   previousBest: number | null;
@@ -83,6 +85,7 @@ const SCHEMA = [
     signed_tx TEXT,
     expiry_height TEXT,
     last_broadcast_at INTEGER,
+    committed_height TEXT,
     next_attempt_at INTEGER NOT NULL DEFAULT 0,
     score INTEGER,
     previous_best INTEGER,
@@ -133,6 +136,7 @@ function toRun(row: Row): RunRecord {
     signedTx: str(row.signed_tx),
     expiryHeight: str(row.expiry_height),
     lastBroadcastAt: row.last_broadcast_at === null ? null : num(row.last_broadcast_at),
+    committedHeight: str(row.committed_height),
     nextAttemptAt: num(row.next_attempt_at),
     score: row.score === null ? null : num(row.score),
     previousBest: row.previous_best === null ? null : num(row.previous_best),
@@ -148,6 +152,11 @@ export class RelayStore {
   constructor(private readonly sql: SqlLike) {
     for (const statement of SCHEMA) {
       sql.exec(statement);
+    }
+    // Journals made before committed_height existed.
+    const columns = sql.exec<Row>(`PRAGMA table_info(runs)`).toArray();
+    if (!columns.some((column) => column.name === "committed_height")) {
+      sql.exec(`ALTER TABLE runs ADD COLUMN committed_height TEXT`);
     }
   }
 
@@ -293,10 +302,20 @@ export class RelayStore {
     );
     this.sql.exec(
       `UPDATE runs SET status = 'submitting', attempts = attempts + 1, tx_hash = ?, signed_tx = ?,
-         expiry_height = ?, last_broadcast_at = NULL, updated_at = ? WHERE run_id = ?`,
+         expiry_height = ?, last_broadcast_at = NULL, committed_height = NULL, updated_at = ?
+       WHERE run_id = ?`,
       attempt.txHash,
       attempt.signedTx,
       attempt.expiryHeight,
+      now,
+      runId,
+    );
+  }
+
+  markCommitted(runId: string, height: string, now: number): void {
+    this.sql.exec(
+      `UPDATE runs SET committed_height = ?, updated_at = ? WHERE run_id = ?`,
+      height,
       now,
       runId,
     );

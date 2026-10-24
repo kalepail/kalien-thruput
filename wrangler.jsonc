@@ -76,4 +76,41 @@
     // */1: leaderboard indexer. */10: touch the current seed epoch.
     "crons": ["*/1 * * * *", "*/10 * * * *"],
   },
+
+  // Local development against `thruput node` (CLOUDFLARE_ENV=local). It reads every key
+  // from .dev.vars.local: RELAY_SECRETS, DEV_API_KEY, THRUPUT_RPC_URL, SCORE_CONTRACT,
+  // TOKEN_CONTRACT. Never deployed.
+  "env": {
+    "local": {
+      "name": "kalien-thruput-local",
+      "workers_dev": false,
+      "vars": {
+        "THRUPUT_RPC_URL": "http://127.0.0.1:9745",
+        "THRUPUT_NETWORK_HASH": "",
+        "SCORE_CONTRACT": "",
+        "TOKEN_CONTRACT": "",
+        "EXPLORER_URL": "",
+        "RELAY_GAS_BASE": "3000000",
+        "RELAY_GAS_PER_FRAME": "2300",
+        "RELAY_GAS_MAX": "90000000",
+        "RELAY_WALLET_GAS_OVERHEAD": "100000",
+        "RELAY_SEED_GAS": "1000000",
+        "RELAY_EXPIRY_BLOCKS": "120",
+        "RELAY_MAX_IN_FLIGHT": "4",
+        "LEADERBOARD_SYNC_ENABLED": "1",
+        "LEADERBOARD_SYNC_MAX_PAGES": "10",
+      },
+      "d1_databases": [
+        {
+          "binding": "LEADERBOARD_DB",
+          "database_name": "kalien-thruput-leaderboard",
+          "database_id": "5bd1495c-f925-4571-bf8c-adde06c93236",
+          "migrations_dir": "worker/migrations",
+        },
+      ],
+      "r2_buckets": [{ "binding": "TAPES", "bucket_name": "kalien-thruput-tapes" }],
+      "durable_objects": { "bindings": [{ "name": "RELAY", "class_name": "RelayDO" }] },
+      "triggers": { "crons": ["*/1 * * * *", "*/10 * * * *"] },
+    },
+  },
 }

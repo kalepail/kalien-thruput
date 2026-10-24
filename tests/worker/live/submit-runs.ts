@@ -7,7 +7,7 @@
 // submits it, polls until the run is final, then checks the tape download,
 // the player's run list, and the leaderboard.
 import { readFileSync } from "fs";
-import { claimMessage, pubkeyAccountAddress } from "../../../shared/thruput/claim";
+import { claimMessage, pubkeyAccountAddress } from "../../../worker/claim";
 import { bytesToHex, hexToBytes } from "../../../worker/hex";
 
 const args = process.argv.slice(2);

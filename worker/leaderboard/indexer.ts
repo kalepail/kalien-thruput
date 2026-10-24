@@ -1,6 +1,4 @@
-import { SEED_ACTIVE_EPOCHS, SEED_EPOCH_SECONDS } from "../constants";
 import type { WorkerEnv } from "../env";
-import { bytesToHex, hexToBytes } from "../hex";
 import { safeErrorMessage } from "../utils";
 import type { IndexedScoreSubmitted, ScoreContract, ScoreSubmitted } from "../chain/score-contract";
 import {
@@ -38,7 +36,7 @@ export function scoreEventRow(
 ): ScoreEventRow {
   return {
     tapeHash: event.tapeHash.replace(/^0x/iu, "").toLowerCase(),
-    playerAddress: event.player.toLowerCase(),
+    playerAddress: event.player,
     seedId: event.seedId,
     seed: event.seed >>> 0,
     frameCount: event.frameCount,
@@ -46,7 +44,7 @@ export function scoreEventRow(
     previousBest: event.previousBest,
     newBest: event.newBest,
     mintedDelta: event.mintedDelta.toString(),
-    txHash: meta.txHash.toLowerCase(),
+    txHash: meta.txHash,
     blockHeight: meta.blockHeight.toString(),
     closedAt: new Date(meta.closedAtMs).toISOString(),
     source: meta.source,
@@ -79,10 +77,7 @@ export async function syncScoreEvents(
   options: { maxPages: number; pageLimit: number },
 ): Promise<SyncResult> {
   const saved = await getIndexerState(env);
-  let state =
-    saved && saved.contractAddress.toLowerCase() === score.address.toLowerCase()
-      ? saved
-      : freshState(score.address);
+  let state = saved && saved.contractAddress === score.address ? saved : freshState(score.address);
   let warning: string | null = null;
   let pages = 0;
   let events = 0;
@@ -94,18 +89,22 @@ export async function syncScoreEvents(
       // eslint-disable-next-line no-await-in-loop -- pages depend on the previous cursor
       const page = await score.scoreEvents({
         fromHeight: BigInt(state.fromHeight),
-        cursor: state.cursor ? hexToBytes(state.cursor) : new Uint8Array(),
+        cursor: state.cursor || null,
         limit: options.pageLimit,
       });
       pages += 1;
-      if (BigInt(state.lastHeight) > 0n && page.oldestBlock > BigInt(state.lastHeight)) {
-        warning = `history gap: indexer keeps blocks from ${page.oldestBlock}, last stored row is at ${state.lastHeight}`;
+      if (
+        BigInt(state.lastHeight) > 0n &&
+        page.oldestIndexedBlockHeight > BigInt(state.lastHeight)
+      ) {
+        warning = `history gap: indexer keeps blocks from ${page.oldestIndexedBlockHeight}, last stored row is at ${state.lastHeight}`;
       }
       // eslint-disable-next-line no-await-in-loop -- block times for this page
-      const rows = await rowsForPage(page.events, page.latestBlock, chain);
+      const rows = await rowsForPage(page.events, chain);
       const last = page.events.at(-1);
-      const cursor = bytesToHex(page.cursor);
-      exhausted = cursor.length === 0;
+      // Only a null cursor ends the walk; empty pages can continue.
+      const cursor = page.nextCursor ?? "";
+      exhausted = page.nextCursor === null;
       const lastHeight = last ? last.blockHeight.toString() : state.lastHeight;
       const next: IndexerState = {
         ...state,
@@ -113,8 +112,8 @@ export async function syncScoreEvents(
         fromHeight: exhausted ? lastHeight : state.fromHeight,
         cursor,
         lastHeight,
-        latestBlock: page.latestBlock.toString(),
-        oldestBlock: page.oldestBlock.toString(),
+        latestBlock: page.latestIndexedBlockHeight.toString(),
+        oldestBlock: page.oldestIndexedBlockHeight.toString(),
         lastSyncedAt: new Date().toISOString(),
         lastError: warning,
       };
@@ -154,33 +153,10 @@ export async function syncScoreEvents(
   };
 }
 
-/** Devnet makes about one block every 2 s (measured 2026-10-23). */
-const ESTIMATED_BLOCK_MS = 2_000;
-const EPOCH_MS = SEED_EPOCH_SECONDS * 1000;
-
-/**
- * Event time. Thruput RPCs (devnet and `thruput node`) do not serve
- * `getBlockByNumber` yet, so when that fails estimate from the distance to
- * the head block, kept inside the window the contract allows for the seed.
- */
-export function estimateEventTimeMs(
-  event: { blockHeight: bigint; seedId: number },
-  latestBlock: bigint,
-  nowMs: number,
-): number {
-  const behind = latestBlock > event.blockHeight ? Number(latestBlock - event.blockHeight) : 0;
-  const estimate = nowMs - behind * ESTIMATED_BLOCK_MS;
-  const earliest = event.seedId * EPOCH_MS;
-  const latest = Math.min(nowMs, earliest + SEED_ACTIVE_EPOCHS * EPOCH_MS);
-  return Math.min(Math.max(estimate, earliest), latest);
-}
-
 async function rowsForPage(
   events: IndexedScoreSubmitted[],
-  latestBlock: bigint,
   chain: IndexerChain,
 ): Promise<ScoreEventRow[]> {
-  const nowMs = Date.now();
   const times = new Map<bigint, number | null>();
   for (const height of new Set(events.map((event) => event.blockHeight))) {
     // eslint-disable-next-line no-await-in-loop -- few distinct blocks per page
@@ -190,7 +166,8 @@ async function rowsForPage(
     scoreEventRow(event, {
       txHash: event.txHash,
       blockHeight: event.blockHeight,
-      closedAtMs: times.get(event.blockHeight) ?? estimateEventTimeMs(event, latestBlock, nowMs),
+      // The block's own time; the event's seconds if the block lookup failed.
+      closedAtMs: times.get(event.blockHeight) ?? event.submittedAt * 1000,
       source: "indexer",
     }),
   );

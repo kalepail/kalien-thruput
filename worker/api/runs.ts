@@ -4,7 +4,7 @@ import { chainContext } from "../chain/context";
 import { MAX_TAPE_BYTES } from "../constants";
 import { bytesToHex, parseFixedHex, sha256 } from "../hex";
 import { replayTape } from "../replay";
-import { allLanes, findRun, laneOf, relayLane } from "../relay/stub";
+import { allLanes, allowedLanes, findRun, pickLane, relayLane } from "../relay/stub";
 import type { RunCursor } from "../relay/store";
 import type { RunView } from "../relay/view";
 import { isSeedIdActive, lookupSeed } from "../seed";
@@ -153,7 +153,6 @@ export function createRunsRouter(): Hono<AppEnv> {
     const playerAddress = pubkeyAccountAddress(pubkey);
     const found = await findRun(c.env, runId);
     const existing = found?.run ?? null;
-    const lane = found?.lane ?? laneOf(c.env, runId);
     if (existing && existing.playerAddress !== playerAddress) {
       return jsonError(c, 409, "this tape was already submitted by another player", {
         code: "already_claimed",
@@ -232,6 +231,9 @@ export function createRunsRouter(): Hono<AppEnv> {
       return jsonError(c, 503, "chain read failed; try again", { code: "chain_unavailable" });
     }
 
+    // A failed run is queued again in the lane that holds it; a new run goes
+    // to an allowed lane.
+    const lane = found?.lane ?? pickLane(runId, await allowedLanes(c.env, chain.score));
     await putTape(c.env, runId, tape);
     const { run } = await relayLane(c.env, lane).submitRun(lane, {
       runId,

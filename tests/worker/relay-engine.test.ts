@@ -160,6 +160,46 @@ describe("RelayEngine", () => {
     expect(store.requireRun(run.runId).status).toBe("confirmed");
   });
 
+  it("never replaces a transaction once its commitment is known", async () => {
+    const run = await newRun(shortTape);
+    engine.enqueue(run);
+    await engine.tick();
+    await chain.mine();
+    // Commitment is visible, but the receipt lags (indexer).
+    const txHash = store.requireRun(run.runId).txHash ?? "";
+    const receipt = chain.receipts.get(txHash);
+    chain.receipts.delete(txHash);
+    const status = chain.relayChain().status;
+    const relay = (engine as unknown as { deps: { chain: { status: typeof status } } }).deps.chain;
+    relay.status = async () => ({ status: "committed", blockHeight: chain.height });
+    await engine.tick();
+    expect(store.requireRun(run.runId).committedHeight).toBe(chain.height.toString());
+    // Now status says unknown and expiry passes: still no replacement.
+    relay.status = async () => ({ status: "unknown" });
+    await chain.mine(20n);
+    await engine.tick();
+    await engine.tick();
+    expect(chain.signed.size).toBe(1);
+    expect(store.requireRun(run.runId).status).toBe("submitting");
+    // The receipt shows up and settles the run.
+    if (receipt) chain.receipts.set(txHash, receipt);
+    await engine.tick();
+    expect(store.requireRun(run.runId).status).toBe("confirmed");
+  });
+
+  it("does not treat a refused re-send as proof of non-admission", async () => {
+    chain.dropBroadcasts = true;
+    const run = await newRun(shortTape);
+    engine.enqueue(run);
+    await engine.tick();
+    now += DEFAULT_RELAY_POLICY.rebroadcastAfterMs;
+    chain.broadcastPlan.push({ kind: "rejected", reason: "transactionRejected" });
+    await engine.tick();
+    const after = store.requireRun(run.runId);
+    expect(after.status).toBe("submitting");
+    expect(after.attempts).toBe(1);
+  });
+
   it("re-broadcasts the same bytes while the transaction can still commit", async () => {
     chain.dropBroadcasts = true;
     const run = await newRun(shortTape);

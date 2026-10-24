@@ -1,8 +1,12 @@
-# Cloudflare Worker local overrides (`vite dev` / `wrangler dev`).
-# Copy to .dev.vars and fill in. Never commit .dev.vars.
+# Cloudflare Worker local secrets (`vite dev`). Never commit these files.
 #
-# Non-secret vars live in wrangler.jsonc "vars". Values here override them
-# locally, for example to point the Worker at a local node.
+# Against devnet: copy to .dev.vars and set the two secrets. wrangler.jsonc
+# lists them in `secrets.required`, so .dev.vars only supplies those two.
+#
+# Against a local `thruput node` (port 9745): copy to .dev.vars.local, set
+# the secrets and the local-node block below, and run
+#   CLOUDFLARE_ENV=local node node_modules/vite/bin/vite.js dev --port 5174
+# The `local` env reads every key from .dev.vars.local.
 
 # ── Secrets (`wrangler secret put` in production) ─────────────────────────
 # Relay lanes: comma-separated 32-byte Ed25519 seeds (hex), one per lane.
@@ -13,10 +17,9 @@ RELAY_SECRETS=
 # Guards /api/admin/* (sync, seed touch). Omit to disable those routes.
 DEV_API_KEY=
 
-# ── Local node (thruput node --port 9745) ─────────────────────────────────
+# ── Local node (.dev.vars.local only) ─────────────────────────────────────
+# Ids are base58 (hex also works).
 # THRUPUT_RPC_URL=http://127.0.0.1:9745
-# THRUPUT_NETWORK_HASH=
-# SCORE_CONTRACT=0x...
-# TOKEN_CONTRACT=0x...
+# SCORE_CONTRACT=<base58>
+# TOKEN_CONTRACT=<base58>
 # EXPLORER_URL=http://127.0.0.1:9745
-# LEADERBOARD_SYNC_ENABLED=0

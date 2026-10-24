@@ -37,7 +37,7 @@ describe("claim message", () => {
 
   it("derives a stable 32-byte account address", async () => {
     const player = await testPlayer(3);
-    expect(pubkeyAccountAddress(player.pubkey)).toMatch(/^0x[0-9a-f]{64}$/u);
+    expect(pubkeyAccountAddress(player.pubkey)).toMatch(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/u);
     expect(pubkeyAccountAddress(player.pubkey)).toBe(player.address);
     expect(pubkeyAccountAddress(player.pubkey)).not.toBe((await testPlayer(4)).address);
   });

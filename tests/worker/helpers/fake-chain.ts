@@ -1,5 +1,5 @@
-import { ExecResult, type TransactionReceipt, type TransactionStatus } from "@thruputchain/client";
-import type { Invocation } from "@thruputchain/client";
+import { toBase58, type Invocation } from "@thruputchain/client";
+import type { ChainReceipt, ChainStatus } from "../../../worker/chain/types";
 import { claimMessage, pubkeyAccountAddress, verifyEd25519 } from "../../../worker/claim";
 import type {
   IndexedScoreSubmitted,
@@ -11,9 +11,9 @@ import { bytesToHex, sha256 } from "../../../worker/hex";
 import type { BroadcastResult, RelayChain } from "../../../worker/relay/engine";
 import { replayTape } from "../../../worker/replay";
 
-export const NETWORK_HASH = `0x${"11".repeat(32)}`;
-export const SCORE_ADDRESS = `0x${"22".repeat(32)}`;
-export const RELAY_ADDRESS = `0x${"33".repeat(32)}`;
+export const NETWORK_HASH = toBase58(new Uint8Array(32).fill(0x11));
+export const SCORE_ADDRESS = toBase58(new Uint8Array(32).fill(0x22));
+export const RELAY_ADDRESS = toBase58(new Uint8Array(32).fill(0x33));
 export const BLOCK_MS = 1_000;
 export const GENESIS_MS = Date.UTC(2026, 9, 1);
 
@@ -34,7 +34,9 @@ export class FakeChain {
   best = new Map<string, number>();
   claimed = new Set<string>();
   events: IndexedScoreSubmitted[] = [];
-  receipts = new Map<string, TransactionReceipt>();
+  receipts = new Map<string, ChainReceipt>();
+  /** Relay addresses the fake contract refuses (NotRelay). */
+  blockedRelays = new Set<string>();
   eventsByTx = new Map<string, ScoreSubmitted>();
   signed = new Map<string, PendingTx>();
   mempool = new Map<string, PendingTx>();
@@ -68,16 +70,14 @@ export class FakeChain {
     }
   }
 
-  private receipt(txHash: string, ok: boolean, message: string | null): TransactionReceipt {
+  private receipt(txHash: string, ok: boolean): ChainReceipt {
     return {
-      txHash: txHash as never,
-      height: this.height,
-      execResult: ok ? ExecResult.ExecResultOK : ExecResult.ExecResultTxRootFrameReverted,
-      executionStatus: ok ? { result: "ok" } : { result: "reverted", message },
-      events: [],
-      returnData: null,
-      abortData: null,
+      txHash,
+      blockHeight: this.height,
+      outcome: ok ? "return" : "abort",
+      abortData: ok ? null : new Uint8Array([1]),
       gasUsed: 1n,
+      raw: null,
     };
   }
 
@@ -87,12 +87,12 @@ export class FakeChain {
       if (!this.seeds.has(seedId)) {
         this.seeds.set(seedId, (seedId * 2654435761) >>> 0 || 0xdeadbeef);
       }
-      this.receipts.set(tx.txHash, this.receipt(tx.txHash, true, null));
+      this.receipts.set(tx.txHash, this.receipt(tx.txHash, true));
       return;
     }
     const fail = (reason: string) => {
       this.failures.set(tx.txHash, reason);
-      this.receipts.set(tx.txHash, this.receipt(tx.txHash, false, reason));
+      this.receipts.set(tx.txHash, this.receipt(tx.txHash, false));
     };
     if (this.forceFailure) {
       return fail(this.forceFailure);
@@ -136,7 +136,8 @@ export class FakeChain {
       previousBest,
       newBest: replay.replayedScore,
       mintedDelta: BigInt(replay.replayedScore - previousBest) * 10_000_000n,
-      tapeHash: `0x${tapeHash}`,
+      tapeHash,
+      submittedAt: Math.floor(this.blockTimeMs(this.height) / 1000),
     };
     this.eventsByTx.set(tx.txHash, event);
     this.events.push({
@@ -145,7 +146,7 @@ export class FakeChain {
       blockHeight: this.height,
       sequenceNumber: this.events.length,
     });
-    this.receipts.set(tx.txHash, this.receipt(tx.txHash, true, null));
+    this.receipts.set(tx.txHash, this.receipt(tx.txHash, true));
   }
 
   relayChain(): RelayChain {
@@ -177,9 +178,10 @@ export class FakeChain {
         return planned ?? { kind: "accepted" };
       },
       receipt: async (txHash) => this.receipts.get(txHash) ?? null,
-      status: async (txHash): Promise<TransactionStatus> => {
-        if (this.receipts.has(txHash)) {
-          return { status: "committed", height: this.receipts.get(txHash)?.height };
+      status: async (txHash): Promise<ChainStatus> => {
+        const receipt = this.receipts.get(txHash);
+        if (receipt) {
+          return { status: "committed", blockHeight: receipt.blockHeight };
         }
         return this.mempool.has(txHash) ? { status: "pending" } : { status: "unknown" };
       },
@@ -196,22 +198,27 @@ export class FakeChain {
       seedFor: async (seedId) => this.seeds.get(seedId) ?? null,
       bestScore: async (player, seedId) => this.best.get(`${player}:${seedId}`) ?? 0,
       isClaimed: async (tapeHash) => this.claimed.has(tapeHash.replace(/^0x/u, "")),
-      scoreSubmittedFromReceipt: (receipt) =>
-        this.eventsByTx.get(receipt.txHash as unknown as string) ?? null,
+      isRelay: async (relay) => !this.blockedRelays.has(relay),
+      scoreSubmittedFromReceipt: (receipt) => this.eventsByTx.get(receipt.txHash) ?? null,
       classifyFailure: (receipt) => {
-        const reason = this.failures.get(receipt.txHash as unknown as string) ?? "failed";
+        const reason = this.failures.get(receipt.txHash) ?? "failed";
         return { reason, relayFault: reason === "NotRelay" || reason === "Paused" };
       },
       scoreEvents: async ({ fromHeight, cursor, limit }) => {
-        const start = cursor.length > 0 ? Number(new DataView(cursor.buffer).getUint32(0)) : 0;
-        const matching = this.events.filter((event) => event.blockHeight >= fromHeight);
-        const page = matching.slice(start, start + limit);
-        const next = start + limit < matching.length ? start + limit : -1;
-        const nextCursor = new Uint8Array(next < 0 ? 0 : 4);
-        if (next >= 0) {
-          new DataView(nextCursor.buffer).setUint32(0, next);
-        }
-        return { events: page, cursor: nextCursor, latestBlock: this.height, oldestBlock: 0n };
+        // Cursor = "<fromHeight>:<offset>", so a continuation keeps its walk.
+        const [walkFrom, start] = cursor
+          ? cursor.split(":").map((part) => BigInt(part))
+          : [fromHeight, 0n];
+        const matching = this.events.filter((event) => event.blockHeight >= (walkFrom ?? 0n));
+        const offset = Number(start ?? 0n);
+        const page = matching.slice(offset, offset + limit);
+        const next = offset + limit < matching.length ? `${walkFrom}:${offset + limit}` : null;
+        return {
+          events: page,
+          nextCursor: next,
+          latestIndexedBlockHeight: this.height,
+          oldestIndexedBlockHeight: 0n,
+        };
       },
     };
   }

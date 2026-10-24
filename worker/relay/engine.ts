@@ -1,5 +1,5 @@
-import { ExecResult, type TransactionReceipt, type TransactionStatus } from "@thruputchain/client";
 import type { Invocation } from "@thruputchain/client";
+import type { ChainReceipt, ChainStatus } from "../chain/types";
 import { hexToBytes } from "../hex";
 import { safeErrorMessage } from "../utils";
 import type { ScoreContract, ScoreSubmitted } from "../chain/score-contract";
@@ -22,8 +22,8 @@ export interface RelayChain {
     expiryHeight: bigint,
   ): Promise<{ txHash: string; signedTx: string }>;
   broadcast(signedTx: string): Promise<BroadcastResult>;
-  receipt(txHash: string): Promise<TransactionReceipt | null>;
-  status(txHash: string): Promise<TransactionStatus>;
+  receipt(txHash: string): Promise<ChainReceipt | null>;
+  status(txHash: string): Promise<ChainStatus>;
   /** Block time in ms since the epoch. */
   blockTimeMs(height: bigint): Promise<number>;
 }
@@ -96,8 +96,8 @@ function shortHash(hash: string): string {
   return `${hash.slice(0, 10)}…`;
 }
 
-export function receiptFailed(receipt: TransactionReceipt): boolean {
-  return receipt.execResult !== ExecResult.ExecResultOK;
+export function receiptFailed(receipt: ChainReceipt): boolean {
+  return receipt.outcome !== "return";
 }
 
 /** One poll interval while transactions are in flight. */
@@ -248,26 +248,38 @@ export class RelayEngine {
     this.log(
       `run ${run.runId.slice(0, 12)} attempt ${run.attempts + 1} tx ${shortHash(signed.txHash)}`,
     );
-    await this.broadcast(run.runId, signed.signedTx);
+    await this.broadcast(run.runId, signed.signedTx, true);
   }
 
-  private async broadcast(runId: string, signedTx: string): Promise<void> {
+  /**
+   * Sends signed bytes. `firstSend` is true for the first send of these bytes:
+   * only then does a refusal prove they were never admitted.
+   */
+  private async broadcast(runId: string, signedTx: string, firstSend: boolean): Promise<void> {
     const { store } = this.deps;
     const result = await this.deps.chain.broadcast(signedTx);
-    if (result.kind === "accepted") {
-      store.markBroadcast(runId, this.deps.now());
-      return;
-    }
-    if (result.kind === "rejected") {
-      // Not admitted, so this hash can never commit. A new attempt is safe.
+    if (result.kind === "rejected" && firstSend) {
+      // Never admitted, so this hash cannot commit. A new attempt is safe.
       this.retryOrFail(runId, `relay transaction refused: ${result.reason}`);
       return;
     }
-    // Unknown: keep the journal entry. Observation decides what happened.
+    // Accepted, unknown, or a refusal of bytes that an earlier send may have
+    // admitted: keep the journal entry; observation decides what happened.
     store.markBroadcast(runId, this.deps.now());
-    this.log(`broadcast for ${runId.slice(0, 12)} unclear: ${result.reason}`);
+    if (result.kind !== "accepted") {
+      this.log(`send for ${runId.slice(0, 12)} not accepted: ${result.reason}`);
+    }
   }
 
+  /**
+   * Follows a submitted transaction (wire-14 rules): a receipt settles it;
+   * known commitment means wait for the receipt (indexer lag); `retry`,
+   * `dropped`, `unknown` and refusals do not prove non-execution, so the same
+   * bytes are re-sent until their expiry height. Only after expiry (plus a
+   * margin), with no receipt and the tape not claimed at a snapshot past that
+   * height, does the run get a new transaction. The contract rejects a claimed
+   * tape hash, so even then a run cannot mint twice.
+   */
   private async observe(run: RunRecord, getTip: () => Promise<bigint>): Promise<void> {
     const { store, chain, score, policy } = this.deps;
     const txHash = run.txHash;
@@ -282,44 +294,34 @@ export class RelayEngine {
     }
 
     const status = await chain.status(txHash);
-    if (status.status === "pending" || status.status === "committed") {
+    if (status.status === "committed") {
+      store.markCommitted(run.runId, status.blockHeight.toString(), this.deps.now());
+      return;
+    }
+    if (status.status === "pending" || run.committedHeight !== null) {
       return;
     }
     const expiry = BigInt(run.expiryHeight ?? "0");
     const tip = await getTip();
-    const dead = tip > expiry + policy.expiryMarginBlocks;
-    if (status.status === "invalid" || status.status === "dropped" || dead) {
-      if (!dead && status.status === "dropped") {
-        // A dropped transaction cannot commit; the scheduler said so.
-        this.retryOrFail(
-          run.runId,
-          `transaction dropped (${status.error.source} ${status.error.code})`,
-        );
-        return;
+    if (tip <= expiry + policy.expiryMarginBlocks) {
+      const sinceBroadcast = this.deps.now() - (run.lastBroadcastAt ?? 0);
+      if (run.signedTx && tip <= expiry && sinceBroadcast >= policy.rebroadcastAfterMs) {
+        await this.broadcast(run.runId, run.signedTx, false);
       }
-      if (!dead && status.status === "invalid") {
-        this.retryOrFail(run.runId, `transaction invalid: ${status.reason}`);
-        return;
-      }
-      if (await score.isClaimed(run.runId)) {
-        store.confirm(
-          run.runId,
-          { score: run.claimedScore, previousBest: null, minted: null, blockHeight: null },
-          this.deps.now(),
-        );
-        return;
-      }
-      this.retryOrFail(run.runId, `transaction ${shortHash(txHash)} expired without a receipt`);
       return;
     }
-    // retry, recentFailure, unknown, other: the same bytes can still commit.
-    const sinceBroadcast = this.deps.now() - (run.lastBroadcastAt ?? 0);
-    if (run.signedTx && tip <= expiry && sinceBroadcast >= policy.rebroadcastAfterMs) {
-      await this.broadcast(run.runId, run.signedTx);
+    if (await score.isClaimed(run.runId, expiry + 1n)) {
+      store.confirm(
+        run.runId,
+        { score: run.claimedScore, previousBest: null, minted: null, blockHeight: null },
+        this.deps.now(),
+      );
+      return;
     }
+    this.retryOrFail(run.runId, `transaction ${shortHash(txHash)} expired without a receipt`);
   }
 
-  private async settle(run: RunRecord, txHash: string, receipt: TransactionReceipt): Promise<void> {
+  private async settle(run: RunRecord, txHash: string, receipt: ChainReceipt): Promise<void> {
     const { store, score } = this.deps;
     const now = this.deps.now();
     if (receiptFailed(receipt)) {
@@ -331,7 +333,7 @@ export class RelayEngine {
         this.retryOrFail(run.runId, failure.reason);
         return;
       }
-      store.finish(run.runId, "rejected", failure.reason, receipt.height.toString(), now);
+      store.finish(run.runId, "rejected", failure.reason, receipt.blockHeight.toString(), now);
       return;
     }
     const event = score.scoreSubmittedFromReceipt(receipt);
@@ -340,7 +342,7 @@ export class RelayEngine {
         run.runId,
         "failed",
         "transaction succeeded but emitted no ScoreSubmitted event",
-        receipt.height.toString(),
+        receipt.blockHeight.toString(),
         now,
       );
       return;
@@ -351,17 +353,17 @@ export class RelayEngine {
         score: event.newBest,
         previousBest: event.previousBest,
         minted: event.mintedDelta.toString(),
-        blockHeight: receipt.height.toString(),
+        blockHeight: receipt.blockHeight.toString(),
       },
       now,
     );
-    const closedAtMs = await this.deps.chain.blockTimeMs(receipt.height).catch(() => now);
+    const closedAtMs = await this.deps.chain.blockTimeMs(receipt.blockHeight).catch(() => now);
     await this.deps
       .onConfirmed({
         run: store.requireRun(run.runId),
         event,
         txHash,
-        blockHeight: receipt.height,
+        blockHeight: receipt.blockHeight,
         closedAtMs,
       })
       .catch((error: unknown) => {

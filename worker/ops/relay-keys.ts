@@ -8,7 +8,15 @@
 // is lane 0, relay-2.secret lane 1, and so on. Each file holds a 32-byte hex seed.
 // --secrets refuses to write to a terminal, so the seeds are not shown.
 /* eslint-disable no-await-in-loop -- operator script: polls and steps in order */
-import { PrivateKeySigner, createPubkeyAccount, fromHex0x, toHex0x } from "@thruputchain/client";
+import {
+  createThruputClient,
+  devnet,
+  Ed25519Signer,
+  createPubkeyAccount,
+  toBase58,
+  fromHex0x,
+  localnet,
+} from "@thruputchain/client";
 import { existsSync, readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -40,38 +48,23 @@ if (flag("--secrets")) {
   process.exit(0);
 }
 
-async function rpc(method: string, params: unknown[]) {
-  const response = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-  });
-  const body = (await response.json()) as {
-    result?: Record<string, unknown>;
-    error?: { message: string };
-  };
-  if (body.error) throw new Error(`${method}: ${body.error.message}`);
-  return body.result ?? {};
-}
+const client = await createThruputClient({
+  cluster:
+    rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost")
+      ? localnet({ rpcUrl })
+      : devnet({ rpcUrl }),
+});
 
-const hog = async (address: string) =>
-  Number(BigInt(String((await rpc("groundhog_getBalance", [address])).rawBalance ?? "0"))) / 1e7;
+const hog = async (address: Uint8Array) =>
+  Number((await client.getBalance({ address })).rawBalance) / 1e7;
 
 for (const [lane, hex] of secrets.entries()) {
-  const address = toHex0x(
-    createPubkeyAccount({ signer: new PrivateKeySigner(fromHex0x(`0x${hex}`)) }).address,
-  );
-  let balance = await hog(address);
+  const account = createPubkeyAccount({ signer: Ed25519Signer.fromSeed(fromHex0x(`0x${hex}`)) });
+  let balance = await hog(account.address);
   if (flag("--fund") && balance < minHog) {
-    const clientNonce = toHex0x(crypto.getRandomValues(new Uint8Array(16)));
-    const attempt = await rpc("groundhog_requestAirdrop", [{ recipient: address, clientNonce }]);
-    console.log(
-      `lane ${lane}: airdrop ${attempt.attemptStatus ?? "sent"} tx ${attempt.txHash ?? "-"}`,
-    );
-    for (let i = 0; i < 30 && (await hog(address)) <= balance; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
-    }
-    balance = await hog(address);
+    const airdrop = await client.requestAirdrop({ recipient: account.address });
+    console.log(`lane ${lane}: airdrop tx ${toBase58(airdrop.transactionHash)}`);
+    balance = await hog(account.address);
   }
-  console.log(`lane ${lane}: ${address} ${balance.toFixed(4)} HOG`);
+  console.log(`lane ${lane}: ${toBase58(account.address)} ${balance.toFixed(4)} HOG`);
 }

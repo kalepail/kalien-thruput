@@ -1,10 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { WorkerEnv } from "../../worker/env";
-import {
-  estimateEventTimeMs,
-  scoreEventRow,
-  syncScoreEvents,
-} from "../../worker/leaderboard/indexer";
+import { toBase58 } from "@thruputchain/client";
+import { scoreEventRow, syncScoreEvents } from "../../worker/leaderboard/indexer";
 import {
   countScoreEvents,
   getIndexerState,
@@ -13,9 +10,13 @@ import {
 import { FakeChain } from "./helpers/fake-chain";
 import { d1 } from "./helpers/sqlite";
 
+const SUBMITTED_AT = 1_790_000_000;
+
 function event(chain: FakeChain, index: number, height: bigint) {
+  const player = new Uint8Array(32).fill(0xab);
+  player[31] = index;
   const e = {
-    player: `0x${"ab".repeat(31)}${index.toString(16).padStart(2, "0")}`,
+    player: toBase58(player),
     seedId: 100,
     seed: 1,
     frameCount: 600,
@@ -23,11 +24,12 @@ function event(chain: FakeChain, index: number, height: bigint) {
     previousBest: 0,
     newBest: 1000 + index,
     mintedDelta: BigInt(1000 + index) * 10_000_000n,
-    tapeHash: `0x${index.toString(16).padStart(64, "0")}`,
+    tapeHash: index.toString(16).padStart(64, "0"),
+    submittedAt: SUBMITTED_AT,
   };
   chain.events.push({
     ...e,
-    txHash: `0x${"f".repeat(63)}${index % 10}`,
+    txHash: toBase58(new Uint8Array(32).fill(index)),
     blockHeight: height,
     sequenceNumber: index,
   });
@@ -103,7 +105,7 @@ describe("syncScoreEvents", () => {
     const blockTimes = { blockTimeMs: async (h: bigint) => chain.blockTimeMs(h) };
     await syncScoreEvents(env, chain.scoreContract(), blockTimes, { maxPages: 10, pageLimit: 10 });
     expect((await getIndexerState(env))?.fromHeight).toBe("50");
-    const other = { ...chain.scoreContract(), address: `0x${"99".repeat(32)}` };
+    const other = { ...chain.scoreContract(), address: toBase58(new Uint8Array(32).fill(0x99)) };
     chain.events = [];
     event(chain, 2, 3n);
     const result = await syncScoreEvents(env, other, blockTimes, { maxPages: 10, pageLimit: 10 });
@@ -112,39 +114,27 @@ describe("syncScoreEvents", () => {
   });
 });
 
-describe("estimateEventTimeMs", () => {
-  const now = Date.UTC(2026, 9, 23, 12, 5, 0);
-  const seedId = Math.floor(now / 600_000);
-
-  it("counts back 2 s per block from the head", () => {
-    expect(estimateEventTimeMs({ blockHeight: 90n, seedId }, 100n, now)).toBe(now - 20_000);
-  });
-
-  it("stays inside the seed's active window", () => {
-    expect(estimateEventTimeMs({ blockHeight: 0n, seedId }, 1_000_000n, now)).toBe(
-      seedId * 600_000,
-    );
-    expect(estimateEventTimeMs({ blockHeight: 100n, seedId: seedId - 200 }, 100n, now)).toBe(
-      (seedId - 200 + 144) * 600_000,
-    );
-  });
-
-  it("is used when the RPC has no block times", async () => {
+describe("event times", () => {
+  it("use the block time, else the event's own seconds", async () => {
     const chain = new FakeChain();
     const env = { LEADERBOARD_DB: d1() } as unknown as WorkerEnv;
-    event(chain, 1, chain.height);
-    const before = Date.now();
+    event(chain, 1, 10n);
+    event(chain, 2, 11n);
     await syncScoreEvents(
       env,
       chain.scoreContract(),
-      { blockTimeMs: async () => Promise.reject(new Error("not implemented")) },
+      {
+        blockTimeMs: async (height) =>
+          height === 10n ? Promise.resolve(1_234_567) : Promise.reject(new Error("no block")),
+      },
       { maxPages: 1, pageLimit: 10 },
     );
-    const row = await env.LEADERBOARD_DB.prepare("SELECT closed_at FROM score_events").first<{
-      closed_at: string;
-    }>();
-    // seedId 100 is far in the past, so the time clamps to its window end.
-    expect(new Date(row?.closed_at ?? 0).getTime()).toBe((100 + 144) * 600_000);
-    expect(before).toBeGreaterThan(0);
+    const rows = await env.LEADERBOARD_DB.prepare(
+      "SELECT block_height, closed_at FROM score_events ORDER BY block_height",
+    ).all<{ block_height: number; closed_at: string }>();
+    expect(rows.results.map((row) => row.closed_at)).toEqual([
+      new Date(1_234_567).toISOString(),
+      new Date(SUBMITTED_AT * 1000).toISOString(),
+    ]);
   });
 });

@@ -8,7 +8,8 @@ export const PROFILE_SIGNATURE_MAX_SKEW_MS = 5 * 60_000;
 
 /**
  * The bytes a player signs (Ed25519, raw message) to set a profile. Fields
- * are joined with "\n"; null fields are empty strings.
+ * are joined with "\n"; null fields are empty strings. The network hash and
+ * address are base58, as `/api/config` and the API return them.
  */
 export function profileMessage(input: {
   networkHash: string;
@@ -20,8 +21,8 @@ export function profileMessage(input: {
   return new TextEncoder().encode(
     [
       PROFILE_DOMAIN,
-      input.networkHash.toLowerCase(),
-      input.playerAddress.toLowerCase(),
+      input.networkHash,
+      input.playerAddress,
       String(input.timestamp),
       input.username ?? "",
       input.linkUrl ?? "",
