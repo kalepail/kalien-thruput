@@ -3,6 +3,51 @@
 Agent: `kt-client`. Scope: `src/` (not `src/game/`), `index.html`, `public/`, `vite.config.ts`,
 `.env.example`, browser deps in root `package.json`, and the `tests/src/` tests for those modules.
 
+## Round 5 (2026-10-24): in-app transaction view
+
+**Status: done, deployed, tested on the deployed site.** Commit `f216ada`. I deployed with
+`worker/ops/deploy.sh` (no `worker/` change; its checks passed: 74 worker tests, lint, format).
+Worker version `63c1be6f-f206-4165-82ca-679f00e9d0a5`.
+
+Why: `explorer.thruput.network` answers 401 for players, so every tx/address link was a dead end.
+
+What changed:
+
+- `/tx/:hash` (`src/components/runs/TxPage.tsx`, `src/thruput/tx.ts`): reads
+  `getTransactionStatus` and `getTransactionReceipt` in parallel, then the block time. It shows the
+  lifecycle status, `execution.result`, block height, time, gas used, the event count, and for a
+  Kalien run the decoded `ScoreSubmitted` event (player, seed, seed id, frames, score, previous
+  best, new best, KALIEN minted, relay) with Replay (`/replay/<tape hash>`) and Player page links.
+  A rejected run shows the contract error name. It polls every 3 s while the status is pending or
+  the receipt is not indexed. With no receipt it says that `unknown`/`dropped` does not prove that
+  the transaction never ran (wire-14 rule). Decoding uses `decodeSubmitReceipt` and `getBlockTime`
+  from `shared/thruput/kalien.ts`.
+- Links: `TxLink` opens `/tx/:hash` first, with a small explorer icon ("Explorer (team access)").
+  `AddressLinks` opens the player page, with a secondary "Explorer (team access)" link (header
+  menu, Wallet page, player card). `/address/:a` redirects to `/leaderboard/:a`.
+- `src/thruput/client.ts` now uses the shared `connectKalien`, `getBestScore`, `getKalienBalance`.
+- Page subtitles wrap long hashes on phones.
+
+Tests (deployed site, fresh key):
+
+| Check | Result |
+|---|---|
+| New run → confirmed card | 1,330 points; card links `/tx/J9C2DixjFjbmHmaQwxCWXq8hTm4HdQenVq6B73s9QGtR` + explorer icon |
+| `/tx/<hash>` | committed, execution return, block 28,481, 14 s ago, gas 3,052,889, 2 events; run: player `FzrDTWaz…oP7hv`, score 1,330, previous best 0, +1,330 KALIEN, 1,839 frames, seed `0x2361197D` |
+| Replay from the tx page | `/replay/f0174e6e…` plays |
+| `/address/<player>` | Redirects to the player page; "Explorer (team access)" points at `/address/<base58>` |
+| `/runs` and leaderboard tx links | `/tx/<base58>` first, explorer second |
+| Unknown hash (`1111…1111`) | status unknown, "does not prove the transaction never ran" |
+| Bad hash (`/tx/not-a-hash`) | "This is not a transaction hash" |
+| 375 px | 0 px horizontal overflow; hash wraps |
+| Old run `4J5JPfWX…` (local Vite proxied to the deployed API) | block 17,863, gas 3,616,081, run 1,880, Replay `33d2553a…` |
+
+Screenshots (`/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/c5af48fa-61eb-44a6-b03d-e26eb2b4d2c5/scratchpad/txview/`): `prod-01-confirmed.png`, `prod-02-tx-page.png`, `prod-03-player-page.png`,
+`prod-04-replay.png`, `prod-05-tx-m375.png`, `local-tx.png`, `local-tx-unknown.png`,
+`local-tx-m375b.png`.
+
+Processes: the local Vite (5173) and all agent-browser sessions are stopped.
+
 ## Round 4 (2026-10-24): real pass on the deployed Worker
 
 **Status: done, all green.** Site: `https://kalien-thruput.sdf-ecosystem.workers.dev` (Worker API
