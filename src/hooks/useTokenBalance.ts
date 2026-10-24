@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BALANCE_REFRESH_MS } from "../consts";
 import { formatKalien } from "../lib/format";
+import { onThruputConfigChange } from "../thruput/config";
 
 export interface UseTokenBalanceReturn {
   balance: bigint | null;
@@ -66,6 +67,9 @@ export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
       }
     }
   }, [walletAddress]);
+
+  // A devnet reset replaces the token contract: read the balance again.
+  useEffect(() => onThruputConfigChange(() => void refresh()), [refresh]);
 
   // Refresh when the address changes, then poll while the tab is visible.
   useEffect(() => {

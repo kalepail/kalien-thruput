@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getThruputConfig, type ThruputConfig } from "../thruput/config";
+import { getThruputConfig, onThruputConfigChange, type ThruputConfig } from "../thruput/config";
 
 export interface UseThruputConfigReturn {
   config: ThruputConfig | null;
@@ -26,8 +26,15 @@ export function useThruputConfig(): UseThruputConfigReturn {
         }
       }
     })();
+    const unsubscribe = onThruputConfigChange((next) => {
+      if (!cancelled) {
+        setConfig(next);
+        setError(null);
+      }
+    });
     return () => {
       cancelled = true;
+      unsubscribe();
     };
   }, []);
 

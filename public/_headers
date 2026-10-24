@@ -1,0 +1,10 @@
+# Security headers for every static response (HTML, JS, CSS, fonts).
+# The player's secret key lives in localStorage, so the CSP allows scripts only
+# from this origin and network reads only from this origin and the devnet RPC
+# (review item 17). Update connect-src if /api/config ever points at another RPC.
+# media-src: game music (src/game/AudioSystem.ts). Fonts are bundled files.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://rpc.thruput.network; media-src 'self' https://api.smol.xyz; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY

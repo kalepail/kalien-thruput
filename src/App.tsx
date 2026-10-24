@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react";
 import Loader2 from "lucide-react/dist/esm/icons/loader-2";
 import { SiteFooter } from "./components/SiteFooter";
 import { SiteHeader } from "./components/SiteHeader";
+import { NetworkChangeNotice } from "./components/NetworkChangeNotice";
 import { navigate, useLocation } from "./hooks/useLocation";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 import { WalletProvider } from "./contexts/WalletContext";
@@ -71,6 +72,7 @@ function App() {
   return (
     <WalletProvider>
       <SiteHeader />
+      <NetworkChangeNotice />
       <ErrorBoundary key={pathname}>
         <Suspense fallback={routeFallback}>
           <RoutePage />

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { onThruputConfigChange } from "../thruput/config";
 
 const SEED_PERIOD_MS = 600_000; // 10 minutes
 const NULL_SEED_RETRY_MS = 3_000;
@@ -92,6 +93,16 @@ let nullRetryTimerId: ReturnType<typeof setTimeout> | null = null;
 let fetchPending = false;
 let observedSeedId = currentSeedId();
 let missingSeedRetryMs = NULL_SEED_RETRY_MS;
+
+// After a devnet reset the old epoch seeds belong to the old contract.
+onThruputConfigChange(() => {
+  seedCache = null;
+  state = { seed: null, seedId: null, secondsLeft: getSecondsUntilNext() };
+  notify();
+  if (listeners.size > 0) {
+    void refreshSeed();
+  }
+});
 
 function notify(): void {
   listeners.forEach((fn) => fn());

@@ -21,7 +21,8 @@ import { useThruputConfig } from "@/hooks/useThruputConfig";
 import { navigate, useLocation } from "@/hooks/useLocation";
 import { useSeed } from "@/hooks/useSeed";
 import type { CompletedGameRun } from "@/game/types";
-import type { RunRecord } from "@/runs/api";
+import { getRun, type RunRecord } from "@/runs/api";
+import { decideEndlessSubmit, type PendingEndlessRun } from "@/runs/endlessGate";
 
 const FLOW_STEPS: Step[] = [
   { key: "play", label: "Play" },
@@ -274,7 +275,7 @@ export function GamePageWrapper() {
   const [endlessModeEnabled, setEndlessModeEnabled] = useState(false);
   const [autoStartSignal, setAutoStartSignal] = useState(0);
   const handledEndlessRunKeyRef = useRef<string | null>(null);
-  const pendingEndlessSubmissionScoresRef = useRef(new Map<number, number>());
+  const pendingEndlessSubmissionScoresRef = useRef(new Map<number, PendingEndlessRun>());
   const submittedFeedbackRunKeyRef = useRef<string | null>(null);
   const waitingForAutoRestartRef = useRef(false);
   const isMountedRef = useRef(true);
@@ -513,65 +514,51 @@ export function GamePageWrapper() {
         currentContext.networkKey === submitContext.networkKey
       );
     };
-    const clearPendingScore = () => {
-      const pendingScore = pendingEndlessSubmissionScoresRef.current.get(completedRunSeedId) ?? 0;
-      if (pendingScore <= completedRunScore) {
-        pendingEndlessSubmissionScoresRef.current.delete(completedRunSeedId);
-      }
-    };
+    const pendingRuns = pendingEndlessSubmissionScoresRef.current;
+    const isOurPending = () => pendingRuns.get(completedRunSeedId)?.score === completedRunScore;
 
     void (async () => {
       if (!flow.wallet.isConnected || completedRunScore <= 0) {
         return;
       }
 
-      const pendingSeedBest =
-        pendingEndlessSubmissionScoresRef.current.get(completedRunSeedId) ?? 0;
-      if (completedRunScore <= pendingSeedBest) {
-        return;
-      }
-
-      let refreshedSeedBest: number | null = null;
+      let confirmedBest: number | null = null;
       try {
-        refreshedSeedBest = await refreshSeedScoreToBeat(completedRunSeedId, { force: true });
+        confirmedBest = await refreshSeedScoreToBeat(completedRunSeedId, { force: true });
       } catch {
-        refreshedSeedBest = null;
+        confirmedBest = null;
       }
-
       if (!isSubmitContextCurrent()) {
         return;
       }
 
-      const latestPendingSeedBest =
-        pendingEndlessSubmissionScoresRef.current.get(completedRunSeedId) ?? 0;
-      if (
-        typeof refreshedSeedBest === "number" &&
-        completedRunScore <= Math.max(refreshedSeedBest, latestPendingSeedBest)
-      ) {
+      const decision = await decideEndlessSubmit({
+        score: completedRunScore,
+        confirmedBest,
+        pending: pendingRuns.get(completedRunSeedId),
+        getRunStatus: async (runId) => (await getRun(runId)).status,
+      });
+      if (!isSubmitContextCurrent()) {
+        return;
+      }
+      if (decision.clearPending) {
+        pendingRuns.delete(completedRunSeedId);
+      }
+      if (decision.action !== "submit") {
         return;
       }
 
-      pendingEndlessSubmissionScoresRef.current.set(
-        completedRunSeedId,
-        Math.max(latestPendingSeedBest, completedRunScore),
-      );
-
+      // Pending, not best: only a confirmation (handleRunConfirmed) records a best.
+      pendingRuns.set(completedRunSeedId, { score: completedRunScore, runId: null });
       const submitted = await submitCompletedRun(completedRun);
-      if (!isSubmitContextCurrent()) {
-        clearPendingScore();
-        return;
-      }
-
       if (!submitted) {
-        clearPendingScore();
+        if (isOurPending()) pendingRuns.delete(completedRunSeedId);
         return;
       }
-
-      if (isMountedRef.current) {
-        noteSubmittedScore(completedRunSeedId, completedRunScore);
+      if (isOurPending()) {
+        pendingRuns.set(completedRunSeedId, { score: completedRunScore, runId: submitted.runId });
       }
-      clearPendingScore();
-      if (isMountedRef.current) {
+      if (isMountedRef.current && isSubmitContextCurrent()) {
         recordSubmissionFeedback(latestRunKey);
       }
     })();
@@ -583,7 +570,6 @@ export function GamePageWrapper() {
     flow.wallet.isConnected,
     networkKey,
     latestRunKey,
-    noteSubmittedScore,
     recordSubmissionFeedback,
     refreshSeedScoreToBeat,
     replayJobId,

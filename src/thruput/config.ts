@@ -53,30 +53,80 @@ export function parseThruputConfig(payload: unknown): ThruputConfig {
   };
 }
 
+async function fetchThruputConfig(): Promise<ThruputConfig> {
+  const response = await fetchWithTimeout(
+    "/api/config",
+    { method: "GET", cache: "no-store" },
+    CONFIG_TIMEOUT_MS,
+  );
+  if (!response.ok) {
+    throw new Error(`failed to load network config (${response.status})`);
+  }
+  const config = parseThruputConfig(await response.json());
+  // Dev only: reach a local node through the Vite `/rpc` proxy (see vite.config.ts).
+  if (typeof __KALIEN_RPC_PROXY__ !== "undefined" && __KALIEN_RPC_PROXY__) {
+    config.rpcUrl = new URL("/rpc", window.location.origin).href;
+  }
+  return config;
+}
+
+// The last config this page saw. A devnet reset changes the network hash and
+// the contracts; an open tab must notice, or it signs for the old network.
+let currentConfig: ThruputConfig | null = null;
+const changeListeners = new Set<(config: ThruputConfig) => void>();
+
+/** Network hash plus contracts: what a devnet reset changes. */
+export function configIdentity(config: ThruputConfig): string {
+  return `${config.networkHash}|${config.scoreContract}|${config.tokenContract}`;
+}
+
 export function getThruputConfig(): Promise<ThruputConfig> {
   if (!configPromise) {
-    configPromise = (async () => {
-      const response = await fetchWithTimeout(
-        "/api/config",
-        { method: "GET", cache: "no-store" },
-        CONFIG_TIMEOUT_MS,
-      );
-      if (!response.ok) {
-        throw new Error(`failed to load network config (${response.status})`);
-      }
-      const config = parseThruputConfig(await response.json());
-      // Dev only: reach a local node through the Vite `/rpc` proxy (see vite.config.ts).
-      if (typeof __KALIEN_RPC_PROXY__ !== "undefined" && __KALIEN_RPC_PROXY__) {
-        config.rpcUrl = new URL("/rpc", window.location.origin).href;
-      }
-      return config;
-    })().catch((error: unknown) => {
-      // Allow a later call to retry after a transient failure.
-      configPromise = null;
-      throw error;
-    });
+    configPromise = fetchThruputConfig()
+      .then((config) => {
+        currentConfig = config;
+        return config;
+      })
+      .catch((error: unknown) => {
+        // Allow a later call to retry after a transient failure.
+        configPromise = null;
+        throw error;
+      });
   }
   return configPromise;
+}
+
+/**
+ * Fetch the config again. When the network identity changed, replace the
+ * cached config and tell every subscriber (client, seed cache, balance, UI).
+ * Returns true when it changed.
+ */
+export async function refreshThruputConfig(): Promise<boolean> {
+  const previous = currentConfig;
+  const next = await fetchThruputConfig();
+  const changed = previous !== null && configIdentity(previous) !== configIdentity(next);
+  currentConfig = next;
+  configPromise = Promise.resolve(next);
+  if (changed) {
+    for (const listener of changeListeners) {
+      listener(next);
+    }
+  }
+  return changed;
+}
+
+/** Called with the new config after a network change (not on the first load). */
+export function onThruputConfigChange(listener: (config: ThruputConfig) => void): () => void {
+  changeListeners.add(listener);
+  return () => {
+    changeListeners.delete(listener);
+  };
+}
+
+/** Test hook: forget the cached config (subscribers stay). */
+export function resetThruputConfigForTests(): void {
+  configPromise = null;
+  currentConfig = null;
 }
 
 export function explorerTxUrl(explorerUrl: string, txHash: string): string {

@@ -7,9 +7,14 @@ import {
   getKalienBalance,
   type KalienClient,
 } from "../../shared/thruput/kalien";
-import { getThruputConfig, type ThruputConfig } from "./config";
+import { getThruputConfig, onThruputConfigChange, type ThruputConfig } from "./config";
 
 let clientPromise: Promise<{ client: KalienClient; config: ThruputConfig }> | null = null;
+
+// The client pins the network hash; after a devnet reset make a new one.
+onThruputConfigChange(() => {
+  clientPromise = null;
+});
 
 /** One client per page, pinned to the network hash from `/api/config`. */
 export function getThruputClient(): Promise<{ client: KalienClient; config: ThruputConfig }> {
