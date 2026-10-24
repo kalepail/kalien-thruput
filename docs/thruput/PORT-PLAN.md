@@ -16,6 +16,31 @@ Remove: RISC Zero guest/host/api-server, Boundless, Vast.ai, proof queues, the p
 ZK job machinery, OpenZeppelin Channels relay, smart-account-kit passkeys, Soroswap KALE swap,
 Soroban contract, Stellar mainnet env, SEP-1 `stellar.toml`.
 
+## Devnet upgrade on 2026-10-24 (read first)
+
+Devnet was wiped and upgraded overnight. Everything we deployed is gone (contracts, balances,
+relay funds). Current devnet (from `getVersionInfo`): wire format **14.1.0**, implementation
+**0.36.0**, release 0.1.31-rc.15, network hash `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj`
+(base58), height ~17k.
+
+- RPC methods are renamed (no `groundhog_` prefix): `getVersionInfo`, `getNetworkInfo`,
+  `getChainTip`, `getChainConfig`, `getServerLimits`, `sendTransaction`, `getTransactionStatus`,
+  `getTransactionReceipt`, `getBalance`, `getStorage`, `simulateInvocation(s)`, `getEvents`,
+  `getBlockByHeight` (block times now exist), `getTransactionsByBlock`, `faucet_requestAirdrop`.
+  Doc: `git -C /Users/kalepail/Desktop/groundhog/developers-site show origin/HEAD:src/content/docs/reference/json-rpc-api.md`
+  (the lead fetched upstream; checkouts are not fast-forwarded, read `origin/HEAD`).
+- Identifiers (addresses, hashes, network hash) are **base58** on the wire and in tools.
+- CLI: `thruput 0.36.0` is installed (matches devnet). Local node bundle: `hog-devnode
+  0.1.31-rc.14` installed and active. The devnet profile has the new network hash.
+- Contract SDK: the crate is now **`thruput-sdk` `=0.54.0`** (registry `thruput`); see a fresh
+  `thruput new` scaffold for the exact `Cargo.toml`, `.cargo/config.toml`, `build.rs` layout.
+- TS: root deps are now **`@thruputchain/client@0.23.0` + `@thruputchain/protocol@0.18.0`**
+  (wire 14). `PrivateKeySigner` is renamed `Ed25519Signer` (with `fromSeed`); `createRpcClient`
+  exposes the native wire-14 methods. Docs: `client-ts` `origin/HEAD` README and
+  `developers-site` `origin/HEAD:src/content/docs/typescript/`.
+- Keys in `~/.config/thruput/keys` still exist; their devnet accounts are empty. Refund with
+  `faucet_requestAirdrop`. Network hash and all contract addresses must come from config.
+
 ## Thruput facts that shape the design
 
 - Docs authority: `/Users/kalepail/Desktop/groundhog/developers-site/src/content/docs/`.
