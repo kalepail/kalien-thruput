@@ -383,9 +383,10 @@ and `conc-2.log` (also `e2e-deployed-1.log`, `d-run.log`).
 
 ### Observations
 
-- Gas scales with frames: about 2,040–2,410 gas per frame for short and medium
-  tapes, and 72.9M–73.8M for 36,000 frames. This agrees with the contract
-  estimate (`≈ 2,065/frame + 0.2M`).
+- Gas scales with frames, but it also depends on the game: gas / frames is
+  1,758–2,472 over the 23 confirmed runs above. The three 36,000-frame runs used
+  72.9M–73.8M (about 2,030 per frame). This agrees with the contract estimate
+  (`≈ 2,065/frame + 0.2M`, 36,000 frames: 67–74M).
 - With 4 lanes, 8 concurrent runs all confirmed within 6–8 s, and each lane took
   1–3 runs. About 60–76 runs/min for short bursts. That is much more than the one
   run per 2–3 s of a single lane.
