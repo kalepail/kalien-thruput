@@ -2,6 +2,34 @@
 
 Agent: `kt-worker` (Cloudflare Worker API, relay, leaderboard). Branch `thruput-devnet`.
 
+## Round 4 (2026-10-24): deployed on the wire-14 devnet (v3)
+
+**Status: deployed and smoke-tested. URL: https://kalien-thruput.sdf-ecosystem.workers.dev**
+
+- Contracts: from `shared/thruput/deployments/devnet.json` (v3): score
+  `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`, token `AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87`,
+  network hash `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj`. No Worker code change was needed.
+- Deploy: `bash worker/ops/deploy.sh --secrets` (checks, build, remote D1 migration, deploy, secrets
+  `RELAY_SECRETS` with all 4 lane keys and `DEV_API_KEY`). First version `b1d0f1ca-ff57-48e8-b915-c31a453d8bb9`.
+- Remote D1: `wrangler d1 migrations apply --remote` fails on this account with API error 7403
+  (twice, on two days), while `d1 execute --remote --file` works. I applied `0001_init.sql` with
+  `execute --file` and recorded it in `d1_migrations`. `deploy.sh` now does this automatically when
+  `migrations apply` fails. `secret put` now passes `--env=""` (top-level env, explicit).
+- `shared/thruput/kalien.ts` (wire 14) is not used yet; the Worker's own chain code was already
+  correct, so I did not delay the deploy. Candidate for a later cleanup (reads and event paging).
+
+| Check | Result |
+|---|---|
+| Local Worker (devnet mode) → v3 smoke | PASS, confirmed in 3.2 s; all 4 lanes `allowed` |
+| Deployed smoke (`bun worker/ops/smoke.ts`), 10:24 UTC | PASS, real tape (2,837 frames, score 5,870) confirmed in 7.5 s |
+| Deployed smoke, after RESUME (16:09 UTC) | PASS, 2,440 frames, score 3,020, confirmed in 6.3 s |
+| `*/1` indexer cron | fired (tail: outcome ok, 2.7–4.1 s); D1 `indexer_state` synced 16:06:34 UTC, 30 events, no error |
+| `*/10` seed cron | D1 `seeds`: 36 rows for 36 consecutive epochs 2988061–2988096 (10:22–16:00 UTC), each recorded 38–62 s after the 10-minute mark, including the pause when no client ran |
+| `/api/health` (16:09 UTC) | lanes 0–3 allowed; confirmed 6/7/6/7; rejected 0; failed 1 (lane 3, another agent's run) |
+
+Open: one `failed` run on lane 3 (from another agent's testing; I could not see its id). A failed run
+retries on a new POST of the same tape. Wrangler warns that `secrets` in `wrangler.jsonc` is experimental.
+
 ## Round 3 (2026-10-24): wire-14 migration — green locally
 
 **Status: STOP point reached.** The Worker runs on `@thruputchain/client 0.23.0` (wire 14,

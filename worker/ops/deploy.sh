@@ -41,19 +41,30 @@ node node_modules/vite/bin/vite.js build
 rm -f dist/*/.dev.vars
 
 echo "== D1 migrations (remote)"
-$WRANGLER d1 migrations apply kalien-thruput-leaderboard --remote
+DB=kalien-thruput-leaderboard
+if ! $WRANGLER d1 migrations apply "$DB" --remote; then
+  # On this account `migrations apply --remote` fails with API error 7403 while
+  # `execute --file` works. Apply each pending file that way and record it.
+  echo "migrations apply failed; applying pending files with d1 execute --file"
+  pending=$($WRANGLER d1 migrations list "$DB" --remote 2>/dev/null | grep -oE '[0-9]{4}_[A-Za-z0-9_-]+\.sql' || true)
+  for name in $pending; do
+    echo "-- $name"
+    $WRANGLER d1 execute "$DB" --remote --file "worker/migrations/$name"
+    $WRANGLER d1 execute "$DB" --remote --command "INSERT INTO d1_migrations (name) VALUES ('$name')"
+  done
+fi
 
 echo "== deploy"
 $WRANGLER deploy
 
 if [[ $secrets -eq 1 ]]; then
   echo "== secrets"
-  bun worker/ops/relay-keys.ts --secrets | $WRANGLER secret put RELAY_SECRETS
+  bun worker/ops/relay-keys.ts --secrets | $WRANGLER secret put RELAY_SECRETS --env=""
   key_file="$RELAY_DIR/dev-api.key"
   if [[ ! -s "$key_file" ]]; then
     (umask 077 && node -e 'process.stdout.write(require("crypto").randomBytes(24).toString("hex"))' > "$key_file")
   fi
-  $WRANGLER secret put DEV_API_KEY < "$key_file"
+  $WRANGLER secret put DEV_API_KEY --env="" < "$key_file"
 fi
 
 echo "== done: https://kalien-thruput.sdf-ecosystem.workers.dev"
