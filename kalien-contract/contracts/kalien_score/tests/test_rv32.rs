@@ -13,6 +13,10 @@ use sdk::TransactResult;
 fn submit_fixture_rv32(fixture: Fixture) -> u64 {
     let world = setup_rv32();
     world.set_seed(T0_SEED_ID, fixture.seed);
+    // As on devnet: relay-only mode with the submitter on the allowlist.
+    let relay = world.relay;
+    world.score_call(&world.admin, move |c| c.add_relay(&relay)).assert_success();
+    world.score_call(&world.admin, |c| c.set_relay_only(true)).assert_success();
     let player = Player::new(0x21);
     let tape = fixture.bytes();
 

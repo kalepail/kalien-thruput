@@ -6,7 +6,8 @@
  * (`deployments/devnet.json`) and a connected client from `connectKalien`.
  *
  * - Reads: `readPlayerState`, `getBestScore`, `getCurrentSeed`, `getSeed`, `getCurrentSeedId`,
- *   `isTapeClaimed`, `getKalienBalance`, `getTokenMetadata`.
+ *   `isTapeClaimed`, `getClaimedSeedId`, `getKalienBalance`, `getTokenMetadata`, `getScoreConfig`,
+ *   `isRelay`, `getRelays`.
  * - Events: `getScoreSubmittedPage` (one page, cursor or height range), `iterateScoreSubmitted`.
  * - Writes: `createRelayWallet`, `submitScore` (build, sign, persist hook, send, wait, decode),
  *   `getSubmitResult` (recover a submission by hash), `ensureCurrentSeed` (cron).
@@ -83,6 +84,8 @@ export const SCORE_ERRORS = {
   12: "ZeroSeed",
   13: "SeedingLocked",
   14: "NotRelay",
+  15: "RelaySetFull",
+  16: "SeedNotExpired",
   20: "TapeTooShort",
   21: "TapeBadMagic",
   22: "TapeBadVersion",
@@ -214,6 +217,20 @@ export function tapePaddingOk(tape: Uint8Array): boolean {
   return lastBody < tape.length && tape[lastBody]! >> 4 === 0;
 }
 
+/** The relay allowlist (relay-only mode accepts only these submitters). */
+export async function getRelays(client: KalienClient, config: KalienConfig): Promise<Hex[]> {
+  const r = await KalienScore.v0_1.relays.view({ client, contract: score(config) });
+  const set = r.value as unknown as { count: bigint | number; relays: ContractAddress[] };
+  return set.relays.slice(0, Number(set.count)).map((a) => toHex0x(a) as Hex);
+}
+
+/** The `seed_id` a tape was accepted for, or null. */
+export async function getClaimedSeedId(client: KalienClient, config: KalienConfig, tapeOrHash: Uint8Array | { hash: Uint8Array }): Promise<number | null> {
+  const hash = tapeOrHash instanceof Uint8Array ? tapeHash(tapeOrHash) : tapeOrHash.hash;
+  const r = await KalienScore.v0_1.claimedSeedId.view({ client, contract: score(config), args: { tapeHash: fixedBytes(hash, 32) } });
+  return r.value === null || r.value === undefined ? null : Number(r.value);
+}
+
 export interface TokenMetadata {
   name: string | null;
   symbol: string | null;
@@ -297,6 +314,10 @@ export interface ScoreSubmittedRow {
   sequenceNumber: number;
   player: Hex;
   playerPubkey: Hex;
+  /** The submitting account (one of the relays in relay-only mode). */
+  relay: Hex;
+  /** Block time of the run, unix seconds. */
+  submittedAt: number;
   seedId: number;
   seed: number;
   frameCount: number;
@@ -360,6 +381,8 @@ export async function getScoreSubmittedPage(
     const t = e.topics as { player: ContractAddress; seed_id: bigint };
     const f = e.fields as {
       player_pubkey: Uint8Array;
+      relay: ContractAddress;
+      submitted_at: bigint;
       seed: bigint;
       frame_count: bigint;
       final_score: bigint;
@@ -374,6 +397,8 @@ export async function getScoreSubmittedPage(
       sequenceNumber: e.sequenceNumber,
       player: toHex0x(t.player) as Hex,
       playerPubkey: toHex(f.player_pubkey),
+      relay: toHex0x(f.relay) as Hex,
+      submittedAt: Number(f.submitted_at),
       seedId: Number(t.seed_id),
       seed: Number(f.seed),
       frameCount: Number(f.frame_count),
@@ -551,6 +576,8 @@ export function decodeSubmitReceipt(config: KalienConfig, receipt: TransactionRe
       run: {
         player: toHex0x(t.player) as Hex,
         playerPubkey: toHex(f.player_pubkey as Uint8Array),
+        relay: toHex0x(f.relay as unknown as ContractAddress) as Hex,
+        submittedAt: Number(f.submitted_at),
         seedId: Number(t.seed_id),
         seed: Number(f.seed),
         frameCount: Number(f.frame_count),

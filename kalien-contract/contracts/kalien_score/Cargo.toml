@@ -22,7 +22,7 @@ bench = false
 # Feature names are contracts with the toolchain; do not rename them.
 [features]
 entrypoints = []
-dev = ["sdk/dev", "thruput-erc20-if/dev"]
+dev = ["sdk/dev", "thruput-erc20-if/dev", "kalien_token/dev"]
 thruput-integration-test = []
 
 # `alloc`: without it the guest reads calldata into a fixed 4,096-byte
@@ -36,6 +36,8 @@ sdk = { version = "=0.51.1", registry = "thruput", features = ["std"] }
 
 [dependencies]
 thruput-erc20-if = { version = "=0.1.56", registry = "thruput" }
+# For the `KalienTokenAdmin` client (`handover_token`); no token entrypoints are linked.
+kalien_token = { path = "../kalien_token" }
 asteroids-verifier-core = { path = "../../../asteroids-core", default-features = false }
 
 [dev-dependencies]

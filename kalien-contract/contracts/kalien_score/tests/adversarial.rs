@@ -8,7 +8,10 @@ use std::sync::{Arc, Mutex};
 
 use asteroids_verifier_core::verify::verify_tape;
 use common::*;
-use kalien_score::{KalienScoreClient, MAX_FRAMES, RelayChanged, ScoreError, SettingsChanged, UNITS_PER_POINT};
+use kalien_score::{
+    KalienScoreClient, MAX_FRAMES, RelayChanged, ScoreError, ScoreSubmitted, SettingsChanged,
+    UNITS_PER_POINT,
+};
 use sdk::*;
 
 static SECOND_SCORE_NONCE: SHA256Hash = sdk::sha256_static!("KALIEN_SCORE_SECOND_NONCE");
@@ -213,7 +216,7 @@ fn relay_only_mode_blocks_other_callers() {
         .assert_abort_as::<ScoreError>();
     assert_eq!(err, ScoreError::NotAdmin);
     let err = world
-        .score_call(&world.relay, move |c| c.set_relay(&relay, true))
+        .score_call(&world.relay, move |c| c.add_relay(&relay))
         .assert_abort_as::<ScoreError>();
     assert_eq!(err, ScoreError::NotAdmin);
 
@@ -221,7 +224,7 @@ fn relay_only_mode_blocks_other_callers() {
     // The relay is not allowed yet.
     assert_eq!(world.submit_err(&player, T0_SEED_ID, &SHORT.bytes()), ScoreError::NotRelay);
 
-    let result = world.score_call(&world.admin, move |c| c.set_relay(&relay, true));
+    let result = world.score_call(&world.admin, move |c| c.add_relay(&relay));
     result.assert_success();
     let changed = result.filter_events::<RelayChanged>(&world.score);
     assert!(changed[0].payload().allowed);
@@ -239,7 +242,7 @@ fn relay_only_mode_blocks_other_callers() {
     assert_eq!(err, ScoreError::NotRelay);
 
     // Removing the relay closes it again; switching the mode off reopens.
-    admin_ok(&world, move |c| c.set_relay(&relay, false));
+    admin_ok(&world, move |c| c.remove_relay(&relay));
     assert_eq!(world.submit_err(&player, T0_SEED_ID, &MEDIUM.bytes()), ScoreError::NotRelay);
     admin_ok(&world, |c| c.set_relay_only(false));
     world.submit_ok(&player, T0_SEED_ID, &MEDIUM.bytes());
@@ -307,4 +310,158 @@ fn mint_amount_cannot_overflow() {
     assert!(max < i128::MAX / 1_000_000_000);
     // Improvement is computed only when final > previous, so the u32 subtraction
     // cannot wrap; NotImproved covers the rest (see rejects_score_not_above_best).
+}
+
+// ---------------------------------------------------------------------------
+// v3: relay set, event fields, pruning, token hand-off.
+
+#[test]
+fn relay_set_allows_several_lanes_and_is_bounded() {
+    let world = setup();
+    world.set_seed(T0_SEED_ID, SHORT.seed);
+    let lanes: Vec<ContractAddress> = (1..=4).map(|i| ContractAddress::named(&format!("relay-{i}"))).collect();
+    for lane in &lanes {
+        let lane = *lane;
+        admin_ok(&world, move |c| c.add_relay(&lane));
+    }
+    // Adding again changes nothing.
+    let lane0 = lanes[0];
+    let again = world.score_call(&world.admin, move |c| c.add_relay(&lane0));
+    again.assert_success();
+    assert!(again.filter_events::<RelayChanged>(&world.score).is_empty());
+    admin_ok(&world, |c| c.set_relay_only(true));
+
+    let set = world.view(|s, _| s.relays());
+    assert_eq!(set.count, 4);
+    assert_eq!(&set.relays[..4], &lanes[..]);
+
+    // Every lane can submit; each run's event names its lane.
+    let tapes = [SHORT.bytes(), MEDIUM.bytes()];
+    for (i, tape) in tapes.iter().enumerate() {
+        let player = Player::new(0x60 + i as u8);
+        let sig = player.sign(&world.network_hash, &world.score, T0_SEED_ID, tape);
+        let pubkey = player.pubkey();
+        let tape = tape.clone();
+        let result = world.score_call(&lanes[i + 2], move |c| c.submit_score(&pubkey, T0_SEED_ID, &tape, &sig));
+        result.assert_success();
+        let events = result.filter_events::<ScoreSubmitted>(&world.score);
+        assert_eq!(events[0].payload().relay, lanes[i + 2]);
+        assert_eq!(events[0].payload().submitted_at, T0_SECONDS);
+    }
+    // Not on the list.
+    // `world.relay` (the default submitter) is not on this list.
+    assert_eq!(world.submit_err(&Player::new(0x70), T0_SEED_ID, &REAL_GAME.bytes()), ScoreError::NotRelay);
+
+    // Remove a middle lane: the last one moves into its slot.
+    let lane1 = lanes[1];
+    let removed = world.score_call(&world.admin, move |c| c.remove_relay(&lane1));
+    removed.assert_success();
+    assert!(!removed.filter_events::<RelayChanged>(&world.score)[0].payload().allowed);
+    let set = world.view(|s, _| s.relays());
+    assert_eq!(set.count, 3);
+    assert_eq!(&set.relays[..3], &[lanes[0], lanes[3], lanes[2]]);
+    assert!(!world.view(move |s, _| s.is_relay(&lane1)));
+    // Removing an unknown address changes nothing.
+    let stranger = ContractAddress::named("stranger");
+    admin_ok(&world, move |c| c.remove_relay(&stranger));
+    assert_eq!(world.view(|s, _| s.relays()).count, 3);
+
+    // Fill to MAX_RELAYS, then one more fails.
+    for i in 0..(kalien_score::MAX_RELAYS - 3) {
+        let extra = ContractAddress::named(&format!("extra-{i}"));
+        admin_ok(&world, move |c| c.add_relay(&extra));
+    }
+    assert_eq!(world.view(|s, _| s.relays()).count as usize, kalien_score::MAX_RELAYS);
+    let err = world
+        .score_call(&world.admin, move |c| c.add_relay(&stranger))
+        .assert_abort_as::<ScoreError>();
+    assert_eq!(err, ScoreError::RelaySetFull);
+
+    // Only the admin manages the set.
+    let err = world
+        .score_call(&lanes[0], move |c| c.remove_relay(&lane0))
+        .assert_abort_as::<ScoreError>();
+    assert_eq!(err, ScoreError::NotAdmin);
+}
+
+#[test]
+fn prune_expired_runs_and_seeds() {
+    let world = setup();
+    world.set_seed(T0_SEED_ID, SHORT.seed);
+    let player = Player::new(0x71);
+    let tape = SHORT.bytes();
+    world.submit_ok(&player, T0_SEED_ID, &tape);
+    let address = player.address();
+    let hash = sha256_bytes(&tape);
+    assert_eq!(world.view(move |s, _| s.claimed_seed_id(&hash)), Some(T0_SEED_ID));
+
+    // Still active: refused.
+    let err = world
+        .score_call(&world.relay, move |c| c.prune_run(&address, T0_SEED_ID, &hash))
+        .assert_abort_as::<ScoreError>();
+    assert_eq!(err, ScoreError::SeedNotExpired);
+    let err = world
+        .score_call(&world.relay, |c| c.prune_seed(T0_SEED_ID))
+        .assert_abort_as::<ScoreError>();
+    assert_eq!(err, ScoreError::SeedNotExpired);
+    // A future epoch is not expired either.
+    let err = world
+        .score_call(&world.relay, |c| c.prune_seed(T0_SEED_ID + 500))
+        .assert_abort_as::<ScoreError>();
+    assert_eq!(err, ScoreError::SeedNotExpired);
+
+    world.advance_to(T0_SECONDS + 600 * kalien_score::ACTIVE_EPOCHS as u64);
+    // The wrong epoch for this tape keeps its claim.
+    let wrong = world.score_call(&world.relay, move |c| c.prune_run(&address, T0_SEED_ID - 1, &hash));
+    let pruned = wrong.assert_return_as::<kalien_score::Pruned>();
+    assert!(!pruned.best && !pruned.claimed);
+
+    let result = world.score_call(&world.relay, move |c| c.prune_run(&address, T0_SEED_ID, &hash));
+    let pruned = result.assert_return_as::<kalien_score::Pruned>();
+    assert!(pruned.best && pruned.claimed);
+    assert_eq!(world.best(&address, T0_SEED_ID), 0);
+    assert!(!world.view(move |s, _| s.is_claimed(&hash)));
+    // KALIEN stays with the player.
+    assert_eq!(world.balance(&address), 1_480 * UNITS_PER_POINT);
+
+    let result = world.score_call(&world.relay, |c| c.prune_seed(T0_SEED_ID));
+    assert!(result.assert_return_as::<kalien_score::Pruned>().seed);
+    assert_eq!(world.view(|s, _| s.seed(T0_SEED_ID)), None);
+    // Twice is harmless.
+    let again = world.score_call(&world.relay, |c| c.prune_seed(T0_SEED_ID));
+    assert!(!again.assert_return_as::<kalien_score::Pruned>().seed);
+}
+
+#[test]
+fn token_handover_moves_mint_authority() {
+    let world = setup();
+    world.set_seed(T0_SEED_ID, SHORT.seed);
+    let successor = ContractAddress::named("score-v4");
+    let token = world.token;
+
+    let err = world
+        .score_call(&world.relay, move |c| c.handover_token(&successor))
+        .assert_abort_as::<ScoreError>();
+    assert_eq!(err, ScoreError::NotAdmin);
+
+    let result = world.score_call(&world.admin, move |c| c.handover_token(&successor));
+    result.assert_success();
+    assert_eq!(result.filter_events::<kalien_score::TokenHandedOver>(&world.score).len(), 1);
+    assert_eq!(
+        world.view(move |_, _| kalien_token::KalienTokenAdminClient::new(&token).administrator()),
+        successor
+    );
+
+    // This contract can no longer mint, so a submission rolls back whole.
+    let player = Player::new(0x72);
+    let result = world.submit(&player, T0_SEED_ID, &SHORT.bytes());
+    assert_eq!(result.assert_abort_as::<kalien_token::ERC20Error>(), kalien_token::ERC20Error::MustBeContractOwner);
+    assert_eq!(world.best(&player.address(), T0_SEED_ID), 0);
+
+    // The successor mints with the same token and balances.
+    let receiver = player.address();
+    world
+        .transact(|tx| tx.call(&successor).run(move || kalien_token::ERC20Client::new(&token).mint(&receiver, 5)))
+        .assert_success();
+    assert_eq!(world.balance(&player.address()), 5);
 }

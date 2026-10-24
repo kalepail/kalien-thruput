@@ -4,6 +4,7 @@
 use sdk::storage::{Map, Value};
 use sdk::*;
 use sdk::crypto::{sha256, verify_signature_ed25519};
+use kalien_token::KalienTokenAdminClient;
 use thruput_erc20_if::ERC20Client;
 
 use crate::claim::{claim_digest, pubkey_account_address};
@@ -17,6 +18,8 @@ pub const ACTIVE_EPOCHS: u32 = 144;
 pub const MAX_FRAMES: u32 = 36_000;
 /// KALIEN base units minted per point of score improvement (7 decimals).
 pub const UNITS_PER_POINT: i128 = 10_000_000;
+/// Most relays the allowlist holds.
+pub const MAX_RELAYS: usize = 8;
 /// Seed used when the derived word is zero (the sim cannot use seed 0).
 pub const ZERO_SEED_FALLBACK: u32 = 0xDEAD_BEEF;
 
@@ -28,8 +31,45 @@ pub struct KalienScore {
     config: Value<Config>,
     seeds: Map<u32, Value<u32>>,
     best: Map<ContractAddress, Map<u32, Value<u32>>>,
-    claimed: Map<[u8; 32], Value<bool>>,
-    relays: Map<ContractAddress, Value<bool>>,
+    /// `sha256(tape)` -> the `seed_id` it was accepted for.
+    claimed: Map<[u8; 32], Value<u32>>,
+    relays: Value<RelaySet>,
+}
+
+/// The relay allowlist: the first `count` entries of `relays` are allowed.
+#[contract_type]
+#[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "dev", derive(Debug))]
+pub struct RelaySet {
+    pub count: u32,
+    pub relays: [ContractAddress; MAX_RELAYS],
+}
+
+impl RelaySet {
+    fn empty() -> Self {
+        Self {
+            count: 0,
+            relays: [ContractAddress::new([0; 32]); MAX_RELAYS],
+        }
+    }
+
+    fn active(&self) -> &[ContractAddress] {
+        &self.relays[..self.count as usize]
+    }
+
+    fn contains(&self, relay: &ContractAddress) -> bool {
+        self.active().contains(relay)
+    }
+}
+
+/// What `prune_run` / `prune_seed` deleted.
+#[contract_type]
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "dev", derive(Debug))]
+pub struct Pruned {
+    pub best: bool,
+    pub claimed: bool,
+    pub seed: bool,
 }
 
 #[contract_type]
@@ -85,6 +125,8 @@ pub enum ScoreError {
     ZeroSeed = 12,
     SeedingLocked = 13,
     NotRelay = 14,
+    RelaySetFull = 15,
+    SeedNotExpired = 16,
     TapeTooShort = 20,
     TapeBadMagic = 21,
     TapeBadVersion = 22,
@@ -107,6 +149,10 @@ pub struct ScoreSubmitted {
     #[topic]
     pub seed_id: u32,
     pub player_pubkey: [u8; 32],
+    /// The account that submitted the transaction (a relay in relay-only mode).
+    pub relay: ContractAddress,
+    /// Block time, unix seconds (the RPC has no block-time lookup).
+    pub submitted_at: u64,
     pub seed: u32,
     pub frame_count: u32,
     pub final_score: u32,
@@ -140,6 +186,15 @@ pub struct RelayChanged {
     pub allowed: bool,
 }
 
+/// The token's mint authority moved to another contract (`handover_token`).
+#[derive(Event, Clone, Debug)]
+pub struct TokenHandedOver {
+    #[topic]
+    pub token: ContractAddress,
+    #[topic]
+    pub new_administrator: ContractAddress,
+}
+
 /// The admin changed.
 #[derive(Event, Clone, Debug)]
 pub struct AdminChanged {
@@ -158,6 +213,16 @@ pub fn current_seed_id() -> u32 {
 /// `seed_id` is the current epoch or one of the previous `ACTIVE_EPOCHS - 1`.
 pub fn is_active(seed_id: u32, current: u32) -> bool {
     seed_id <= current && current - seed_id < ACTIVE_EPOCHS
+}
+
+/// `seed_id` is in the past and out of the active window for good.
+pub fn is_expired(seed_id: u32, current: u32) -> bool {
+    seed_id <= current && current - seed_id >= ACTIVE_EPOCHS
+}
+
+/// Block time in unix seconds.
+fn block_seconds() -> u64 {
+    *get_block_timepoint() / NANOS_PER_SECOND
 }
 
 /// `sha256(source_tx_hash || seed_id u32 LE || block_height i64 LE ||
@@ -207,12 +272,11 @@ impl KalienScore {
             .unwrap_or(0)
     }
 
-    fn _is_relay(&self, relay: &ContractAddress) -> bool {
+    fn _relay_set(&self) -> RelaySet {
         self.relays
-            .at(relay)
             .try_get()
             .none_if_missing()
-            .unwrap_or(false)
+            .unwrap_or_else(RelaySet::empty)
     }
 
     fn _settings_changed(config: &Config) {
@@ -224,18 +288,18 @@ impl KalienScore {
     }
 
     fn _is_claimed(&self, tape_hash: &[u8; 32]) -> bool {
-        self.claimed
-            .at(tape_hash)
-            .try_get()
-            .none_if_missing()
-            .unwrap_or(false)
+        self._claimed_seed_id(tape_hash).is_some()
+    }
+
+    fn _claimed_seed_id(&self, tape_hash: &[u8; 32]) -> Option<u32> {
+        self.claimed.at(tape_hash).try_get().none_if_missing()
     }
 }
 
 #[contract(
     client = KalienScoreClient,
     throws = ScoreError,
-    emits(ScoreSubmitted, SeedCreated, SettingsChanged, RelayChanged, AdminChanged)
+    emits(ScoreSubmitted, SeedCreated, SettingsChanged, RelayChanged, AdminChanged, TokenHandedOver)
 )]
 impl KalienScore {
     /// One-time setup. Call it atomically with deployment.
@@ -316,8 +380,9 @@ impl KalienScore {
     ) -> ScoreReceipt {
         let config = self._config();
         ensure(!config.paused, ScoreError::Paused);
+        let caller = get_caller();
         if config.relay_only {
-            ensure(self._is_relay(&get_caller()), ScoreError::NotRelay);
+            ensure(self._relay_set().contains(&caller), ScoreError::NotRelay);
         }
 
         let stored_seed = self._stored_seed(seed_id).unwrap_or_else(|| throw(ScoreError::UnknownSeed));
@@ -354,7 +419,7 @@ impl KalienScore {
         } = replay_tape(tape, MAX_FRAMES).unwrap_or_else(|err| throw(err));
 
         self.best.at_mut(&player).at_mut(&seed_id).set(&final_score);
-        self.claimed.at_mut(&tape_hash).set(&true);
+        self.claimed.at_mut(&tape_hash).set(&seed_id);
 
         let minted_delta = (final_score - previous_best) as i128 * UNITS_PER_POINT;
         ERC20Client::new(&config.token).mint(&player, minted_delta);
@@ -363,6 +428,8 @@ impl KalienScore {
             player,
             seed_id,
             player_pubkey: *player_pubkey,
+            relay: caller,
+            submitted_at: block_seconds(),
             seed,
             frame_count,
             final_score,
@@ -387,6 +454,65 @@ impl KalienScore {
     /// The best recorded score of `player` for `seed_id` (0 if none).
     pub fn best_score(&self, player: &ContractAddress, seed_id: u32) -> u32 {
         self._best(player, seed_id)
+    }
+
+    /// The `seed_id` a tape (by `sha256(tape)`) was accepted for, if any.
+    pub fn claimed_seed_id(&self, tape_hash: &[u8; 32]) -> Option<u32> {
+        self._claimed_seed_id(tape_hash)
+    }
+
+    /// Anyone: delete the stored best and tape hash of one run whose epoch has
+    /// left the active window for good. The storage deposits return to this
+    /// contract. Afterwards `best_score` for that epoch reads 0; the indexer
+    /// keeps the history.
+    pub fn prune_run(
+        &mut self,
+        player: &ContractAddress,
+        seed_id: u32,
+        tape_hash: &[u8; 32],
+    ) -> Pruned {
+        ensure(is_expired(seed_id, current_seed_id()), ScoreError::SeedNotExpired);
+        let mut pruned = Pruned {
+            best: false,
+            claimed: false,
+            seed: false,
+        };
+        let mut player_bests = self.best.at_mut(player);
+        if player_bests.at(&seed_id).try_get().none_if_missing().is_some() {
+            player_bests.delete_at(&seed_id);
+            pruned.best = true;
+        }
+        if self._claimed_seed_id(tape_hash) == Some(seed_id) {
+            self.claimed.delete_at(tape_hash);
+            pruned.claimed = true;
+        }
+        pruned
+    }
+
+    /// Anyone: delete the seed of an expired epoch (refunds its deposit).
+    pub fn prune_seed(&mut self, seed_id: u32) -> Pruned {
+        ensure(is_expired(seed_id, current_seed_id()), ScoreError::SeedNotExpired);
+        let present = self._stored_seed(seed_id).is_some();
+        if present {
+            self.seeds.delete_at(&seed_id);
+        }
+        Pruned {
+            best: false,
+            claimed: false,
+            seed: present,
+        }
+    }
+
+    /// Admin: give the token's mint authority to `new_administrator` (for
+    /// example a later score contract), so a redeploy keeps the same token and
+    /// balances. This contract can no longer mint afterwards.
+    pub fn handover_token(&mut self, new_administrator: &ContractAddress) {
+        let config = self._require_admin();
+        KalienTokenAdminClient::new(&config.token).set_administrator(new_administrator);
+        log_event(&TokenHandedOver {
+            token: config.token,
+            new_administrator: *new_administrator,
+        });
     }
 
     /// Whether a tape with this `sha256(tape)` was already accepted.
@@ -426,19 +552,49 @@ impl KalienScore {
         Self::_settings_changed(&config);
     }
 
-    /// Admin: allow or remove a relay address.
-    pub fn set_relay(&mut self, relay: &ContractAddress, allowed: bool) {
+    /// Admin: allow a relay (at most `MAX_RELAYS`). Adding one twice changes nothing.
+    pub fn add_relay(&mut self, relay: &ContractAddress) {
         self._require_admin();
-        self.relays.at_mut(relay).set(&allowed);
+        let mut set = self._relay_set();
+        if set.contains(relay) {
+            return;
+        }
+        ensure((set.count as usize) < MAX_RELAYS, ScoreError::RelaySetFull);
+        set.relays[set.count as usize] = *relay;
+        set.count += 1;
+        self.relays.set(&set);
         log_event(&RelayChanged {
             relay: *relay,
-            allowed,
+            allowed: true,
+        });
+    }
+
+    /// Admin: remove a relay. Removing an unknown address changes nothing.
+    pub fn remove_relay(&mut self, relay: &ContractAddress) {
+        self._require_admin();
+        let mut set = self._relay_set();
+        let Some(index) = set.active().iter().position(|r| r == relay) else {
+            return;
+        };
+        let last = set.count as usize - 1;
+        set.relays[index] = set.relays[last];
+        set.relays[last] = ContractAddress::new([0; 32]);
+        set.count -= 1;
+        self.relays.set(&set);
+        log_event(&RelayChanged {
+            relay: *relay,
+            allowed: false,
         });
     }
 
     /// Whether `relay` may submit while `relay_only` is on.
     pub fn is_relay(&self, relay: &ContractAddress) -> bool {
-        self._is_relay(relay)
+        self._relay_set().contains(relay)
+    }
+
+    /// The relay allowlist (the first `count` entries).
+    pub fn relays(&self) -> RelaySet {
+        self._relay_set()
     }
 
     /// Admin: disable `set_seed` for good. After this, only `ensure_current_seed`

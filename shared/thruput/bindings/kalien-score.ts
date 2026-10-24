@@ -11,22 +11,28 @@ const __gh_s = __gh_contract_spec.contractSpecString;
 const __gh_entrypoints = {
   KalienScore: {
     v0_1: {
+      addRelay: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("61e98fd6fa1ef2e5")),
       bestScore: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("699115ff457047b6")),
       claimMessage: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("73a29e934f192600")),
+      claimedSeedId: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("9a7f6a2aa38098d5")),
       config: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("990c283a540f6eac")),
       currentSeed: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("8e2e8f0664660c40")),
       currentSeedId: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("8d61bd2181e21b64")),
       ensureCurrentSeed: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("632c2ceffd1b7dcc")),
+      handoverToken: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("c41e6cd7c97e2ce4")),
       initialize: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("78deddfca2e9d13c")),
       isClaimed: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("af5f307c6b21a06d")),
       isRelay: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("cca053e9911fa235")),
       isSeedActive: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("f5299c273338cbdb")),
       lockSeeding: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("2eff8e01c5761e1f")),
       playerAddress: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("c0f3d5d78d0e846d")),
+      pruneRun: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("b63ce6419240d505")),
+      pruneSeed: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("2b994f3988e0440b")),
+      relays: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("808d1070ed2afb89")),
+      removeRelay: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("153c4d1cbde34d0a")),
       seed: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("326d168f4ee37c2b")),
       setAdmin: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("66447ca062fc95ab")),
       setPaused: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("074d6550d1255a2d")),
-      setRelay: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("3868941bad4c5746")),
       setRelayOnly: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("a9426b47ed2e2ec3")),
       setSeed: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("438c2d7b2e60fdab")),
       submitScore: __gh_protocol.contractEntrypointID(__gh_protocol_utils.fromHex("91239f105b22814d")),
@@ -42,7 +48,11 @@ export namespace kalien_score {
 
       export interface Config { "admin": __gh_protocol.ContractAddress; "token": __gh_protocol.ContractAddress; "paused": boolean; "relay_only": boolean; "seeding_locked": boolean; }
 
-      export type ScoreError = 1n | 2n | 3n | 4n | 5n | 6n | 7n | 8n | 9n | 10n | 11n | 12n | 13n | 14n | 20n | 21n | 22n | 23n | 24n | 25n | 26n | 27n | 28n | 30n | 31n | 32n;
+      export interface Pruned { "best": boolean; "claimed": boolean; "seed": boolean; }
+
+      export interface RelaySet { "count": bigint; "relays": __gh_client_contract.FixedArray<__gh_protocol.ContractAddress, 8>; }
+
+      export type ScoreError = 1n | 2n | 3n | 4n | 5n | 6n | 7n | 8n | 9n | 10n | 11n | 12n | 13n | 14n | 15n | 16n | 20n | 21n | 22n | 23n | 24n | 25n | 26n | 27n | 28n | 30n | 31n | 32n;
 
       export interface ScoreReceipt { "player": __gh_protocol.ContractAddress; "seed_id": bigint; "seed": bigint; "frame_count": bigint; "final_score": bigint; "previous_best": bigint; "minted_delta": bigint; "tape_hash": __gh_client_contract.FixedBytes<32>; }
 
@@ -72,7 +82,7 @@ export namespace kalien_score {
       export interface ScoreSubmitted extends __gh_client_contract.DecodedContractEvent<
         "ScoreSubmitted",
         { "player": __gh_protocol.ContractAddress; "seed_id": bigint },
-        { "player_pubkey": __gh_client_contract.FixedBytes<32>; "seed": bigint; "frame_count": bigint; "final_score": bigint; "previous_best": bigint; "new_best": bigint; "minted_delta": bigint; "tape_hash": __gh_client_contract.FixedBytes<32> }
+        { "player_pubkey": __gh_client_contract.FixedBytes<32>; "relay": __gh_protocol.ContractAddress; "submitted_at": bigint; "seed": bigint; "frame_count": bigint; "final_score": bigint; "previous_best": bigint; "new_best": bigint; "minted_delta": bigint; "tape_hash": __gh_client_contract.FixedBytes<32> }
       > {}
 
       export interface ScoreSubmittedFilter {
@@ -97,6 +107,17 @@ export namespace kalien_score {
       > {}
 
       export type SettingsChangedFilter = globalThis.Record<string, never>;
+
+      export interface TokenHandedOver extends __gh_client_contract.DecodedContractEvent<
+        "TokenHandedOver",
+        { "token": __gh_protocol.ContractAddress; "new_administrator": __gh_protocol.ContractAddress },
+        {  }
+      > {}
+
+      export interface TokenHandedOverFilter {
+        "token"?: __gh_client_contract.ContractEventFilterValue<__gh_protocol.ContractAddress>;
+        "new_administrator"?: __gh_client_contract.ContractEventFilterValue<__gh_protocol.ContractAddress>;
+      }
     }
   }
 }
@@ -104,6 +125,11 @@ export namespace kalien_score {
 export namespace KalienScore {
 
   export namespace v0_1 {
+
+    export interface AddRelayArgs {
+      relay: __gh_protocol.ContractAddress;
+    }
+    export type AddRelayResult = void;
 
     export interface BestScoreArgs {
       player: __gh_protocol.ContractAddress;
@@ -117,6 +143,11 @@ export namespace KalienScore {
     }
     export type ClaimMessageResult = __gh_client_contract.FixedBytes<32>;
 
+    export interface ClaimedSeedIdArgs {
+      tapeHash: __gh_client_contract.FixedBytes<32>;
+    }
+    export type ClaimedSeedIdResult = bigint | null;
+
     export type ConfigArgs = void;
     export type ConfigResult = __gh_codegen.kalien_score$v0_1$implementation$Config;
 
@@ -128,6 +159,11 @@ export namespace KalienScore {
 
     export type EnsureCurrentSeedArgs = void;
     export type EnsureCurrentSeedResult = __gh_codegen.kalien_score$v0_1$implementation$SeedInfo;
+
+    export interface HandoverTokenArgs {
+      newAdministrator: __gh_protocol.ContractAddress;
+    }
+    export type HandoverTokenResult = void;
 
     export interface InitializeArgs {
       admin: __gh_protocol.ContractAddress;
@@ -158,6 +194,26 @@ export namespace KalienScore {
     }
     export type PlayerAddressResult = __gh_protocol.ContractAddress;
 
+    export interface PruneRunArgs {
+      player: __gh_protocol.ContractAddress;
+      seedId: bigint;
+      tapeHash: __gh_client_contract.FixedBytes<32>;
+    }
+    export type PruneRunResult = __gh_codegen.kalien_score$v0_1$implementation$Pruned;
+
+    export interface PruneSeedArgs {
+      seedId: bigint;
+    }
+    export type PruneSeedResult = __gh_codegen.kalien_score$v0_1$implementation$Pruned;
+
+    export type RelaysArgs = void;
+    export type RelaysResult = __gh_codegen.kalien_score$v0_1$implementation$RelaySet;
+
+    export interface RemoveRelayArgs {
+      relay: __gh_protocol.ContractAddress;
+    }
+    export type RemoveRelayResult = void;
+
     export interface SeedArgs {
       seedId: bigint;
     }
@@ -172,12 +228,6 @@ export namespace KalienScore {
       paused: boolean;
     }
     export type SetPausedResult = void;
-
-    export interface SetRelayArgs {
-      relay: __gh_protocol.ContractAddress;
-      allowed: boolean;
-    }
-    export type SetRelayResult = void;
 
     export interface SetRelayOnlyArgs {
       relayOnly: boolean;
@@ -219,6 +269,14 @@ export const spec: __gh_client_contract.ContractSpec = {
       ],
       methods: [
         {
+          name: __gh_s("add_relay"),
+          args: [
+            { name: __gh_s("relay"), ty: { v: __gh_contract_spec.ContractTypeKind.Address } },
+          ],
+          return_type: { v: __gh_contract_spec.ContractTypeKind.Void },
+          effect: null,
+        },
+        {
           name: __gh_s("best_score"),
           args: [
             { name: __gh_s("player"), ty: { v: __gh_contract_spec.ContractTypeKind.Address } },
@@ -234,6 +292,14 @@ export const spec: __gh_client_contract.ContractSpec = {
             { name: __gh_s("tape_hash"), ty: { v: __gh_contract_spec.ContractTypeKind.Array, array: { element: { v: __gh_contract_spec.ContractTypeKind.U8 }, len: 32n } } },
           ],
           return_type: { v: __gh_contract_spec.ContractTypeKind.Array, array: { element: { v: __gh_contract_spec.ContractTypeKind.U8 }, len: 32n } },
+          effect: null,
+        },
+        {
+          name: __gh_s("claimed_seed_id"),
+          args: [
+            { name: __gh_s("tape_hash"), ty: { v: __gh_contract_spec.ContractTypeKind.Array, array: { element: { v: __gh_contract_spec.ContractTypeKind.U8 }, len: 32n } } },
+          ],
+          return_type: { v: __gh_contract_spec.ContractTypeKind.Option, option_inner: { v: __gh_contract_spec.ContractTypeKind.U32 } },
           effect: null,
         },
         {
@@ -262,6 +328,14 @@ export const spec: __gh_client_contract.ContractSpec = {
           args: [
           ],
           return_type: { v: __gh_contract_spec.ContractTypeKind.Named, named: { crate_name: __gh_s("kalien_score"), major: __gh_s("0.1"), module_path: __gh_s("kalien_score::implementation"), declared: __gh_s("SeedInfo") } },
+          effect: null,
+        },
+        {
+          name: __gh_s("handover_token"),
+          args: [
+            { name: __gh_s("new_administrator"), ty: { v: __gh_contract_spec.ContractTypeKind.Address } },
+          ],
+          return_type: { v: __gh_contract_spec.ContractTypeKind.Void },
           effect: null,
         },
         {
@@ -313,6 +387,39 @@ export const spec: __gh_client_contract.ContractSpec = {
           effect: null,
         },
         {
+          name: __gh_s("prune_run"),
+          args: [
+            { name: __gh_s("player"), ty: { v: __gh_contract_spec.ContractTypeKind.Address } },
+            { name: __gh_s("seed_id"), ty: { v: __gh_contract_spec.ContractTypeKind.U32 } },
+            { name: __gh_s("tape_hash"), ty: { v: __gh_contract_spec.ContractTypeKind.Array, array: { element: { v: __gh_contract_spec.ContractTypeKind.U8 }, len: 32n } } },
+          ],
+          return_type: { v: __gh_contract_spec.ContractTypeKind.Named, named: { crate_name: __gh_s("kalien_score"), major: __gh_s("0.1"), module_path: __gh_s("kalien_score::implementation"), declared: __gh_s("Pruned") } },
+          effect: null,
+        },
+        {
+          name: __gh_s("prune_seed"),
+          args: [
+            { name: __gh_s("seed_id"), ty: { v: __gh_contract_spec.ContractTypeKind.U32 } },
+          ],
+          return_type: { v: __gh_contract_spec.ContractTypeKind.Named, named: { crate_name: __gh_s("kalien_score"), major: __gh_s("0.1"), module_path: __gh_s("kalien_score::implementation"), declared: __gh_s("Pruned") } },
+          effect: null,
+        },
+        {
+          name: __gh_s("relays"),
+          args: [
+          ],
+          return_type: { v: __gh_contract_spec.ContractTypeKind.Named, named: { crate_name: __gh_s("kalien_score"), major: __gh_s("0.1"), module_path: __gh_s("kalien_score::implementation"), declared: __gh_s("RelaySet") } },
+          effect: null,
+        },
+        {
+          name: __gh_s("remove_relay"),
+          args: [
+            { name: __gh_s("relay"), ty: { v: __gh_contract_spec.ContractTypeKind.Address } },
+          ],
+          return_type: { v: __gh_contract_spec.ContractTypeKind.Void },
+          effect: null,
+        },
+        {
           name: __gh_s("seed"),
           args: [
             { name: __gh_s("seed_id"), ty: { v: __gh_contract_spec.ContractTypeKind.U32 } },
@@ -332,15 +439,6 @@ export const spec: __gh_client_contract.ContractSpec = {
           name: __gh_s("set_paused"),
           args: [
             { name: __gh_s("paused"), ty: { v: __gh_contract_spec.ContractTypeKind.Bool } },
-          ],
-          return_type: { v: __gh_contract_spec.ContractTypeKind.Void },
-          effect: null,
-        },
-        {
-          name: __gh_s("set_relay"),
-          args: [
-            { name: __gh_s("relay"), ty: { v: __gh_contract_spec.ContractTypeKind.Address } },
-            { name: __gh_s("allowed"), ty: { v: __gh_contract_spec.ContractTypeKind.Bool } },
           ],
           return_type: { v: __gh_contract_spec.ContractTypeKind.Void },
           effect: null,
@@ -391,6 +489,27 @@ export const spec: __gh_client_contract.ContractSpec = {
       },
     },
     {
+      v: __gh_contract_spec.ContractTypeDefKind.TypeDefStruct,
+      struct_def: {
+        name: { crate_name: __gh_s("kalien_score"), major: __gh_s("0.1"), module_path: __gh_s("kalien_score::implementation"), declared: __gh_s("Pruned") },
+        fields: [
+          { name: __gh_s("best"), ty: { v: __gh_contract_spec.ContractTypeKind.Bool } },
+          { name: __gh_s("claimed"), ty: { v: __gh_contract_spec.ContractTypeKind.Bool } },
+          { name: __gh_s("seed"), ty: { v: __gh_contract_spec.ContractTypeKind.Bool } },
+        ],
+      },
+    },
+    {
+      v: __gh_contract_spec.ContractTypeDefKind.TypeDefStruct,
+      struct_def: {
+        name: { crate_name: __gh_s("kalien_score"), major: __gh_s("0.1"), module_path: __gh_s("kalien_score::implementation"), declared: __gh_s("RelaySet") },
+        fields: [
+          { name: __gh_s("count"), ty: { v: __gh_contract_spec.ContractTypeKind.U32 } },
+          { name: __gh_s("relays"), ty: { v: __gh_contract_spec.ContractTypeKind.Array, array: { element: { v: __gh_contract_spec.ContractTypeKind.Address }, len: 8n } } },
+        ],
+      },
+    },
+    {
       v: __gh_contract_spec.ContractTypeDefKind.TypeDefEnum,
       enum_def: {
         name: { crate_name: __gh_s("kalien_score"), major: __gh_s("0.1"), module_path: __gh_s("kalien_score::implementation"), declared: __gh_s("ScoreError") },
@@ -409,6 +528,8 @@ export const spec: __gh_client_contract.ContractSpec = {
           { name: __gh_s("ZeroSeed"), value: 12n },
           { name: __gh_s("SeedingLocked"), value: 13n },
           { name: __gh_s("NotRelay"), value: 14n },
+          { name: __gh_s("RelaySetFull"), value: 15n },
+          { name: __gh_s("SeedNotExpired"), value: 16n },
           { name: __gh_s("TapeTooShort"), value: 20n },
           { name: __gh_s("TapeBadMagic"), value: 21n },
           { name: __gh_s("TapeBadVersion"), value: 22n },
@@ -481,6 +602,8 @@ export const spec: __gh_client_contract.ContractSpec = {
       ],
       fields: [
         { name: __gh_s("player_pubkey"), ty: { v: __gh_contract_spec.ContractTypeKind.Array, array: { element: { v: __gh_contract_spec.ContractTypeKind.U8 }, len: 32n } } },
+        { name: __gh_s("relay"), ty: { v: __gh_contract_spec.ContractTypeKind.Address } },
+        { name: __gh_s("submitted_at"), ty: { v: __gh_contract_spec.ContractTypeKind.U64 } },
         { name: __gh_s("seed"), ty: { v: __gh_contract_spec.ContractTypeKind.U32 } },
         { name: __gh_s("frame_count"), ty: { v: __gh_contract_spec.ContractTypeKind.U32 } },
         { name: __gh_s("final_score"), ty: { v: __gh_contract_spec.ContractTypeKind.U32 } },
@@ -511,6 +634,16 @@ export const spec: __gh_client_contract.ContractSpec = {
         { name: __gh_s("seeding_locked"), ty: { v: __gh_contract_spec.ContractTypeKind.Bool } },
       ],
     },
+    {
+      name: { crate_name: __gh_s("kalien_score"), major: __gh_s("0.1"), module_path: __gh_s("kalien_score::implementation"), declared: __gh_s("TokenHandedOver") },
+      signature: __gh_protocol.topic(__gh_protocol_utils.fromHex("6555764076c0624628e6e3545b3e876b601d299be013d06434b70464ac931ea1")),
+      topics: [
+        { name: __gh_s("token"), ty: { v: __gh_contract_spec.ContractTypeKind.Address } },
+        { name: __gh_s("new_administrator"), ty: { v: __gh_contract_spec.ContractTypeKind.Address } },
+      ],
+      fields: [
+      ],
+    },
   ],
 };
 
@@ -518,6 +651,34 @@ const __gh_codecs = __gh_client_contract.createContractCodecContext(spec.type_de
 
 export const KalienScore = {
   v0_1: {
+    addRelay: __gh_client_contract.defineContractMethod<
+      KalienScore.v0_1.AddRelayArgs,
+      KalienScore.v0_1.AddRelayResult,
+      KalienScore.v0_1.DeclaredException
+    >({
+      interfaceName: "KalienScore",
+      interfaceVersion: "0.1.0",
+      abiName: "add_relay",
+      publicName: "addRelay",
+      entrypoint: __gh_entrypoints.KalienScore.v0_1.addRelay,
+      effect: spec.interfaces[0]!.methods[0]!.effect,
+      args: [
+        {
+          abiName: "relay",
+          publicName: "relay",
+          type: spec.interfaces[0]!.methods[0]!.args[0]!.ty,
+        },
+      ],
+      returnType: spec.interfaces[0]!.methods[0]!.return_type,
+      throws: [
+        {
+          selector: 0xdf1e219a979853c7n,
+          name: "ScoreError",
+          type: spec.interfaces[0]!.throws[0]!.ty,
+        },
+      ],
+      codecs: __gh_codecs,
+    }),
     bestScore: __gh_client_contract.defineContractMethod<
       KalienScore.v0_1.BestScoreArgs,
       KalienScore.v0_1.BestScoreResult,
@@ -528,20 +689,20 @@ export const KalienScore = {
       abiName: "best_score",
       publicName: "bestScore",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.bestScore,
-      effect: spec.interfaces[0]!.methods[0]!.effect,
+      effect: spec.interfaces[0]!.methods[1]!.effect,
       args: [
         {
           abiName: "player",
           publicName: "player",
-          type: spec.interfaces[0]!.methods[0]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[1]!.args[0]!.ty,
         },
         {
           abiName: "seed_id",
           publicName: "seedId",
-          type: spec.interfaces[0]!.methods[0]!.args[1]!.ty,
+          type: spec.interfaces[0]!.methods[1]!.args[1]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[0]!.return_type,
+      returnType: spec.interfaces[0]!.methods[1]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -561,20 +722,48 @@ export const KalienScore = {
       abiName: "claim_message",
       publicName: "claimMessage",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.claimMessage,
-      effect: spec.interfaces[0]!.methods[1]!.effect,
+      effect: spec.interfaces[0]!.methods[2]!.effect,
       args: [
         {
           abiName: "seed_id",
           publicName: "seedId",
-          type: spec.interfaces[0]!.methods[1]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[2]!.args[0]!.ty,
         },
         {
           abiName: "tape_hash",
           publicName: "tapeHash",
-          type: spec.interfaces[0]!.methods[1]!.args[1]!.ty,
+          type: spec.interfaces[0]!.methods[2]!.args[1]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[1]!.return_type,
+      returnType: spec.interfaces[0]!.methods[2]!.return_type,
+      throws: [
+        {
+          selector: 0xdf1e219a979853c7n,
+          name: "ScoreError",
+          type: spec.interfaces[0]!.throws[0]!.ty,
+        },
+      ],
+      codecs: __gh_codecs,
+    }),
+    claimedSeedId: __gh_client_contract.defineContractMethod<
+      KalienScore.v0_1.ClaimedSeedIdArgs,
+      KalienScore.v0_1.ClaimedSeedIdResult,
+      KalienScore.v0_1.DeclaredException
+    >({
+      interfaceName: "KalienScore",
+      interfaceVersion: "0.1.0",
+      abiName: "claimed_seed_id",
+      publicName: "claimedSeedId",
+      entrypoint: __gh_entrypoints.KalienScore.v0_1.claimedSeedId,
+      effect: spec.interfaces[0]!.methods[3]!.effect,
+      args: [
+        {
+          abiName: "tape_hash",
+          publicName: "tapeHash",
+          type: spec.interfaces[0]!.methods[3]!.args[0]!.ty,
+        },
+      ],
+      returnType: spec.interfaces[0]!.methods[3]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -594,10 +783,10 @@ export const KalienScore = {
       abiName: "config",
       publicName: "config",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.config,
-      effect: spec.interfaces[0]!.methods[2]!.effect,
+      effect: spec.interfaces[0]!.methods[4]!.effect,
       args: [
       ],
-      returnType: spec.interfaces[0]!.methods[2]!.return_type,
+      returnType: spec.interfaces[0]!.methods[4]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -617,10 +806,10 @@ export const KalienScore = {
       abiName: "current_seed",
       publicName: "currentSeed",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.currentSeed,
-      effect: spec.interfaces[0]!.methods[3]!.effect,
+      effect: spec.interfaces[0]!.methods[5]!.effect,
       args: [
       ],
-      returnType: spec.interfaces[0]!.methods[3]!.return_type,
+      returnType: spec.interfaces[0]!.methods[5]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -640,10 +829,10 @@ export const KalienScore = {
       abiName: "current_seed_id",
       publicName: "currentSeedId",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.currentSeedId,
-      effect: spec.interfaces[0]!.methods[4]!.effect,
+      effect: spec.interfaces[0]!.methods[6]!.effect,
       args: [
       ],
-      returnType: spec.interfaces[0]!.methods[4]!.return_type,
+      returnType: spec.interfaces[0]!.methods[6]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -663,10 +852,38 @@ export const KalienScore = {
       abiName: "ensure_current_seed",
       publicName: "ensureCurrentSeed",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.ensureCurrentSeed,
-      effect: spec.interfaces[0]!.methods[5]!.effect,
+      effect: spec.interfaces[0]!.methods[7]!.effect,
       args: [
       ],
-      returnType: spec.interfaces[0]!.methods[5]!.return_type,
+      returnType: spec.interfaces[0]!.methods[7]!.return_type,
+      throws: [
+        {
+          selector: 0xdf1e219a979853c7n,
+          name: "ScoreError",
+          type: spec.interfaces[0]!.throws[0]!.ty,
+        },
+      ],
+      codecs: __gh_codecs,
+    }),
+    handoverToken: __gh_client_contract.defineContractMethod<
+      KalienScore.v0_1.HandoverTokenArgs,
+      KalienScore.v0_1.HandoverTokenResult,
+      KalienScore.v0_1.DeclaredException
+    >({
+      interfaceName: "KalienScore",
+      interfaceVersion: "0.1.0",
+      abiName: "handover_token",
+      publicName: "handoverToken",
+      entrypoint: __gh_entrypoints.KalienScore.v0_1.handoverToken,
+      effect: spec.interfaces[0]!.methods[8]!.effect,
+      args: [
+        {
+          abiName: "new_administrator",
+          publicName: "newAdministrator",
+          type: spec.interfaces[0]!.methods[8]!.args[0]!.ty,
+        },
+      ],
+      returnType: spec.interfaces[0]!.methods[8]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -686,20 +903,20 @@ export const KalienScore = {
       abiName: "initialize",
       publicName: "initialize",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.initialize,
-      effect: spec.interfaces[0]!.methods[6]!.effect,
+      effect: spec.interfaces[0]!.methods[9]!.effect,
       args: [
         {
           abiName: "admin",
           publicName: "admin",
-          type: spec.interfaces[0]!.methods[6]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[9]!.args[0]!.ty,
         },
         {
           abiName: "token",
           publicName: "token",
-          type: spec.interfaces[0]!.methods[6]!.args[1]!.ty,
+          type: spec.interfaces[0]!.methods[9]!.args[1]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[6]!.return_type,
+      returnType: spec.interfaces[0]!.methods[9]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -719,15 +936,15 @@ export const KalienScore = {
       abiName: "is_claimed",
       publicName: "isClaimed",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.isClaimed,
-      effect: spec.interfaces[0]!.methods[7]!.effect,
+      effect: spec.interfaces[0]!.methods[10]!.effect,
       args: [
         {
           abiName: "tape_hash",
           publicName: "tapeHash",
-          type: spec.interfaces[0]!.methods[7]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[10]!.args[0]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[7]!.return_type,
+      returnType: spec.interfaces[0]!.methods[10]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -747,15 +964,15 @@ export const KalienScore = {
       abiName: "is_relay",
       publicName: "isRelay",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.isRelay,
-      effect: spec.interfaces[0]!.methods[8]!.effect,
+      effect: spec.interfaces[0]!.methods[11]!.effect,
       args: [
         {
           abiName: "relay",
           publicName: "relay",
-          type: spec.interfaces[0]!.methods[8]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[11]!.args[0]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[8]!.return_type,
+      returnType: spec.interfaces[0]!.methods[11]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -775,15 +992,15 @@ export const KalienScore = {
       abiName: "is_seed_active",
       publicName: "isSeedActive",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.isSeedActive,
-      effect: spec.interfaces[0]!.methods[9]!.effect,
+      effect: spec.interfaces[0]!.methods[12]!.effect,
       args: [
         {
           abiName: "seed_id",
           publicName: "seedId",
-          type: spec.interfaces[0]!.methods[9]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[12]!.args[0]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[9]!.return_type,
+      returnType: spec.interfaces[0]!.methods[12]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -803,10 +1020,10 @@ export const KalienScore = {
       abiName: "lock_seeding",
       publicName: "lockSeeding",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.lockSeeding,
-      effect: spec.interfaces[0]!.methods[10]!.effect,
+      effect: spec.interfaces[0]!.methods[13]!.effect,
       args: [
       ],
-      returnType: spec.interfaces[0]!.methods[10]!.return_type,
+      returnType: spec.interfaces[0]!.methods[13]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -826,15 +1043,132 @@ export const KalienScore = {
       abiName: "player_address",
       publicName: "playerAddress",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.playerAddress,
-      effect: spec.interfaces[0]!.methods[11]!.effect,
+      effect: spec.interfaces[0]!.methods[14]!.effect,
       args: [
         {
           abiName: "player_pubkey",
           publicName: "playerPubkey",
-          type: spec.interfaces[0]!.methods[11]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[14]!.args[0]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[11]!.return_type,
+      returnType: spec.interfaces[0]!.methods[14]!.return_type,
+      throws: [
+        {
+          selector: 0xdf1e219a979853c7n,
+          name: "ScoreError",
+          type: spec.interfaces[0]!.throws[0]!.ty,
+        },
+      ],
+      codecs: __gh_codecs,
+    }),
+    pruneRun: __gh_client_contract.defineContractMethod<
+      KalienScore.v0_1.PruneRunArgs,
+      KalienScore.v0_1.PruneRunResult,
+      KalienScore.v0_1.DeclaredException
+    >({
+      interfaceName: "KalienScore",
+      interfaceVersion: "0.1.0",
+      abiName: "prune_run",
+      publicName: "pruneRun",
+      entrypoint: __gh_entrypoints.KalienScore.v0_1.pruneRun,
+      effect: spec.interfaces[0]!.methods[15]!.effect,
+      args: [
+        {
+          abiName: "player",
+          publicName: "player",
+          type: spec.interfaces[0]!.methods[15]!.args[0]!.ty,
+        },
+        {
+          abiName: "seed_id",
+          publicName: "seedId",
+          type: spec.interfaces[0]!.methods[15]!.args[1]!.ty,
+        },
+        {
+          abiName: "tape_hash",
+          publicName: "tapeHash",
+          type: spec.interfaces[0]!.methods[15]!.args[2]!.ty,
+        },
+      ],
+      returnType: spec.interfaces[0]!.methods[15]!.return_type,
+      throws: [
+        {
+          selector: 0xdf1e219a979853c7n,
+          name: "ScoreError",
+          type: spec.interfaces[0]!.throws[0]!.ty,
+        },
+      ],
+      codecs: __gh_codecs,
+    }),
+    pruneSeed: __gh_client_contract.defineContractMethod<
+      KalienScore.v0_1.PruneSeedArgs,
+      KalienScore.v0_1.PruneSeedResult,
+      KalienScore.v0_1.DeclaredException
+    >({
+      interfaceName: "KalienScore",
+      interfaceVersion: "0.1.0",
+      abiName: "prune_seed",
+      publicName: "pruneSeed",
+      entrypoint: __gh_entrypoints.KalienScore.v0_1.pruneSeed,
+      effect: spec.interfaces[0]!.methods[16]!.effect,
+      args: [
+        {
+          abiName: "seed_id",
+          publicName: "seedId",
+          type: spec.interfaces[0]!.methods[16]!.args[0]!.ty,
+        },
+      ],
+      returnType: spec.interfaces[0]!.methods[16]!.return_type,
+      throws: [
+        {
+          selector: 0xdf1e219a979853c7n,
+          name: "ScoreError",
+          type: spec.interfaces[0]!.throws[0]!.ty,
+        },
+      ],
+      codecs: __gh_codecs,
+    }),
+    relays: __gh_client_contract.defineContractMethod<
+      KalienScore.v0_1.RelaysArgs,
+      KalienScore.v0_1.RelaysResult,
+      KalienScore.v0_1.DeclaredException
+    >({
+      interfaceName: "KalienScore",
+      interfaceVersion: "0.1.0",
+      abiName: "relays",
+      publicName: "relays",
+      entrypoint: __gh_entrypoints.KalienScore.v0_1.relays,
+      effect: spec.interfaces[0]!.methods[17]!.effect,
+      args: [
+      ],
+      returnType: spec.interfaces[0]!.methods[17]!.return_type,
+      throws: [
+        {
+          selector: 0xdf1e219a979853c7n,
+          name: "ScoreError",
+          type: spec.interfaces[0]!.throws[0]!.ty,
+        },
+      ],
+      codecs: __gh_codecs,
+    }),
+    removeRelay: __gh_client_contract.defineContractMethod<
+      KalienScore.v0_1.RemoveRelayArgs,
+      KalienScore.v0_1.RemoveRelayResult,
+      KalienScore.v0_1.DeclaredException
+    >({
+      interfaceName: "KalienScore",
+      interfaceVersion: "0.1.0",
+      abiName: "remove_relay",
+      publicName: "removeRelay",
+      entrypoint: __gh_entrypoints.KalienScore.v0_1.removeRelay,
+      effect: spec.interfaces[0]!.methods[18]!.effect,
+      args: [
+        {
+          abiName: "relay",
+          publicName: "relay",
+          type: spec.interfaces[0]!.methods[18]!.args[0]!.ty,
+        },
+      ],
+      returnType: spec.interfaces[0]!.methods[18]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -854,15 +1188,15 @@ export const KalienScore = {
       abiName: "seed",
       publicName: "seed",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.seed,
-      effect: spec.interfaces[0]!.methods[12]!.effect,
+      effect: spec.interfaces[0]!.methods[19]!.effect,
       args: [
         {
           abiName: "seed_id",
           publicName: "seedId",
-          type: spec.interfaces[0]!.methods[12]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[19]!.args[0]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[12]!.return_type,
+      returnType: spec.interfaces[0]!.methods[19]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -882,15 +1216,15 @@ export const KalienScore = {
       abiName: "set_admin",
       publicName: "setAdmin",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.setAdmin,
-      effect: spec.interfaces[0]!.methods[13]!.effect,
+      effect: spec.interfaces[0]!.methods[20]!.effect,
       args: [
         {
           abiName: "admin",
           publicName: "admin",
-          type: spec.interfaces[0]!.methods[13]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[20]!.args[0]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[13]!.return_type,
+      returnType: spec.interfaces[0]!.methods[20]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -910,48 +1244,15 @@ export const KalienScore = {
       abiName: "set_paused",
       publicName: "setPaused",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.setPaused,
-      effect: spec.interfaces[0]!.methods[14]!.effect,
+      effect: spec.interfaces[0]!.methods[21]!.effect,
       args: [
         {
           abiName: "paused",
           publicName: "paused",
-          type: spec.interfaces[0]!.methods[14]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[21]!.args[0]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[14]!.return_type,
-      throws: [
-        {
-          selector: 0xdf1e219a979853c7n,
-          name: "ScoreError",
-          type: spec.interfaces[0]!.throws[0]!.ty,
-        },
-      ],
-      codecs: __gh_codecs,
-    }),
-    setRelay: __gh_client_contract.defineContractMethod<
-      KalienScore.v0_1.SetRelayArgs,
-      KalienScore.v0_1.SetRelayResult,
-      KalienScore.v0_1.DeclaredException
-    >({
-      interfaceName: "KalienScore",
-      interfaceVersion: "0.1.0",
-      abiName: "set_relay",
-      publicName: "setRelay",
-      entrypoint: __gh_entrypoints.KalienScore.v0_1.setRelay,
-      effect: spec.interfaces[0]!.methods[15]!.effect,
-      args: [
-        {
-          abiName: "relay",
-          publicName: "relay",
-          type: spec.interfaces[0]!.methods[15]!.args[0]!.ty,
-        },
-        {
-          abiName: "allowed",
-          publicName: "allowed",
-          type: spec.interfaces[0]!.methods[15]!.args[1]!.ty,
-        },
-      ],
-      returnType: spec.interfaces[0]!.methods[15]!.return_type,
+      returnType: spec.interfaces[0]!.methods[21]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -971,15 +1272,15 @@ export const KalienScore = {
       abiName: "set_relay_only",
       publicName: "setRelayOnly",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.setRelayOnly,
-      effect: spec.interfaces[0]!.methods[16]!.effect,
+      effect: spec.interfaces[0]!.methods[22]!.effect,
       args: [
         {
           abiName: "relay_only",
           publicName: "relayOnly",
-          type: spec.interfaces[0]!.methods[16]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[22]!.args[0]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[16]!.return_type,
+      returnType: spec.interfaces[0]!.methods[22]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -999,20 +1300,20 @@ export const KalienScore = {
       abiName: "set_seed",
       publicName: "setSeed",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.setSeed,
-      effect: spec.interfaces[0]!.methods[17]!.effect,
+      effect: spec.interfaces[0]!.methods[23]!.effect,
       args: [
         {
           abiName: "seed_id",
           publicName: "seedId",
-          type: spec.interfaces[0]!.methods[17]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[23]!.args[0]!.ty,
         },
         {
           abiName: "seed",
           publicName: "seed",
-          type: spec.interfaces[0]!.methods[17]!.args[1]!.ty,
+          type: spec.interfaces[0]!.methods[23]!.args[1]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[17]!.return_type,
+      returnType: spec.interfaces[0]!.methods[23]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -1032,30 +1333,30 @@ export const KalienScore = {
       abiName: "submit_score",
       publicName: "submitScore",
       entrypoint: __gh_entrypoints.KalienScore.v0_1.submitScore,
-      effect: spec.interfaces[0]!.methods[18]!.effect,
+      effect: spec.interfaces[0]!.methods[24]!.effect,
       args: [
         {
           abiName: "player_pubkey",
           publicName: "playerPubkey",
-          type: spec.interfaces[0]!.methods[18]!.args[0]!.ty,
+          type: spec.interfaces[0]!.methods[24]!.args[0]!.ty,
         },
         {
           abiName: "seed_id",
           publicName: "seedId",
-          type: spec.interfaces[0]!.methods[18]!.args[1]!.ty,
+          type: spec.interfaces[0]!.methods[24]!.args[1]!.ty,
         },
         {
           abiName: "tape",
           publicName: "tape",
-          type: spec.interfaces[0]!.methods[18]!.args[2]!.ty,
+          type: spec.interfaces[0]!.methods[24]!.args[2]!.ty,
         },
         {
           abiName: "signature",
           publicName: "signature",
-          type: spec.interfaces[0]!.methods[18]!.args[3]!.ty,
+          type: spec.interfaces[0]!.methods[24]!.args[3]!.ty,
         },
       ],
-      returnType: spec.interfaces[0]!.methods[18]!.return_type,
+      returnType: spec.interfaces[0]!.methods[24]!.return_type,
       throws: [
         {
           selector: 0xdf1e219a979853c7n,
@@ -1130,6 +1431,8 @@ export const kalien_score = {
         "ZeroSeed": 12n,
         "SeedingLocked": 13n,
         "NotRelay": 14n,
+        "RelaySetFull": 15n,
+        "SeedNotExpired": 16n,
         "TapeTooShort": 20n,
         "TapeBadMagic": 21n,
         "TapeBadVersion": 22n,
@@ -1165,13 +1468,15 @@ export const kalien_score = {
         ],
         fields: [
           { name: "player_pubkey", type: spec.events[2]!.fields[0]!.ty },
-          { name: "seed", type: spec.events[2]!.fields[1]!.ty },
-          { name: "frame_count", type: spec.events[2]!.fields[2]!.ty },
-          { name: "final_score", type: spec.events[2]!.fields[3]!.ty },
-          { name: "previous_best", type: spec.events[2]!.fields[4]!.ty },
-          { name: "new_best", type: spec.events[2]!.fields[5]!.ty },
-          { name: "minted_delta", type: spec.events[2]!.fields[6]!.ty },
-          { name: "tape_hash", type: spec.events[2]!.fields[7]!.ty },
+          { name: "relay", type: spec.events[2]!.fields[1]!.ty },
+          { name: "submitted_at", type: spec.events[2]!.fields[2]!.ty },
+          { name: "seed", type: spec.events[2]!.fields[3]!.ty },
+          { name: "frame_count", type: spec.events[2]!.fields[4]!.ty },
+          { name: "final_score", type: spec.events[2]!.fields[5]!.ty },
+          { name: "previous_best", type: spec.events[2]!.fields[6]!.ty },
+          { name: "new_best", type: spec.events[2]!.fields[7]!.ty },
+          { name: "minted_delta", type: spec.events[2]!.fields[8]!.ty },
+          { name: "tape_hash", type: spec.events[2]!.fields[9]!.ty },
         ],
         codecs: __gh_codecs,
       }),
@@ -1212,19 +1517,45 @@ export const kalien_score = {
         ],
         codecs: __gh_codecs,
       }),
+      TokenHandedOver: __gh_client_contract.defineContractEvent<
+        "TokenHandedOver",
+        kalien_score.v0_1.implementation.TokenHandedOver["topics"],
+        kalien_score.v0_1.implementation.TokenHandedOver["fields"],
+        kalien_score.v0_1.implementation.TokenHandedOverFilter
+      >({
+        name: "TokenHandedOver",
+        signature: spec.events[5]!.signature,
+        topics: [
+          {
+            name: "token",
+            type: spec.events[5]!.topics[0]!.ty,
+            representation: "address",
+          },
+          {
+            name: "new_administrator",
+            type: spec.events[5]!.topics[1]!.ty,
+            representation: "address",
+          },
+        ],
+        fields: [
+        ],
+        codecs: __gh_codecs,
+      }),
     },
   },
 } as const;
 
-export type KalienScoreEvent = kalien_score.v0_1.implementation.AdminChanged | kalien_score.v0_1.implementation.RelayChanged | kalien_score.v0_1.implementation.ScoreSubmitted | kalien_score.v0_1.implementation.SeedCreated | kalien_score.v0_1.implementation.SettingsChanged;
+export type KalienScoreEvent = kalien_score.v0_1.implementation.AdminChanged | kalien_score.v0_1.implementation.RelayChanged | kalien_score.v0_1.implementation.ScoreSubmitted | kalien_score.v0_1.implementation.SeedCreated | kalien_score.v0_1.implementation.SettingsChanged | kalien_score.v0_1.implementation.TokenHandedOver;
 
 export function decodeEvent(__gh_event: { topics: globalThis.Uint8Array[]; data: globalThis.Uint8Array }): KalienScoreEvent | null {
-  return kalien_score.v0_1.implementation.AdminChanged.decode(__gh_event) ?? kalien_score.v0_1.implementation.RelayChanged.decode(__gh_event) ?? kalien_score.v0_1.implementation.ScoreSubmitted.decode(__gh_event) ?? kalien_score.v0_1.implementation.SeedCreated.decode(__gh_event) ?? kalien_score.v0_1.implementation.SettingsChanged.decode(__gh_event);
+  return kalien_score.v0_1.implementation.AdminChanged.decode(__gh_event) ?? kalien_score.v0_1.implementation.RelayChanged.decode(__gh_event) ?? kalien_score.v0_1.implementation.ScoreSubmitted.decode(__gh_event) ?? kalien_score.v0_1.implementation.SeedCreated.decode(__gh_event) ?? kalien_score.v0_1.implementation.SettingsChanged.decode(__gh_event) ?? kalien_score.v0_1.implementation.TokenHandedOver.decode(__gh_event);
 }
 
 // The types the namespaces above refer to, under names no declaration can capture.
 export namespace __gh_codegen {
   export type kalien_score$v0_1$implementation$Config = kalien_score.v0_1.implementation.Config;
+  export type kalien_score$v0_1$implementation$Pruned = kalien_score.v0_1.implementation.Pruned;
+  export type kalien_score$v0_1$implementation$RelaySet = kalien_score.v0_1.implementation.RelaySet;
   export type kalien_score$v0_1$implementation$ScoreError = kalien_score.v0_1.implementation.ScoreError;
   export type kalien_score$v0_1$implementation$ScoreReceipt = kalien_score.v0_1.implementation.ScoreReceipt;
   export type kalien_score$v0_1$implementation$SeedInfo = kalien_score.v0_1.implementation.SeedInfo;

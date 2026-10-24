@@ -13,8 +13,8 @@
  *                (--player-key NAME | --player-secret-file FILE) [--seed-id N] [--gas N]
  *   fixtures     --deployment FILE --admin-key NAME --relay-key NAME --player-key NAME [--out FILE]
  *                fix fixture seeds on free epochs and submit the fixture tapes
- *   harden       --deployment FILE --admin-key NAME --relay-key NAME [--lock-seeding]
- *                allow the relay, turn on relay-only mode, optionally lock set_seed for good
+ *   harden       --deployment FILE --admin-key NAME --relay-keys NAME,NAME,... [--lock-seeding]
+ *                allow the relays, turn on relay-only mode, optionally lock set_seed for good
  *   export-secret --key NAME                               print the 32-byte seed as hex (for the Worker secret file)
  *   integration  --rpc URL [--out FILE]                     full local-node test with fresh keys
  *
@@ -411,22 +411,23 @@ async function cmdHarden(args: Record<string, string>) {
   const dep = loadDeployment(need(args, "deployment"));
   const client = await connect(dep.rpcUrl);
   const admin = walletFor(client, loadKeySecret(need(args, "admin-key")));
-  const relay = walletFor(client, loadKeySecret(need(args, "relay-key")));
+  const relayKeys = need(args, "relay-keys").split(",").filter(Boolean);
+  const relays = relayKeys.map((k) => walletFor(client, loadKeySecret(k)).account.address);
   const score = addressFromHex(dep.scoreContract);
-  const invocations = [
-    KalienScore.v0_1.setRelay.invocation(score, gasAmount(5_000_000n), { relay: relay.account.address, allowed: true }),
-    KalienScore.v0_1.setRelayOnly.invocation(score, gasAmount(5_000_000n), { relayOnly: true }),
-  ];
+  const invocations = relays.map((relay) => KalienScore.v0_1.addRelay.invocation(score, gasAmount(5_000_000n), { relay }));
+  invocations.push(KalienScore.v0_1.setRelayOnly.invocation(score, gasAmount(5_000_000n), { relayOnly: true }));
   if (args["lock-seeding"] === "true") invocations.push(KalienScore.v0_1.lockSeeding.invocation(score, gasAmount(5_000_000n)));
   const txs: string[] = [];
   for (const invocation of invocations) {
     const res = await admin.executeAndWait({ invocation, gasLimit: gasAmount(10_000_000n) });
     txs.push(toHex0x(res.txHash));
   }
-  const cfg = await KalienScore.v0_1.config.view({ client, contract: score });
-  const allowed = await KalienScore.v0_1.isRelay.view({ client, contract: score, args: { relay: relay.account.address } });
-  console.log(JSON.stringify({ relay: toHex0x(relay.account.address), relayAllowed: allowed.value, config: cfg.value, txs }, (_, v) => jsonable(typeof v === "object" && v instanceof Uint8Array && v.length === 32 ? toHex0x(v as ContractAddress) : v)));
-  if (!allowed.value || !(cfg.value as unknown as { relay_only: boolean }).relay_only) throw new Error("harden did not take effect");
+  const cfg = (await KalienScore.v0_1.config.view({ client, contract: score })).value as unknown as { relay_only: boolean; seeding_locked: boolean };
+  const set = (await KalienScore.v0_1.relays.view({ client, contract: score })).value as unknown as { count: bigint; relays: ContractAddress[] };
+  const allowed = set.relays.slice(0, Number(set.count)).map((a) => toHex0x(a));
+  console.log(JSON.stringify({ relays: allowed, relayKeys, relayOnly: cfg.relay_only, seedingLocked: cfg.seeding_locked, txs }));
+  for (const r of relays) if (!allowed.includes(toHex0x(r))) throw new Error(`relay ${toHex0x(r)} not allowed`);
+  if (!cfg.relay_only) throw new Error("relay-only mode is off");
 }
 
 async function cmdExportSecret(args: Record<string, string>) {
