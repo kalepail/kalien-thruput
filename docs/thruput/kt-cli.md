@@ -416,7 +416,7 @@ Each tape is 18,024 bytes (the maximum) and passes `scripts/verify-tape.ts`.
 ### Burst: 8 × 36,000 frames at once (`concurrency-runs --tapes-dir`)
 
 **8/8 confirmed in 8.3 s wall, 58.1 runs/min. Lane spread: lane0 +2, lane1 +0,
-lane2 +4, lane3 +2.** Total gas 516.0M.
+lane2 +4, lane3 +2.** Total gas 517.0M.
 
 | Player | Score | Post | Done | Gas | Run id | Tx |
 |---|---:|---:|---:|---:|---|---|
