@@ -212,9 +212,10 @@ Deploy order: token `initialize(deployer)`, then score `initialize(admin, token)
 
 General: JSON bodies are camelCase and carry `success: true|false`. Errors are
 `{ success: false, error: "<text>", code?: "<slug>" }` with a 4xx/5xx status; 429 is a rate
-limit (`Retry-After` header). Hex input accepts an optional `0x`. Addresses are lowercase
-`0x` + 64 hex. KALIEN amounts (`minted`, `mintedDelta`, `totalMinted`) are decimal strings of
-base units (7 decimals). `runId` = `sha256(tape)` as 64 hex chars (no `0x`).
+limit (`Retry-After` header). **(wire 14)** Addresses, transaction hashes, the network hash and
+contract ids are **base58** in all responses; input accepts base58 or 64 hex chars (optional
+`0x`). `pubkey` and `sig` stay hex. KALIEN amounts (`minted`, `mintedDelta`, `totalMinted`) are
+decimal strings of base units (7 decimals). `runId` = `sha256(tape)` as 64 hex chars (no `0x`).
 
 - `GET /api/config` → `{ networkHash, rpcUrl, scoreContract, tokenContract, explorerUrl }`
 - `GET /api/seed/current` → `{ seedId, seed, indexed, secondsLeft }`. `seed` is null until the
@@ -234,7 +235,9 @@ base units (7 decimals). `runId` = `sha256(tape)` as 64 hex chars (no `0x`).
   updatedAt }`. `score` is the confirmed new best, else the claimed score. `rejected` means the
   contract refused the run (`error` = contract error name and reason). `failed` means the relay
   gave up (a new POST of the same tape retries it).
-- `GET /api/runs?player=<address>&limit=<1..100>` → `{ player, runs: [run record] }`
+- `GET /api/runs?player=<address>&limit=<1..100>&offset=<0..1000>` or `&cursor=<nextCursor>` →
+  `{ player, runs: [run record], total, limit, offset, nextOffset, nextCursor }` (newest first,
+  merged over relay lanes).
 - `GET /api/runs/:id/tape` → raw tape, only once the run is confirmed.
 - `GET /api/leaderboard?window=10m|day|all&limit&offset&address` → `{ window, generatedAt,
   windowRange, pagination: { limit, offset, total, nextOffset }, entries, me, ingestion }`.
@@ -246,15 +249,17 @@ base units (7 decimals). `runId` = `sha256(tape)` as 64 hex chars (no `0x`).
 - `PUT /api/leaderboard/player/:address/profile` with JSON `{ pubkey, username, linkUrl,
   timestamp, signature }`. `signature` = Ed25519 by the player key over the UTF-8 bytes of
   `["kalien-profile-v1", networkHash, address, timestamp, username ?? "", linkUrl ?? ""].join("\n")`
-  (lowercase hex, `timestamp` = ms, within 5 minutes of server time, newer than the last
-  update). `pubkeyAccountAddress(pubkey)` must equal `address`. Helper: `worker/profile.ts`
+  (**(wire 14)** `networkHash` and `address` in base58, exactly as `/api/config` and the API
+  return them; `timestamp` = ms, within 5 minutes of server time, newer than the last update). `pubkeyAccountAddress(pubkey)` must equal `address`. Helper: `worker/profile.ts`
   `profileMessage`.
-- `GET /api/health` → relay address, run counts, indexer state.
+- `GET /api/health` → `{ lanes: [{ lane, allowed, address, counts, seedTouch, lastError }], indexer }`.
+  `allowed` = the lane key passes `is_relay`; new runs go only to allowed lanes.
 - Admin (`Authorization: Bearer <DEV_API_KEY>`): `POST /api/admin/sync`,
   `POST /api/admin/seed/touch`.
 - Leaderboard data: the relay writes a row on confirmation; a 1-minute cron indexes
-  `ScoreSubmitted` events into D1. Thruput RPCs do not serve `getBlockByNumber` yet, so
-  `closedAt` is the confirmation time (relay) or an estimate from the head height (indexer).
+  `ScoreSubmitted` events into D1 (`getEvents`). `closedAt` is the block time
+  (`getBlockByHeight`; the event's `submitted_at` as fallback). Rows are kept per score
+  contract, so a redeploy starts an empty leaderboard.
 
 ### Browser wallet (owned by `client`)
 

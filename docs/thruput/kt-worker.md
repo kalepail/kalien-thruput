@@ -2,7 +2,105 @@
 
 Agent: `kt-worker` (Cloudflare Worker API, relay, leaderboard). Branch `thruput-devnet`.
 
-## Status
+## Round 3 (2026-10-24): wire-14 migration — green locally
+
+**Status: STOP point reached.** The Worker runs on `@thruputchain/client 0.23.0` (wire 14,
+base58) and passes end to end against a local `thruput node` (hog-devnode rc.14, wire 14.1.0).
+It is **not deployed** yet: I wait for the lead (kt-contract v3 on the new devnet).
+
+### Commits this round
+
+| Commit | What |
+|---|---|
+| `d27f265` | Relay lanes (`RELAY_SECRETS`), run-list paging, alarm recovery, load test |
+| `b988988` | Contracts from `shared/thruput/deployments/devnet.json`; deploy and smoke scripts |
+| `39e76b5` | State per score contract (D1 + relay objects); relay faults retried; padding check |
+| `c16c601` | Wire-14 migration, base58 ids, allowlist routing, `local` wrangler env |
+
+### What changed
+
+- `worker/chain/`: `Ed25519Signer.fromSeed`, native `sendTransaction` / `getTransactionStatus` /
+  `getTransactionReceipt` / `getBlockByHeight` / `getEvents` via the SDK. Worker-owned types in
+  `chain/types.ts` (`ChainReceipt`, `ChainStatus`), so the engine and tests do not depend on
+  SDK shapes. Unfamiliar outcome variants map to `other` (never success).
+- Relay rules from `docs/thruput/reference/json-rpc-alpha-guide.md`:
+  - The relay saves the signed bytes and hash before it sends them.
+  - If a status was ever `committed`, the relay never replaces the transaction; it waits for the receipt (indexer lag).
+  - `retry`, `dropped`, `unknown`, `recentFailure`, and a refused re-send do not prove non-execution. Until the expiry height, the relay only re-sends the same bytes.
+  - A refusal (`admission: rejected` or `notAttempted`) counts as non-admission only on the first send of those bytes.
+  - After expiry plus 10 blocks, with no receipt, the relay reads `is_claimed` with `minStateBlockHeight = expiry + 1`. If the tape is not claimed, it signs a new transaction. This deliberate re-dispatch is safe, because the contract rejects a claimed tape hash (`AlreadyClaimed`), so a run cannot mint twice.
+- Identifiers: base58 everywhere in the API and D1 (`worker/ids.ts`). Input accepts base58 or hex.
+  The claim digest and the player address still come from `shared/thruput/claim.ts` (wrapped in
+  `worker/claim.ts` for base58).
+- Allowlist routing: `allowedLanes()` asks `is_relay` for each lane key (cached 60 s). New runs go
+  only to allowed lanes (stable per run id). A failed run is re-queued in the lane that holds it.
+  `/api/health` shows `allowed` per lane.
+- Indexer: real block times from `getBlockByHeight` (the event's `submitted_at` as fallback); the
+  old 2 s/block estimate is gone. A walk ends only at `nextCursor: null`; cursor errors are kept
+  (no silent restart); a new score contract starts a new walk.
+- `wrangler.jsonc`: `secrets.required` = `RELAY_SECRETS`, `DEV_API_KEY` (keeps `wrangler types`
+  stable). New env `local` (`CLOUDFLARE_ENV=local`, keys from `.dev.vars.local`) for a local node;
+  never deployed. `wrangler types --check` ignores `--env-file`, so that route does not work.
+- Ops: `worker/ops/relay-keys.ts` (SDK client; list, fund, `--secrets` pipe), `deploy.sh`, `smoke.ts`.
+
+### Firehose decision: not used (keep `getEvents`)
+
+I read `reference/firehose.md` and decided not to use the Firehose:
+- A Durable Object with an outbound WebSocket cannot hibernate, so it would stay awake (billed) all day.
+- It would hold 1 of the 12 global public subscriber slots (experimental, no SLA, 8 connections per IP).
+- It must decode a full block XDR record every ~2 s and ACK each block.
+- It adds little. The contract is `relay_only`, so every `ScoreSubmitted` comes from our relay, and the relay writes the leaderboard row when it confirms the run. The 1-minute `getEvents` cron is only the repair and backfill path.
+
+Revisit if non-relay submitters appear or sub-minute repair matters.
+
+### Tests (all green)
+
+| Command | Result |
+|---|---|
+| `bun run check` | typegen up to date, all typechecks, lint 0/0, format clean |
+| `bun test tests/worker` | 69 pass, 0 fail (10 files) |
+
+New unit tests: wire-14 receipt/status/send-error mapping, base58/hex ids, known commitment is
+never replaced, a refused re-send is not proof of non-admission, NotRelay retried then failed,
+allowlist routing (blocked lanes get no runs), contract switch resets state, padding nibble.
+
+### Real runs: local rc.14 node (port 9745)
+
+My own deploy of kt-contract's `42d0b48` artifacts: token `448VHqfwFgDaFTC2ZjNXGiSLzppP4JmEwKVBcgE5ieEv`,
+score `HLFCaQzGjLuTytHs8WGjd3UbdiuNxwFoCqzpJ2gDsqvP`, relays lanes 0 and 2 allowed, `relay_only` on.
+Worker: `CLOUDFLARE_ENV=local vite dev --port 5174`.
+
+| Check | Result |
+|---|---|
+| `bun worker/ops/smoke.ts --api http://127.0.0.1:5174` | PASS (config, network hash, seed touch, POST, confirmed in 2.0 s, tape, list, leaderboard, health) |
+| Fixtures (`tests/worker/live/submit-runs.ts`) | medium, test-long (36,000 f), kalien-911140 (36,000 f), real-game confirmed; a racing lower run rejected `NotImproved` |
+| Gas used (wire 14) | medium 9,817,555; real-game 14,341,964; kalien-911140 67,608,071; test-long 74,515,851; rejected run 165,995 |
+| Indexer rebuild (wipe D1, `POST /api/admin/sync`) | 5 events, identical stats and runs, exact block times; restart at last height dedupes |
+| Load (`load-runs.ts --runs 12`) | 12/12 confirmed in 4.3 s; lanes 0 and 2 only (1 and 3 not allowed) |
+
+Devnet: the four lane keys are funded on the new devnet (≈1,000 HOG each). Base58 addresses for the
+v3 allowlist (`kalien-relay`, `kalien-relay-2..4`):
+`94febNxmANEba5YFYVrrKvYEpTq7dEXzhqPARRCnUkMJ`, `63sSHUhsshPPYc6HATTfiJKBChhhUEpTnuMGvUBjXqYT`,
+`9U7TwtWnL8mg2XYwf6L4R5TAzGnsYVwMxaPaM1Loj7PD`, `6uHAVi82rWirY492rSmd2oUXpmvUfmTBfiSBXdZtVrP8`.
+
+### Left for the deploy (waiting for the lead)
+
+Remote D1 migration (a 7403 error appeared once, then a remote query worked), `RELAY_SECRETS` and
+`DEV_API_KEY` secrets, `worker/ops/deploy.sh --secrets`, `bun worker/ops/smoke.ts`, cron check.
+
+### Requests
+
+- **kt-contract:** the working-tree `shared/thruput/deployments/devnet.json` (uncommitted) pins
+  network hash `DHsdn1…`, but devnet reports `DWELtF…`; the Worker refuses that RPC. Please
+  commit the v3 record with the current hash. Allow the four lane addresses above.
+  `shared/thruput/kalien.ts` is still pre-wire-14 (`PrivateKeySigner`); the Worker does not use it
+  yet. I use only `claim.ts` and the bindings.
+- **kt-client / kt-cli:** API ids are now base58 (input accepts hex). The profile message uses the
+  base58 network hash and address. Run lists have `offset`/`cursor` paging. See the plan section.
+
+## Round 1 (2026-10-23)
+
+### Status
 
 **STOP point A is reached.** The local Worker runs end to end with real tapes against my own
 local node and against the Thruput devnet (kt-contract's deployment). The Worker is not
