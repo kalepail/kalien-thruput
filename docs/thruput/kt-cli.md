@@ -5,14 +5,13 @@ paths, `test-fixtures/`.
 
 ## Status
 
-**Round 3 (devnet wire-14 migration) is green.** The CLI uses
-`@thruputchain/client@0.23.0`, base58 identifiers, and the new pubkey account
-derivation. All CLI tests pass (23), and they also pass against kt-contract's
-migrated `claim.ts` and vectors that are on disk but not yet committed. Waiting
-for the lead: the deployed Worker on the new devnet, then a repeat of the e2e.
+**Round 4 (deployed Worker, wire-14 devnet) passed.** The e2e script, the CLI
+(`submit`, `status`, `run`), all rejection paths, and two 8-player concurrency
+rounds work against `https://kalien-thruput.sdf-ecosystem.workers.dev`. All 33
+runs confirmed; none failed. See "Round 4 results".
 
-Round 2 (local Worker on the old devnet) passed; see "Round 2 results". Those
-addresses and run ids are gone with the devnet wipe.
+Round 3 (wire-14 migration) is green: 23 CLI tests pass. Round 2 (local Worker,
+old devnet) passed; its addresses and run ids are gone with the devnet wipe.
 
 ## Commits
 
@@ -27,6 +26,7 @@ addresses and run ids are gone with the devnet wipe.
 | `69cc9b5` | CLI handles `code` / `bestScore`; run loop handles `not_improved` and `already_claimed`; e2e covers dedupe and refusals |
 | `0517091` | Wire-14 migration: `Ed25519Signer`, base58 addresses and keys, new derivation, legacy key file upgrade, import/export formats |
 | `9d0fef4` | Vector test checks `pubkeyHash` and the hex forms of the claim inputs |
+| `a2a2450` | e2e logs gas and lane spread, checks malformed tapes; new `scripts/concurrency-runs.ts`; `scripts/lib/probe.ts` |
 | `86b18f0` | `generate-tape.ts --random-config`; `submit --json` includes `code`, `bestScore`, `existing` |
 
 Lesson: the shared index is not private. I now stage and commit in one command
@@ -271,8 +271,132 @@ Notes for other agents:
   base58 for these, tell me. The CLI reads any address or hash format in
   responses.
 
+## Round 4 results (deployed Worker, 2026-10-24)
+
+Worker `https://kalien-thruput.sdf-ecosystem.workers.dev`. Network hash
+`DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj`. Score contract
+`8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`, token
+`AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87`. 4 relay lanes, all allowed.
+Gas is `gasUsed` from `getTransactionReceipt` on `https://rpc.thruput.network`.
+"Time" is from the POST to the `confirmed` status seen by polling (1–2 s poll
+interval), so it includes up to one poll interval.
+
+### e2e (`bun run scripts/e2e-runs.ts --api-url <deployed> --runs 3`): PASSED
+
+Player `4ac8m9Pr2vWSTAfKSiyySnkTc4JBrKaCMTNAD567hXuP`, seed `0x3adb0180`,
+seed_id 2988062.
+
+| Run id | Score | Frames | Previous | Minted | Gas | Time | Tx |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `4b8f5125…05bfe` | 1,980 | 1,200 | 0 | 19800000000 | 2,197,592 | 5.0 s | `74t9hgtNPZJdeyZypeLyHVQ39vEoXEQz8X1HLqec4t8y` |
+| `5bfc89a1…dd92f3` | 5,740 | 3,000 | 1,980 | 37600000000 | 5,272,616 | 7.0 s | `A4bMThUyZChuD1MVG6XDVCkdRNDqxpE7s8uKgqzt3MQr` |
+| `e5e3136e…d33252` | 14,240 | 6,000 | 5,740 | 85000000000 | 10,703,561 | 5.0 s | `2dw9AqWZkikLHsSPmbeo4KKZj6k49TZrcRn8ukcXCjiW` |
+
+Also passed: `runId == sha256(tape)`, run list, tape download (3,024 bytes,
+same bytes), player stats (`bestScore 14240`, `totalMinted 142400000000`,
+rank 1). Lane spread for the 3 runs: lane0 +0, lane1 +2, lane2 +1, lane3 +0.
+
+| Case | Result |
+|---|---|
+| Same player re-sends a confirmed tape | 200, same run |
+| Another player, same tape, valid signature | 409 `already_claimed` |
+| Fresh tape 4,820 < best 14,240 | 409 `not_improved`, `bestScore 14240` |
+| Zero signature | 400 `bad_signature` |
+| Valid signature, seed_id + 1 | 409 `seed_missing` |
+| Valid signature, seed_id - 1 | 400 `seed_mismatch` |
+| Valid signature, seed_id - 1000 | 400 `seed_inactive` |
+| Bad magic / truncated / CRC mismatch / empty tape | 400 `bad_tape` (each) |
+| 18,025-byte body | 413 `tape_too_large` |
+| Footer score forged (+1,000,000) | 400 `replay_mismatch` |
+
+### CLI binary (`cli/dist/kalien`, new key `8yXUcnv3bcr8W163kYGVCpUDJDkL5x12p1EHALGxfSp7`)
+
+| Command | Result |
+|---|---|
+| `kalien submit` (`generate-tape --random-config`, 26,250, 10,843 frames) | confirmed in 6.0 s (whole command), run `736e6d70…cbabf`, minted 262500000000, gas 24,098,741, tx `HXJrugUMngoSmXgd2oAmSWaL9cjSqMizPwDD3rdF4Fip` |
+| `kalien status 736e6d70…` | confirmed, same fields, explorer link |
+| `kalien submit` same tape `--json` | `ok: true, existing: true`, same run |
+| `kalien submit` lower tape (3,160) `--json` | `not_improved`, `bestScore 26250`, HTTP 409, exit 1 |
+| `--seed-id 2987000` | `seed_inactive`, HTTP 400, exit 1 |
+| `--seed-id 2988061` (previous epoch) | `seed_mismatch`, HTTP 400, exit 1 |
+| Same tape, second key | `already_claimed`, HTTP 409, exit 1 |
+| Truncated tape (300 bytes) | refused locally before any request: `Tape length mismatch` |
+
+A bad signature cannot come from the CLI (it always signs correctly); the e2e
+covers it.
+
+### `kalien run --threads 4` for 210 s (key `J1QiC6FqKQU7apgRM152eu3RYm7M84NDzksZjySwdrR2`)
+
+27,914 games; 3 submissions, all confirmed on seed_id 2988062. The last run went
+out on SIGINT shutdown. Each tape is 36,000 frames (the farm's best games run to
+the frame cap).
+
+| Run id | Score | Previous | Minted | Gas | POST → confirmed | Tx |
+|---|---:|---:|---:|---:|---:|---|
+| `82e86871…e3414` | 177,260 | 0 | 1772600000000 | 73,303,033 | 4.3 s | `E2YTpL6uxgs6qST18Nz4J2fb8gCqVu6Y3nb7Eu5HVst5` |
+| `d7cb316b…478c0` | 179,230 | 177,260 | 19700000000 | 72,939,300 | 3.9 s | `j1D1SMtnQg7ZnKbNviGnC1fZsHHYxeVfGz6TJXWor7r` |
+| `ccca7bfa…4d09` | 182,800 | 179,230 | 35700000000 | 73,760,036 | 3.1 s | `H8A5TV5L9UTgher4uL1GaF1Kvv5Z4HCYMNKUz1A1EvR4` |
+
+(Time here is the run record's `updatedAt − createdAt`.) The run ended before the
+epoch change, so this round did not test the epoch switch. Round 2 did not
+either; it is still untested.
+
+### Concurrency (`bun run scripts/concurrency-runs.ts --players 8`)
+
+8 new keys, one unique tape each (jittered autopilot config), all POSTed at the
+same moment. "post" = time until the POST returned; "done" = time until
+`confirmed` was seen.
+
+Round A (`--max-frames 12000`), seed_id 2988063: **8/8 confirmed in 8.1 s wall,
+59.1 runs/min. Lane spread: lane0 +2, lane1 +1, lane2 +2, lane3 +3.**
+
+| Player | Score | Frames | Post | Done | Gas | Run id | Tx |
+|---|---:|---:|---:|---:|---:|---|---|
+| p0 | 22,680 | 9,705 | 0.9 s | 2.1 s | 18,114,680 | `fd1d4f6e…f9cc` | `DaQRyFX8ymADbQnHMirnLyrC6d6aUnKhFqNsj8rmuvrg` |
+| p1 | 9,450 | 4,246 | 0.9 s | 6.5 s | 8,722,577 | `6e4fe2f3…7352` | `E5q5qsbHB4zYHA33ovKGsD2TQNtsJDy97Py25MQCRi2e` |
+| p2 | 19,430 | 8,326 | 1.9 s | 6.3 s | 20,150,591 | `c6d9a2e4…4ee` | `4UDs7A3XMnQ84D4eiSY8Ye9XACRPchwXukhBNUzYLcho` |
+| p3 | 22,250 | 10,648 | 1.6 s | 5.0 s | 25,717,533 | `f59cddb1…b165` | `8M8yXCi7BtcLif8TjtHQtuhWgrFt1h7GpXsUy6NTC232` |
+| p4 | 11,930 | 5,458 | 2.1 s | 8.0 s | 11,123,417 | `78925d28…ea6a` | `Dp2kY18f9VHvxVZ5fB8cGpcGfHnZaY2UvYMvGVmyrcG4` |
+| p5 | 21,430 | 10,600 | 1.9 s | 7.5 s | 26,202,883 | `d1264667…d29e` | `DfAbAqUWZFL58Fy7MUv4WDqu948XfoQ3roJ7MZwJ3USH` |
+| p6 | 24,490 | 12,000 | 2.4 s | 8.1 s | 23,009,553 | `6a838c0f…2d4b` | `HMEEzPSurgqjTc5BkcLeAij6Bhcopcve9Tx2rpSzTZ3Y` |
+| p7 | 18,500 | 7,299 | 1.7 s | 5.0 s | 13,522,568 | `21b9aab2…9d8c` | `3Rms5CHhMiVV1WdxQdL9N9qMAn7TLeGPocQyVmNAmXyn` |
+
+Round B (`--max-frames 36000`), seed_id 2988063: **8/8 confirmed in 6.3 s wall,
+75.7 runs/min. Lane spread: lane0 +2, lane1 +2, lane2 +1, lane3 +3.** The
+jittered games ended at 7k–15k frames, so this is not the 36,000-frame worst
+case.
+
+| Player | Score | Frames | Post | Done | Gas | Run id | Tx |
+|---|---:|---:|---:|---:|---:|---|---|
+| p0 | 30,470 | 14,566 | 0.9 s | 5.2 s | 30,138,275 | `bd8a2e7dcd6c…` | `W7TH6yhjzwgEVgaoi5sTxj62yzpZDTVjFjHwhcApjZE` |
+| p1 | 18,050 | 7,382 | 1.6 s | 6.0 s | 14,807,696 | `234a08f77ee4…` | `7oeDB47JM48wp7LZYfPRJNipGfkd1gvyeEFzS35z3KwM` |
+| p2 | 29,150 | 10,676 | 1.2 s | 4.5 s | 24,335,756 | `c7a2ab92fb1e…` | `6ETdsivjSDEFdzJCN2QwjcJ4oPMHEzLGduJoNmpdRzM4` |
+| p3 | 24,190 | 9,532 | 0.9 s | 6.3 s | 20,744,744 | `74eb08076e67…` | `HYM6qpjXV5oMCw83C4omxUUV2VtLMsss8bfcWP8nY86u` |
+| p4 | 17,760 | 9,071 | 1.0 s | 6.3 s | 21,419,696 | `fdd8ef551ccc…` | `EUEa4iJs2H9ojUfFzgtUqPL1U96oUgZQu7CZ4M78C3de` |
+| p5 | 14,000 | 6,992 | 0.9 s | 3.2 s | 16,143,832 | `29d4d6cfd0fc…` | `8RFtyBPSo3G2wVcEhgsNU6rUskCCHhbcBQvyGRGkG6KW` |
+| p6 | 21,950 | 9,924 | 1.0 s | 5.2 s | 20,692,992 | `395b1204011f…` | `9KcHeG4VPEWePAxYsMD1bU2gc4YtfuQTGxF8kTx6CE6a` |
+| p7 | 17,070 | 7,144 | 1.0 s | 5.2 s | 16,434,963 | `533cb51c4784…` | `FyYXewPBernSKDmKunP2W33MbhsiYY2DcfEHVoL84kur` |
+
+Full run ids are in the logs:
+`/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/cfb386b3-55e4-434b-8d68-49329aa4c69e/scratchpad/conc-1.log`
+and `conc-2.log` (also `e2e-deployed-1.log`, `d-run.log`).
+
+### Observations
+
+- Gas scales with frames: about 2,040–2,410 gas per frame for short and medium
+  tapes, and 72.9M–73.8M for 36,000 frames. This agrees with the contract
+  estimate (`≈ 2,065/frame + 0.2M`).
+- With 4 lanes, 8 concurrent runs all confirmed within 6–8 s, and each lane took
+  1–3 runs. About 60–76 runs/min for short bursts. That is much more than the one
+  run per 2–3 s of a single lane.
+- The POST itself took 0.9–2.4 s under 8 concurrent requests (replay pre-check
+  and signature check in the Worker).
+- No request failed during this session, so no retry was needed.
+
 ## Open issues
 
-- Repeat the e2e and CLI checks against the deployed Worker on the new devnet
-  (the lead will say when it is up).
-- The 372 s `queued` delay from round 2 (kt-worker).
+- Epoch-change behavior of `kalien run` is untested (no run crossed a seed epoch).
+- A concurrency round with eight 36,000-frame tapes (worst-case gas reservation
+  per lane) is not done. It needs farmed full-length tapes.
+- The 372 s `queued` delay from round 2 (kt-worker). It did not happen again in
+  round 4.
