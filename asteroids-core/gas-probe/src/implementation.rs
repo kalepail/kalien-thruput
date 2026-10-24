@@ -1,12 +1,12 @@
 use asteroids_verifier_core::tape::parse_tape_ref;
 use asteroids_verifier_core::{verify_tape, VerifyError};
-use sdk::*;
+use thruput_sdk::*;
 
 /// Max frames accepted on chain (10 minutes at 60 fps).
 pub const MAX_FRAMES: u32 = 36_000;
 
 #[derive(Debug)]
-#[sdk::storage]
+#[thruput_sdk::storage]
 pub struct Contract {}
 
 /// A tape that failed verification. `code` names the `VerifyError` variant (see `error_code`);

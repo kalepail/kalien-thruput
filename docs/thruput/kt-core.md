@@ -1,28 +1,87 @@
 # kt-core report: simulation core and gas measurement
 
-Agent: `kt-core`. Branch: `thruput-devnet`. Status: **STOP point A reached** (tasks 1–4 done).
+Agent: `kt-core`. Branch: `thruput-devnet`. Status: **round 3 done (2026-10-24)**: strict-rule
+fix, gas probe on `thruput-sdk =0.54.0` / CLI 0.36.0 / hog-devnode rc.14. Rounds 1–2 below.
+
+## Round 3 summary (2026-10-24)
+
+1. **Strict-rule fix (changes on-chain behavior).** Commit `c8d6644`. Two strict rules rejected
+   honest runs. **kalien_score must be rebuilt and redeployed** with this `asteroids-core`.
+   - Evidence: the first large parity run (3,580 tapes, 59,344,360 frames per side) had 0 state
+     mismatches but **20 of 2,506 valid tapes (0.8%)** that the TS pre-check accepted and the
+     strict replay rejected. 16 × `SHIP_POSITION_STEP`, 4 × `GLOBAL_MODE_LIVES_CONSISTENCY`.
+     Classes: 11 pattern, 3 runs, 3 uniform, 3 mutants of skilled tapes. So real players could
+     hit it, mostly when they die at full speed.
+   - `SHIP_POSITION_STEP`: in a death frame the check bounds the step by
+     `(max_speed_sq >> 8) + 4` = 8,228. `v >> 4` floors negative velocities, so a legal step
+     reaches 8,285 or more (example: dy = −91 at vy ≈ −1,444). New bound: the exact maximum of
+     `(vx >> 4)² + (vy >> 4)²` over the clamped velocity disc = **8,458**, computed at compile
+     time and checked by a brute-force test.
+   - `GLOBAL_MODE_LIVES_CONSISTENCY`: a ship bullet in flight scores after game over, crosses
+     10,000, and the sim grants an extra life, so `lives = 1` in game over. New rule: game over
+     allows `lives <= 1` (bullets after game over can add at most 4 × 990 < 10,000 points, so at
+     most one extra life).
+   - Both changes only relax the rules: any tape accepted before is still accepted. Golden
+     results are unchanged. The TS sim has no strict rules, so `src/game/` needs no change.
+   - Regression: 4 of the 20 tapes are in `asteroids-core/tests/fixtures/strict-regressions/`
+     (`tests/strict_regressions.rs`). Each old rule makes that test fail; the fix makes it pass.
+     All 17 regenerated failing tapes now verify.
+   - After the fix, the same large parity run: **3,580 tapes, 59,344,360 frames, 2,506 accepted
+     by both, 0 state mismatches, 0 strict-only rejections.**
+   - I corrected my earlier wrong claims in the docs: honest inputs did trip strict rules, and
+     bullets can still score for up to 72 frames after game over.
+2. **Gas probe on the new toolchain.** `asteroids-core/gas-probe` now uses `thruput-sdk =0.54.0`
+   (scaffold layout from CLI 0.36.0). RV32 executor and a local rc.14 node (wire 14.1.0,
+   implementation 0.36.0) give the numbers in "Gas table" and "Memory". Gas is +0.25% against
+   the 0.51 build; statics fall from 5,696 to 2,816 bytes; peak memory for a full tape is
+   **41,323 of 65,536 bytes**.
+3. Not done this round: a devnet probe call (devnet was wiped; my throwaway key has no funds
+   there). The local node numbers equal the executor + 50 gas, as on the old devnet.
+
+## Round 2 summary
+
+1. **Score-delta bitset.** Statics 9,160 → 5,696 bytes; peak memory for a full tape 47,667 →
+   44,203 bytes; replay gas +0.3%. Golden results unchanged. Commit `9fe5143`.
+2. **TS/Rust parity.** New tool `asteroids-core/parity/`. It compares the full sim state on
+   every frame. Result: all states equal, but 20 honest tapes failed strict rules; fixed in
+   round 3.
+3. **Docs.** Root `README.md` and `docs/` rewritten for Thruput; ZK-era docs archived.
+   See "Docs rewrite" below.
+4. **Security finding (needs a decision).** The tape dedupe key `sha256(tape)` is malleable:
+   a copier can change a confirmed public tape (padding nibble, frames after game over, inputs
+   the sim ignores) and claim the same score under another key within the 24-hour window.
+   Details and options: `docs/games/asteroids/04-TAPE-REUSE-AND-REPLAY-POLICY.md`.
 
 ## Result
 
 One transaction can replay a full 36,000-frame tape. A chunked replay is not necessary.
 
-- Gas for a full tape is 67M to 74M. The sender needs that much free HOG (7.4 HOG). Gas is not burned.
-- Peak guest memory is about 44.2 KiB of 64 KiB, with a 16 KiB stack (after the score-table
-  bitset; it was 47.7 KiB before).
+- Gas for a full tape is 67.5M to 74.4M. The sender needs that much free HOG (7.5 HOG). Gas is
+  not burned.
+- Peak guest memory is about 40.4 KiB of 64 KiB, with a 16 KiB stack (`thruput-sdk` 0.54.0).
 - The contract **must** build with a 16 KiB stack. The default 30 KiB stack leaves too little heap
   for an 18,024-byte tape (see "Memory").
 
 ## Gas table
 
-Measured with `thruput test` (RV32 executor), current code (score-delta bitset):
+Current (round 3): `thruput test` (RV32 executor), `thruput-sdk =0.54.0`, CLI 0.36.0, core with
+the strict-rule fix. Wall times are slower because a parity run used the CPU at the same time.
 
 | tape | frames | bytes | noop gas | parse gas | replay gas | gas/frame | executor wall ms |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| test-short | 700 | 374 | 996 | 6,417 | 1,247,218 | 1,773 | 6.6 |
-| test-medium | 5,000 | 2,524 | 996 | 36,517 | 9,518,031 | 1,896 | 49.8 |
-| test-real-game | 6,643 | 3,346 | 996 | 48,025 | 14,043,783 | 2,107 | 74.2 |
-| test-long | 36,000 | 18,024 | 10,353 | 262,874 | 74,242,002 | 2,055 | 389.7 |
-| kalien-911140 | 36,000 | 18,024 | 10,353 | 262,874 | 67,334,222 | 1,863 | 353.9 |
+| test-short | 700 | 374 | 990 | 6,411 | 1,250,714 | 1,778 | 14.0 |
+| test-medium | 5,000 | 2,524 | 990 | 36,511 | 9,543,027 | 1,901 | 87.2 |
+| test-real-game | 6,643 | 3,346 | 990 | 48,019 | 14,076,991 | 2,112 | 119.0 |
+| test-long | 36,000 | 18,024 | 10,347 | 262,868 | 74,421,998 | 2,060 | 800.5 |
+| kalien-911140 | 36,000 | 18,024 | 10,347 | 262,868 | 67,514,218 | 1,868 | 702.5 |
+
+Local node, round 3: `thruput node --port 9545 --hog-devnode-version 0.1.31-rc.14` (wire 14.1.0,
+implementation 0.36.0), `thruput call gas-probe replay 0x<tape> --gas-limit 90000000`. Every
+receipt had `execution.result = return` with the expected score. Gas used: 1,250,764 /
+9,543,077 / 14,077,041 / 74,422,048 / 67,514,268 (executor + 50).
+
+Round 2 (SDK 0.51.1, CLI 0.29.2, score-delta bitset): replay gas 1,247,218 / 9,518,031 /
+14,043,783 / 74,242,002 / 67,334,222.
 
 Before the bitset (`[bool; 3961]` table), replay gas was 1,243,024 / 9,488,037 / 14,003,931 /
 74,026,010 / 67,118,230. The bitset costs about 0.3% more gas and saves 3,464 bytes of memory.
@@ -33,9 +92,9 @@ numbers + 50 gas (the wallet wrapper).
 - gas/frame = (replay − parse) / frames.
 - Planning number: **75M gas** covers every tape up to 36,000 frames that we measured. Use a gas
   limit of 80M for a 36,000-frame tape (8 HOG free in the relay wallet).
-- `maxViewGas` is 10M, so `view` can preview tapes up to about 5,000 frames only.
+- The old `maxViewGas` was 10M (about 5,000 frames). Check `getServerLimits` on the new devnet.
 
-### Real transactions
+### Real transactions (round 1, old devnet, wiped on 2026-10-24)
 
 Local node (`thruput node --port 9545`, CLI 0.29.2, gas limit 90M):
 
@@ -61,16 +120,16 @@ Devnet `groundhog_chainConfig` reports `maxRv32MemoryBytes = 65536` and no per-t
 ## Memory
 
 Measured on RV32 with the probe method `memory_probe` (stack painting and the bump-allocator
-cursor), 16 KiB stack, current code:
+cursor), 16 KiB stack, current code (`thruput-sdk` 0.54.0, round 3):
 
 | item | bytes |
 |---|---:|
 | stack reserve (16 KiB) | 16,384 |
 | stack used by `replay` (peak, includes SDK entry) | 5,296–5,340 |
-| statics (`.rodata` + `.data` + `.bss`) | 5,696 (was 9,160 before the bitset) |
+| statics (`.rodata` + `.data` + `.bss`) | 2,816 (SDK 0.51.1: 5,696; before the bitset: 9,160) |
 | heap used, 374–3,346-byte tapes | 4,096 |
 | heap used, 18,024-byte tape | 22,123 |
-| **peak total, 18,024-byte tape** | **44,203 of 65,536** (was 47,667) |
+| **peak total, 18,024-byte tape** | **41,323 of 65,536** (SDK 0.51.1: 44,203; before the bitset: 47,667) |
 
 - `size_of` of the game state is about 2 KiB (43 asteroids × 36 B, 5 + 3 bullets × 24 B,
   4 saucers × 36 B, plus scalars). It is on the stack. No allocation happens per frame.
@@ -87,6 +146,85 @@ cursor), 16 KiB stack, current code:
 - The legal-score-delta table is now a 496-byte bitset (`LEGAL_SCORE_DELTA_BITS`), packed at
   compile time from the same `build_legal_score_delta_table`. A test compares every delta.
 
+## TS/Rust parity (round 2)
+
+Tool: `asteroids-core/parity/` (`parity.ts` + Rust binary `asteroids-parity`).
+Run: `bun run asteroids-core/parity/parity.ts [--count N] [--autopilot N] [--seed S]`.
+
+- **Corpus** (deterministic from `--seed`):
+  - `uniform`: uniform random nibbles. `runs`: held inputs with random run lengths and per-bit
+    weights. `pattern`: edge patterns (fire toggled every frame, fire held, both turn keys,
+    thrust held, idle, all 16 values cycled). A quarter of these are full 36,000-frame tapes.
+  - `autopilot`: tapes from the Rust autopilot bots (all 32 bots, random seeds, 36,000-frame cap).
+  - `mutant`: fixture and autopilot tapes with 1–8 flipped input nibbles (and sometimes
+    truncated), with a correct claim. `mutant-stale`: the same, but with the original claim.
+  - `claim`: valid runs with a wrong claimed score (0, +1, −10, +990, `u32::MAX`).
+  - `invalid`: empty, too short, bad magic/version/rules tag/reserved bytes, frame count 0,
+    36,001, `u32::MAX`, length mismatches, trailing or missing bytes, CRC flips, a non-zero
+    padding nibble, and a full-size tape + 1 byte.
+  - `fixture`: every known tape (test fixtures, public autopilot tapes, golden local tapes).
+- **Compared per tape:** container verdict and error class; replayed frame count; final score;
+  a chained hash of the **full sim state after every frame** (frame, score, lives, wave, RNG
+  state, game over, the ship, and every asteroid, bullet, saucer, and saucer bullet in storage
+  order), with checkpoints every 500 frames to locate a divergence; the Worker's own
+  `replayTape()` score; and the verdict (TS: parses and the replayed score equals the claim;
+  Rust: strict `verify_tape`).
+- **Self-test:** `--self-test` flips thrust and fire from frame 150 on, on the TS side only. The
+  tool detected 52 of 52 perturbed tapes. (An earlier hash without entity state missed 3 of
+  52; that is why the hash covers every entity.)
+
+Large run after the round 3 fix (`--count 1500 --autopilot 192 --seed 0x5eed0001`; 5 slow bot
+runs hit the 120 s timeout):
+
+| class | tapes | frames | accepted | rejected |
+|---|---:|---:|---:|---:|
+| autopilot | 187 | 2,263,915 | 187 | 0 |
+| claim | 357 | 8,449,846 | 0 | 357 |
+| fixture | 14 | 185,824 | 13 | 1 (old v2 tape) |
+| invalid | 22 | 1,504 | 2 | 20 |
+| mutant | 750 | 7,384,956 | 750 | 0 |
+| mutant-stale | 750 | 7,613,177 | 54 | 696 |
+| pattern | 500 | 11,324,490 | 500 | 0 |
+| runs | 500 | 11,275,714 | 500 | 0 |
+| uniform | 500 | 10,844,934 | 500 | 0 |
+| **total** | **3,580** | **59,344,360** | **2,506** | **1,074** |
+
+- Rejected by both: 20 container errors (same class on both sides), 1,054 claim mismatches.
+- State mismatches: **0**. Strict-only rejections: **0** (before the fix: 20; see round 3).
+- The 2 accepted `invalid` tapes are a non-zero padding nibble and a frame count that reads the
+  padding nibble as a frame. Both sims accept them the same way (see the malleability finding).
+- No divergence between the sims, so I made no change to `src/game/`.
+
+Speed: Rust eval 18.4 s, TS eval 131.7 s for two TS replays per tape (state-hash loop and the
+Worker's `replayTape`). The TS sim replays about 0.9M frames per second in Bun with hashing, so
+a 36,000-frame pre-check takes about 40 ms.
+
+## Docs rewrite (round 2)
+
+Commit `docs: rewrite README and docs for the Thruput version`.
+
+- New: `docs/ARCHITECTURE.md` (system map, components, game core, contracts, Worker, key
+  wallet, leaderboard, CLI and autopilot, the life of one run, trust model, TODO list),
+  `docs/OPERATIONS.md` (setup, local run, every test command, deploy, devnet reset, relay
+  funding), `asteroids-core/README.md`.
+- Rewritten: root `README.md`, `docs/README.md`, `docs/games/README.md`,
+  `docs/games/asteroids/README.md`, `docs/archive/README.md`,
+  `docs/games/asteroids/02-VERIFICATION-SPEC.md` (on-chain replay, no journal, rule table,
+  Worker pre-check).
+- Fixed in `01-GAME-SPEC.md`: the fire gate is a latch + cooldown (not a shift register); saucers
+  do not pause while the ship is hidden (no such rule in the code); session length.
+- Renamed: `04-INTEGER-MATH-SPEC.md` → `03-INTEGER-MATH-SPEC.md`.
+- New: `04-TAPE-REUSE-AND-REPLAY-POLICY.md` (current dedupe model, the malleability gap, options).
+- Archived to `docs/archive/zk/`: Asteroids specs 00, 03, 05–12, 15 (`zk/asteroids/`), the ZK
+  reference library (`zk/references/`), `VERIFIER-STATUS.md`, `VERIFIER-PERF-NEXT.md`,
+  `PROVISIONING.md`, `LEADERBOARD-EVENT-SOURCING-OPERATIONS.md`, `SEED_EPOCH_CLOCK_AUTHORITY.md`.
+  The ZK launch article went to `docs/archive/social-drafts/TWITTER-zk-launch.md`.
+- Facts still in flux are marked `TODO` (lead): Worker not deployed yet, the malleability fix,
+  `set_seed` and seed grinding, relay throughput, rate limits, the `deploy:testnet` /
+  `deploy:mainnet` scripts in the root `package.json`.
+- Not changed (other owners): `shared/README.md` still describes `shared/stellar/` (the
+  contract agent says the coordinator can remove `shared/stellar/`); component READMEs.
+
 ## What changed
 
 Commits (all on `thruput-devnet`):
@@ -94,7 +232,12 @@ Commits (all on `thruput-devnet`):
 1. `c78f14b test(core): add golden replay baseline for all known tapes` — before any code change.
 2. `28042b6 refactor(core): move asteroids-core to repo root, remove RISC Zero verifier`.
 3. `581dbfa refactor(core): make the replay core allocation-free for the RV32 guest`.
-4. Gas probe and this report (next commit).
+4. `3583817 feat(core): add RV32 gas probe and record replay gas and memory`.
+5. `9fe5143 perf(core): pack the legal score-delta table into a bitset` (round 2).
+6. `docs: rewrite README and docs for the Thruput version` (round 2).
+7. `c8d6644 fix(core): stop two strict rules from rejecting honest runs` (round 3; also adds the
+   parity tool).
+8. `chore(core): move the gas probe to thruput-sdk 0.54.0` (round 3).
 
 ### Golden baseline (task 1)
 
@@ -176,6 +319,12 @@ All commands use `CARGO_HOME=/Users/kalepail/.cargo-thruput`.
   `{ recipient: <32-byte hex address>, clientNonce: <1–32 random bytes hex> }` gave 1,000 HOG.
 - `thruput node` writes the active endpoint into `~/.config/thruput/config.toml`. I ran it on port
   9545 and stopped it after the tests.
+- Round 3: a second managed node needs its own cache:
+  `XDG_CACHE_HOME=$HOME/.cache/kt-core-node thruput node --port 9545 --key kt-core-local
+  --initial-account-hog 1000 --hog-devnode-version 0.1.31-rc.14` (with `thruput/toolchain`
+  symlinked to the shared `~/.cache/thruput/toolchain`). `--key ... --initial-account-hog` funds
+  the key at genesis, so no airdrop is needed. CLI 0.36 `call --json` reports `transactionHash`,
+  `blockHeight`, `execution.result`, and `gasUsed` (decimal string).
 - Keys created: `kt-core-local` (local only) and `kt-core-devnet` (devnet throwaway). Both live in
   `~/.config/thruput/keys/`. No secret is in git or in this report.
 
@@ -219,7 +368,14 @@ staged any more. Since then I commit only with `git commit -m ... -- <my paths>`
 
 ## Open items
 
-- Task 5 waits for the lead: hot-path optimization (not needed for feasibility) and any
-  resumable replay shape.
+- **kt-contract:** rebuild and redeploy `kalien_score` with `asteroids-core` at `c8d6644` or later
+  (the strict-rule fix). Without it, about 0.8% of honest runs fail with `RuleViolation` after
+  the relay spent gas.
+
+- Decision needed: the tape-malleability fix (see round 2 summary, item 4). The two cheap
+  options (zero padding nibble; tape must end at game over or at 36,000 frames) are exact rule
+  tightenings that I can make in `asteroids-core` and `src/game/tape.ts`. The contract then
+  needs a redeploy.
+- Hot-path optimization is not needed (one transaction replays a full tape).
 - `asteroids-core/tests/fixtures/local/asteroids-19c8d5b04e2.tape` is an old v2 tape. It stays to
   pin the parser's rejection.

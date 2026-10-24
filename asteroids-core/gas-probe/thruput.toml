@@ -13,8 +13,7 @@ default_key = "kt-core-local"
 # default_wallet = "alice"
 
 [profile.local.contracts]
-# gas-probe = "0x0000000000000000000000000000000000000000000000000000000000000000"
-# gas-probe = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# gas-probe = "<base58 address>"
 
 # [profile.local.wallets.alice]
 # address = "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -27,8 +26,7 @@ default_key = "kt-core-devnet"
 # default_wallet = "alice"
 
 [profile.devnet.contracts]
-gas-probe = "0x65713a9cd2431ea2b3eabd9bd88d98065eb26ee4565f83e313730c5eda3b6043"
-# gas-probe = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# gas-probe = "<base58 address>"
 
 # [profile.devnet.wallets.alice]
 # address = "0x0000000000000000000000000000000000000000000000000000000000000000"

@@ -14,7 +14,8 @@ fn integration_tests_run_with_thruput() {}
 
 #[cfg(feature = "thruput-integration-test")]
 mod live {
-    use thruput_json_rpc_client::{GroundhogApiClient, HttpClientBuilder};
+    use thruput_json_rpc_client::{HttpClientBuilder, native::NativeClient};
+    use thruput_json_rpc_client::types::{requests::EmptyRequest, responses::DecodedResponse};
     use std::{env, path::Path};
 
     // Ordinary Cargo leaves this ignored. `thruput test --integration`
@@ -43,15 +44,17 @@ mod live {
         assert_eq!(profile, "integration");
         assert_eq!(default_key, "integration");
 
-        let client = HttpClientBuilder::default()
+        let client = NativeClient::new(HttpClientBuilder::default()
             .build(&rpc_url)
-            .expect("RPC URL should be valid");
-        let tip = client
-            .chain_tip()
+            .expect("RPC URL should be valid"));
+        let DecodedResponse::Known(tip) = client
+            .get_chain_tip(EmptyRequest {})
             .await
-            .expect("ephemeral node should answer chainTip");
+            .expect("ephemeral node should answer getChainTip") else {
+            panic!("ephemeral node returned an unsupported chain tip");
+        };
         assert!(
-            *tip.height > 0,
+            *tip.block_height > 0,
             "ephemeral chain should advance before integration tests run"
         );
 
@@ -71,13 +74,9 @@ mod live {
     }
 
     fn assert_contract_address(address: &str) {
-        let hex = address
-            .strip_prefix("0x")
-            .unwrap_or_else(|| panic!("contract address is missing its 0x prefix: {address}"));
-        assert_eq!(hex.len(), 64, "contract address must contain 32 bytes");
-        assert!(
-            hex.bytes().all(|byte| byte.is_ascii_hexdigit()),
-            "contract address contains non-hex characters: {address}"
-        );
+        serde_json::from_value::<thruput_json_rpc_client::types::ContractAddress>(
+            serde_json::Value::String(address.to_owned()),
+        )
+        .expect("contract address must be base58 encoding of 32 bytes");
     }
 }

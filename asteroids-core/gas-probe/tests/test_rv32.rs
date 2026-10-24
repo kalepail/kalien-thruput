@@ -1,12 +1,12 @@
 mod common;
 
-use sdk::*;
+use thruput_sdk::*;
 use std::path::PathBuf;
 use std::time::Instant;
 
 use gas_probe::{ContractClient, ReplayFailed};
 
-static NONCE: SHA256Hash = sdk::sha256_static!("GAS_PROBE_RV32_NONCE");
+static NONCE: SHA256Hash = thruput_sdk::sha256_static!("GAS_PROBE_RV32_NONCE");
 
 fn thruput_artifact(file_name: &str) -> PathBuf {
     std::env::var_os("CARGO_TARGET_DIR")
@@ -34,11 +34,11 @@ fn with_probe(label: &str, f: impl FnOnce(&ContractClient) + std::panic::UnwindS
 
 /// Gas used by `call`, measured from the transaction's remaining gas.
 fn gas_of<T>(call: impl FnOnce() -> T) -> (T, u64, f64) {
-    let before = sdk::stats::gas_remaining();
+    let before = thruput_sdk::stats::gas_remaining();
     let started = Instant::now();
     let value = call();
     let elapsed = started.elapsed().as_secs_f64() * 1_000.0;
-    let after = sdk::stats::gas_remaining();
+    let after = thruput_sdk::stats::gas_remaining();
     (value, before - after, elapsed)
 }
 

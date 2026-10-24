@@ -1,10 +1,10 @@
 mod common;
 
-use sdk::*;
+use thruput_sdk::*;
 
 use gas_probe::{ContractClient, ReplayFailed, register_mock_contract};
 
-static NONCE: SHA256Hash = sdk::sha256_static!("GAS_PROBE_NONCE");
+static NONCE: SHA256Hash = thruput_sdk::sha256_static!("GAS_PROBE_NONCE");
 
 #[test]
 fn native_replay_matches_fixture_scores() {

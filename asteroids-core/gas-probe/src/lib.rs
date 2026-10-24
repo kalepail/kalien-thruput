@@ -3,7 +3,7 @@
 #[cfg(target_arch = "riscv32")]
 extern crate alloc;
 
-sdk::declare_mock_contract!();
+thruput_sdk::declare_mock_contract!();
 
 mod implementation;
 
