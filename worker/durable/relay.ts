@@ -7,7 +7,7 @@ import { recordSeed, upsertScoreEvent } from "../leaderboard/store";
 import { relaySecrets } from "../relay/lanes";
 import { relayPolicy } from "../relay/policy";
 import { RelayService } from "../relay/service";
-import type { NewRun, RunCursor } from "../relay/store";
+import type { NewRun, RunCursor, RunStatus } from "../relay/store";
 import { getTape } from "../tapes";
 import { safeErrorMessage } from "../utils";
 
@@ -99,6 +99,11 @@ export class RelayDO extends DurableObject<WorkerEnv> {
   ) {
     this.bind(lane);
     return this.service.listRuns(playerAddress, options);
+  }
+
+  runsByStatus(lane: number, statuses: RunStatus[], limit: number) {
+    this.bind(lane);
+    return this.service.runsByStatus(statuses, limit);
   }
 
   touchSeed(lane: number, seedId: number) {

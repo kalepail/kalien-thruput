@@ -200,6 +200,53 @@ describe("RelayEngine", () => {
     expect(after.attempts).toBe(1);
   });
 
+  it("retries an out-of-gas fault once with 1.5x gas, then confirms", async () => {
+    const run = await newRun(mediumTape);
+    const first = scoreGas(DEFAULT_RELAY_POLICY, 5000) + DEFAULT_RELAY_POLICY.walletGasOverhead;
+    chain.minGasToSucceed = first + 1n;
+    engine.enqueue(run);
+    await engine.tick();
+    await chain.mine();
+    // Out of gas: the same tick queues the run again and signs one new
+    // transaction with 1.5x child gas.
+    await engine.tick();
+    const after = store.requireRun(run.runId);
+    expect(after).toMatchObject({ status: "submitting", oogRetries: 1, attempts: 2 });
+    await chain.mine();
+    await engine.tick();
+    expect(store.requireRun(run.runId).status).toBe("confirmed");
+    expect(chain.gasSeen).toEqual([
+      first,
+      (scoreGas(DEFAULT_RELAY_POLICY, 5000) * 3n) / 2n + DEFAULT_RELAY_POLICY.walletGasOverhead,
+    ]);
+  });
+
+  it("fails after a second out-of-gas fault, and at once on any other fault", async () => {
+    const run = await newRun(mediumTape);
+    chain.minGasToSucceed = 10n ** 12n;
+    engine.enqueue(run);
+    for (let i = 0; i < 3; i += 1) {
+      // eslint-disable-next-line no-await-in-loop
+      await engine.tick();
+      // eslint-disable-next-line no-await-in-loop
+      await chain.mine();
+    }
+    await engine.tick();
+    const done = store.requireRun(run.runId);
+    expect(done.status).toBe("failed");
+    expect(done.error).toContain("out of gas");
+    expect(chain.signed.size).toBe(2);
+
+    chain.minGasToSucceed = null;
+    chain.forceFault = true;
+    const other = await newRun(shortTape);
+    engine.enqueue(other);
+    await engine.tick();
+    await chain.mine();
+    await engine.tick();
+    expect(store.requireRun(other.runId)).toMatchObject({ status: "failed", attempts: 1 });
+  });
+
   it("re-broadcasts the same bytes while the transaction can still commit", async () => {
     chain.dropBroadcasts = true;
     const run = await newRun(shortTape);

@@ -4,6 +4,7 @@ import { chainSettings } from "../chain/network";
 import { CONFIG_CACHE_CONTROL, HEALTH_CACHE_CONTROL, SEED_CACHE_CONTROL } from "../cache-control";
 import { getIndexerState } from "../leaderboard/store";
 import { runLeaderboardSync } from "../leaderboard/sync";
+import type { RunStatus } from "../relay/store";
 import { allLanes, allowedLanes, relayLane } from "../relay/stub";
 import { currentSeedId, lookupSeed, secondsLeftInEpoch } from "../seed";
 import { safeErrorMessage } from "../utils";
@@ -101,6 +102,34 @@ export function createApiRouter(): Hono<AppEnv> {
     } catch (error) {
       return jsonError(c, 502, safeErrorMessage(error));
     }
+  });
+
+  // GET /api/admin/runs?status=failed,rejected&limit=50 — recent problem runs, all lanes.
+  api.get("/admin/runs", async (c) => {
+    if (!isAdmin(c)) {
+      return jsonError(c, 404, "not found");
+    }
+    const known = new Set(["queued", "submitting", "confirmed", "rejected", "failed"]);
+    const statuses = (c.req.query("status") ?? "failed,rejected")
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value): value is RunStatus => known.has(value));
+    const limitRaw = Number.parseInt(c.req.query("limit") ?? "50", 10);
+    const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 200);
+    const pages = await Promise.all(
+      allLanes(c.env).map(async (lane) =>
+        (await relayLane(c.env, lane).runsByStatus(lane, statuses, limit)).map((run) => ({
+          lane,
+          ...run,
+        })),
+      ),
+    );
+    const merged = pages.flat();
+    // eslint-disable-next-line unicorn/no-array-sort -- sorts a fresh array
+    merged.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+    const runs = merged.slice(0, limit);
+    c.header("Cache-Control", "no-store");
+    return c.json({ success: true, statuses, runs });
   });
 
   api.post("/admin/seed/touch", async (c) => {

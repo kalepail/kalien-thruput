@@ -209,6 +209,25 @@ describe("contract redeploy", () => {
   });
 });
 
+describe("GET /api/admin/runs", () => {
+  it("lists rejected runs with their error for the admin key only", async () => {
+    const t = testApp();
+    const seedId = currentSeedId();
+    t.chain.seeds.set(seedId, seedOf(shortTape));
+    t.chain.forceFailure = "NotImproved";
+    await submit(t, shortTape);
+    await t.settle();
+    expect((await t.request("/api/admin/runs")).status).toBe(404);
+    const body = (await (
+      await t.request("/api/admin/runs?status=rejected", {
+        headers: { authorization: "Bearer test-key" },
+      })
+    ).json()) as { runs: Array<{ lane: number; status: string; error: string }> };
+    expect(body.runs).toHaveLength(1);
+    expect(body.runs[0]).toMatchObject({ lane: 0, status: "rejected", error: "NotImproved" });
+  });
+});
+
 describe("GET /api/seed/current", () => {
   it("returns a stored seed and asks the relay to touch a missing one", async () => {
     const t = testApp();

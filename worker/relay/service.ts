@@ -69,6 +69,11 @@ export class RelayService {
     };
   }
 
+  /** Recent runs with these statuses (ops), newest first. */
+  runsByStatus(statuses: RunStatus[], limit: number): RunView[] {
+    return this.store.listByStatus(statuses, limit).map(runView);
+  }
+
   async touchSeed(seedId: number): Promise<{ seed: number | null; txHash: string | null }> {
     const engine = await this.getEngine();
     const result = await engine.touchSeed(seedId);

@@ -33,6 +33,8 @@ export interface RelayPolicy {
   gasBase: bigint;
   gasPerFrame: bigint;
   gasMax: bigint;
+  /** Child gas cap for the one retry after an out-of-gas fault. */
+  gasRetryMax: bigint;
   /** Root gas on top of the child call, for the DefaultWallet wrapper. */
   walletGasOverhead: bigint;
   seedTouchGas: bigint;
@@ -47,11 +49,13 @@ export interface RelayPolicy {
 }
 
 export const DEFAULT_RELAY_POLICY: RelayPolicy = {
-  // kt-core measured up to 2,101 gas per frame and 74M for a 36,000-frame
-  // tape (docs/thruput/kt-core.md). Base covers signature, storage, and mint.
-  gasBase: 3_000_000n,
-  gasPerFrame: 2_300n,
-  gasMax: 90_000_000n,
+  // Measured 1,758–2,472 gas per frame (kt-cli round 4) and up to 74.5M for
+  // a 36,000-frame tape. Gas is reserved, not burned, so keep a wide margin:
+  // 36,000 frames -> 113M (11.3 HOG free per in-flight transaction).
+  gasBase: 5_000_000n,
+  gasPerFrame: 3_000n,
+  gasMax: 113_000_000n,
+  gasRetryMax: 150_000_000n,
   walletGasOverhead: 100_000n,
   seedTouchGas: 1_000_000n,
   expiryBlocks: 120n,
@@ -228,7 +232,7 @@ export class RelayEngine {
       store.finish(run.runId, "failed", "tape is missing from storage", null, this.deps.now());
       return;
     }
-    const childGas = scoreGas(policy, run.frameCount);
+    const childGas = run.gasOverride ? BigInt(run.gasOverride) : scoreGas(policy, run.frameCount);
     const invocation = score.submitScoreInvocation(
       {
         playerPubkey: hexToBytes(run.playerPubkey),
@@ -239,10 +243,16 @@ export class RelayEngine {
       childGas,
     );
     const expiry = (await getTip()) + policy.expiryBlocks;
-    const signed = await chain.sign(invocation, childGas + policy.walletGasOverhead, expiry);
+    const gasLimit = childGas + policy.walletGasOverhead;
+    const signed = await chain.sign(invocation, gasLimit, expiry);
     store.recordAttempt(
       run.runId,
-      { txHash: signed.txHash, signedTx: signed.signedTx, expiryHeight: expiry.toString() },
+      {
+        txHash: signed.txHash,
+        signedTx: signed.signedTx,
+        expiryHeight: expiry.toString(),
+        gasLimit: gasLimit.toString(),
+      },
       this.deps.now(),
     );
     this.log(
@@ -321,11 +331,52 @@ export class RelayEngine {
     this.retryOrFail(run.runId, `transaction ${shortHash(txHash)} expired without a receipt`);
   }
 
+  /**
+   * A committed `fault` changed no state. Out of gas (gas used reached the
+   * limit) gets one new transaction with more gas; any other fault repeats
+   * for the same input, so the run fails at once.
+   */
+  private settleFault(run: RunRecord, receipt: ChainReceipt): void {
+    const { store, policy } = this.deps;
+    const now = this.deps.now();
+    const height = receipt.blockHeight.toString();
+    const limit = run.gasLimit ? BigInt(run.gasLimit) : null;
+    const outOfGas = limit !== null && receipt.gasUsed >= limit;
+    if (!outOfGas) {
+      store.finish(
+        run.runId,
+        "failed",
+        `execution fault (gas used ${receipt.gasUsed})`,
+        height,
+        now,
+      );
+      return;
+    }
+    const child = limit - policy.walletGasOverhead;
+    const boosted = (child * 3n) / 2n;
+    const next = boosted > policy.gasRetryMax ? policy.gasRetryMax : boosted;
+    if (run.oogRetries >= 1 || next <= child) {
+      store.finish(run.runId, "failed", `out of gas at ${limit} gas`, height, now);
+      return;
+    }
+    this.log(`run ${run.runId.slice(0, 12)} out of gas at ${limit}; one retry with ${next}`);
+    store.requeueWithMoreGas(
+      run.runId,
+      next.toString(),
+      `out of gas at ${limit} gas; retrying`,
+      now,
+    );
+  }
+
   private async settle(run: RunRecord, txHash: string, receipt: ChainReceipt): Promise<void> {
     const { store, score } = this.deps;
     const now = this.deps.now();
     if (receiptFailed(receipt)) {
       const failure = score.classifyFailure(receipt);
+      if (receipt.outcome === "fault") {
+        this.settleFault(run, receipt);
+        return;
+      }
       if (failure.relayFault) {
         // The run itself may be fine: the committed failure changed nothing,
         // so a new attempt is safe (it checks is_claimed first).

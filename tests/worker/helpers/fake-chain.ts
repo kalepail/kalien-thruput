@@ -25,6 +25,7 @@ interface PendingTx {
   txHash: string;
   invocation: FakeInvocation;
   expiry: bigint;
+  gasLimit: bigint;
 }
 
 /** In-memory `kalien_score` contract plus a chain that mines on demand. */
@@ -48,6 +49,10 @@ export class FakeChain {
   failures = new Map<string, string>();
   /** When set, every submit_score fails with this contract error. */
   forceFailure: string | null = null;
+  /** submit_score needs at least this root gas, else an out-of-gas fault. */
+  minGasToSucceed: bigint | null = null;
+  /** When true, submit_score faults (not out of gas). */
+  forceFault = false;
   private counter = 0;
   readonly gasSeen: bigint[] = [];
 
@@ -96,6 +101,18 @@ export class FakeChain {
     };
     if (this.forceFailure) {
       return fail(this.forceFailure);
+    }
+    const outOfGas = this.minGasToSucceed !== null && tx.gasLimit < this.minGasToSucceed;
+    if (outOfGas || this.forceFault) {
+      this.receipts.set(tx.txHash, {
+        txHash: tx.txHash,
+        blockHeight: this.height,
+        outcome: "fault",
+        abortData: null,
+        gasUsed: outOfGas ? tx.gasLimit : 1n,
+        raw: null,
+      });
+      return;
     }
     const { args } = tx.invocation;
     const tapeHash = bytesToHex(await sha256(args.tape));
@@ -161,6 +178,7 @@ export class FakeChain {
           txHash,
           invocation: invocation as unknown as FakeInvocation,
           expiry: expiryHeight,
+          gasLimit,
         });
         return { txHash, signedTx: `signed:${txHash}` };
       },

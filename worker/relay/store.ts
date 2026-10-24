@@ -31,6 +31,12 @@ export interface RunRecord {
   lastBroadcastAt: number | null;
   /** Height from a `committed` status of the current transaction, if seen. */
   committedHeight: string | null;
+  /** Root gas limit of the current transaction. */
+  gasLimit: string | null;
+  /** Child gas for the next attempt after an out-of-gas fault, else null. */
+  gasOverride: string | null;
+  /** Out-of-gas retries used (at most one). */
+  oogRetries: number;
   nextAttemptAt: number;
   score: number | null;
   previousBest: number | null;
@@ -86,6 +92,9 @@ const SCHEMA = [
     expiry_height TEXT,
     last_broadcast_at INTEGER,
     committed_height TEXT,
+    gas_limit TEXT,
+    gas_override TEXT,
+    oog_retries INTEGER NOT NULL DEFAULT 0,
     next_attempt_at INTEGER NOT NULL DEFAULT 0,
     score INTEGER,
     previous_best INTEGER,
@@ -137,6 +146,9 @@ function toRun(row: Row): RunRecord {
     expiryHeight: str(row.expiry_height),
     lastBroadcastAt: row.last_broadcast_at === null ? null : num(row.last_broadcast_at),
     committedHeight: str(row.committed_height),
+    gasLimit: str(row.gas_limit),
+    gasOverride: str(row.gas_override),
+    oogRetries: num(row.oog_retries),
     nextAttemptAt: num(row.next_attempt_at),
     score: row.score === null ? null : num(row.score),
     previousBest: row.previous_best === null ? null : num(row.previous_best),
@@ -153,10 +165,22 @@ export class RelayStore {
     for (const statement of SCHEMA) {
       sql.exec(statement);
     }
-    // Journals made before committed_height existed.
-    const columns = sql.exec<Row>(`PRAGMA table_info(runs)`).toArray();
-    if (!columns.some((column) => column.name === "committed_height")) {
-      sql.exec(`ALTER TABLE runs ADD COLUMN committed_height TEXT`);
+    // Journals made before these columns existed.
+    const columns = new Set(
+      sql
+        .exec<Row>(`PRAGMA table_info(runs)`)
+        .toArray()
+        .map((column) => String(column.name)),
+    );
+    for (const [name, type] of [
+      ["committed_height", "TEXT"],
+      ["gas_limit", "TEXT"],
+      ["gas_override", "TEXT"],
+      ["oog_retries", "INTEGER NOT NULL DEFAULT 0"],
+    ]) {
+      if (!columns.has(name ?? "")) {
+        sql.exec(`ALTER TABLE runs ADD COLUMN ${name} ${type}`);
+      }
     }
   }
 
@@ -287,7 +311,7 @@ export class RelayStore {
   /** Journals a signed transaction. Call before broadcast. */
   recordAttempt(
     runId: string,
-    attempt: { txHash: string; signedTx: string; expiryHeight: string },
+    attempt: { txHash: string; signedTx: string; expiryHeight: string; gasLimit: string },
     now: number,
   ): void {
     const run = this.requireRun(runId);
@@ -302,14 +326,48 @@ export class RelayStore {
     );
     this.sql.exec(
       `UPDATE runs SET status = 'submitting', attempts = attempts + 1, tx_hash = ?, signed_tx = ?,
-         expiry_height = ?, last_broadcast_at = NULL, committed_height = NULL, updated_at = ?
+         expiry_height = ?, gas_limit = ?, last_broadcast_at = NULL, committed_height = NULL,
+         updated_at = ?
        WHERE run_id = ?`,
       attempt.txHash,
       attempt.signedTx,
       attempt.expiryHeight,
+      attempt.gasLimit,
       now,
       runId,
     );
+  }
+
+  /**
+   * After an out-of-gas fault: queue one more attempt with more child gas.
+   * The fault committed as a failure, so no state changed.
+   */
+  requeueWithMoreGas(runId: string, childGas: string, reason: string, now: number): void {
+    this.sql.exec(
+      `UPDATE runs SET status = 'queued', error = ?, signed_tx = NULL, gas_override = ?,
+         oog_retries = oog_retries + 1, next_attempt_at = ?, updated_at = ? WHERE run_id = ?`,
+      reason,
+      childGas,
+      now,
+      now,
+      runId,
+    );
+  }
+
+  /** Recent runs with one of these statuses, newest first. */
+  listByStatus(statuses: RunStatus[], limit: number): RunRecord[] {
+    if (statuses.length === 0) {
+      return [];
+    }
+    return this.sql
+      .exec<Row>(
+        `SELECT * FROM runs WHERE status IN (${statuses.map(() => "?").join(",")})
+         ORDER BY updated_at DESC LIMIT ?`,
+        ...statuses,
+        limit,
+      )
+      .toArray()
+      .map(toRun);
   }
 
   markCommitted(runId: string, height: string, now: number): void {

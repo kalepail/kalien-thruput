@@ -17,6 +17,7 @@ export interface WorkerEnv {
   RELAY_GAS_BASE?: string;
   RELAY_GAS_PER_FRAME?: string;
   RELAY_GAS_MAX?: string;
+  RELAY_GAS_RETRY_MAX?: string;
   RELAY_WALLET_GAS_OVERHEAD?: string;
   RELAY_SEED_GAS?: string;
   RELAY_EXPIRY_BLOCKS?: string;

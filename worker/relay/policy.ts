@@ -24,6 +24,7 @@ export function relayPolicy(env: WorkerEnv): RelayPolicy {
     gasBase: bigintVar(env.RELAY_GAS_BASE, base.gasBase),
     gasPerFrame: bigintVar(env.RELAY_GAS_PER_FRAME, base.gasPerFrame),
     gasMax: bigintVar(env.RELAY_GAS_MAX, base.gasMax),
+    gasRetryMax: bigintVar(env.RELAY_GAS_RETRY_MAX, base.gasRetryMax),
     walletGasOverhead: bigintVar(env.RELAY_WALLET_GAS_OVERHEAD, base.walletGasOverhead),
     seedTouchGas: bigintVar(env.RELAY_SEED_GAS, base.seedTouchGas),
     expiryBlocks: bigintVar(env.RELAY_EXPIRY_BLOCKS, base.expiryBlocks),
