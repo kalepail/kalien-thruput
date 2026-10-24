@@ -41,6 +41,16 @@ relay funds). Current devnet (from `getVersionInfo`): wire format **14.1.0**, im
 - Keys in `~/.config/thruput/keys` still exist; their devnet accounts are empty. Refund with
   `faucet_requestAirdrop`. Network hash and all contract addresses must come from config.
 
+- **Migration guide from the Thruput team:** `docs/thruput/reference/json-rpc-alpha-guide.md`
+  (wire 14 method map, named `params` objects, base58 identifiers, lowercase `0x` hex payloads,
+  decimal-string heights/gas, admission vs commitment, `execution.result` in receipts,
+  cursor pagination that ends only at `nextCursor: null`, `error.data.kind` handling).
+- **Firehose:** `wss://firehose.thruput.network` streams committed block records (XDR) with
+  resumable replay from a height and per-block ACK. Docs: `developers-site` `origin/HEAD:`
+  `src/content/docs/reference/firehose.md` and `guides/consume-the-firehose.md`.
+- Devnet now has some support for Stellar G/C StrKey addresses (Ed25519 keys only; ML-DSA-65
+  keys exist too but have no StrKey form). We keep Ed25519 browser keys.
+
 ## Thruput facts that shape the design
 
 - Docs authority: `/Users/kalepail/Desktop/groundhog/developers-site/src/content/docs/`.
