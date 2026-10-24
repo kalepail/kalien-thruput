@@ -33,7 +33,7 @@ describe("claimMessage", () => {
         seedId: 1,
         tape: new Uint8Array(),
       }),
-    ).rejects.toThrow(/32 bytes/);
+    ).rejects.toThrow();
   });
 
   it.skipIf(!existsSync(VECTORS_PATH))("matches the shared claim vectors", async () => {

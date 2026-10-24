@@ -2,6 +2,7 @@ import { fetchWithTimeout as baseFetchWithTimeout, parseJson } from "@/lib/api";
 import { parseBaseUnits } from "@/lib/format";
 import { bytesToHex } from "@/lib/hex";
 import { getThruputConfig } from "@/thruput/config";
+import { canonicalIdOr, toCanonicalId } from "@/thruput/ids";
 
 export type LeaderboardWindow = "10m" | "day" | "all";
 
@@ -114,7 +115,9 @@ function parseProfile(raw: unknown, fallbackAddress: string): PlayerProfile | nu
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Json;
   return {
-    playerAddress: str(pick(record, "playerAddress", "player_address")) ?? fallbackAddress,
+    playerAddress: canonicalIdOr(
+      str(pick(record, "playerAddress", "player_address")) ?? fallbackAddress,
+    ),
     username: str(pick(record, "username")),
     linkUrl: str(pick(record, "linkUrl", "link_url")),
     updatedAt: str(pick(record, "updatedAt", "updated_at")) ?? new Date(0).toISOString(),
@@ -123,7 +126,9 @@ function parseProfile(raw: unknown, fallbackAddress: string): PlayerProfile | nu
 
 export function parseLeaderboardEntry(raw: unknown, index = 0): LeaderboardEntry {
   const record = obj(raw);
-  const playerAddress = str(pick(record, "playerAddress", "player_address", "player")) ?? "";
+  const playerAddress = canonicalIdOr(
+    str(pick(record, "playerAddress", "player_address", "player")) ?? "",
+  );
   return {
     rank: num(pick(record, "rank")) ?? index + 1,
     runId: str(pick(record, "runId", "run_id")),
@@ -137,7 +142,7 @@ export function parseLeaderboardEntry(raw: unknown, index = 0): LeaderboardEntry
     completedAt:
       str(pick(record, "completedAt", "completed_at", "closedAt", "closed_at", "createdAt")) ??
       new Date(0).toISOString(),
-    txHash: str(pick(record, "txHash", "tx_hash")),
+    txHash: toCanonicalId(str(pick(record, "txHash", "tx_hash"))),
   };
 }
 
@@ -180,8 +185,9 @@ export function parseLeaderboardPlayer(
   fallbackAddress: string,
 ): LeaderboardPlayer {
   const player = obj(obj(payload).player ?? payload);
-  const playerAddress =
-    str(pick(player, "playerAddress", "player_address", "address")) ?? fallbackAddress;
+  const playerAddress = canonicalIdOr(
+    str(pick(player, "playerAddress", "player_address", "address")) ?? fallbackAddress,
+  );
   const stats = obj(player.stats);
   const ranks = obj(player.ranks);
   const rawRuns = pick(player, "recentRuns", "recent_runs");
@@ -308,8 +314,9 @@ export function profileUpdateMessage(input: {
 }): string {
   return [
     PROFILE_MESSAGE_DOMAIN,
-    input.networkHash.toLowerCase(),
-    input.address.toLowerCase(),
+    // Base58 is case-sensitive: never change the case of these identifiers.
+    canonicalIdOr(input.networkHash),
+    canonicalIdOr(input.address),
     String(input.timestamp),
     input.username ?? "",
     input.linkUrl ?? "",

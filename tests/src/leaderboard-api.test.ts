@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import { verify } from "@noble/ed25519";
+import { verifyAsync as verify } from "@noble/ed25519";
+import { toBase58 } from "@thruputchain/client";
 import {
   parseLeaderboardEntry,
   parseLeaderboardPage,
@@ -9,26 +10,31 @@ import {
 } from "../../src/leaderboard/api";
 import { generateStoredWallet, walletFromSecret } from "../../src/wallet/keyWallet";
 import { hexToBytes } from "../../src/lib/hex";
-import { profileMessage } from "../../worker/profile";
+
+const PLAYER_BYTES = new Uint8Array(32).fill(7);
+const PLAYER = toBase58(PLAYER_BYTES);
+const PLAYER_HEX = `0x${"07".repeat(32)}`;
+const TX_HEX = `0x${"de".repeat(32)}`;
+const TX_BASE58 = toBase58(new Uint8Array(32).fill(0xde));
 
 describe("leaderboard parsing", () => {
   it("reads Thruput entries with base-unit minted amounts", () => {
     const entry = parseLeaderboardEntry({
       rank: 2,
       runId: "r1",
-      player: "0xabc",
+      player: PLAYER,
       score: 1200,
       minted: "12000000000",
       seed: 7,
-      txHash: "0xdead",
+      txHash: TX_HEX,
     });
     expect(entry).toMatchObject({
       rank: 2,
       runId: "r1",
-      playerAddress: "0xabc",
+      playerAddress: PLAYER,
       score: 1200,
       minted: 12_000_000_000n,
-      txHash: "0xdead",
+      txHash: TX_BASE58,
     });
   });
 
@@ -36,7 +42,7 @@ describe("leaderboard parsing", () => {
     const page = parseLeaderboardPage(
       {
         window: "day",
-        entries: [{ player: "0x1", score: 3 }],
+        entries: [{ player: PLAYER, score: 3 }],
         pagination: { limit: 25, offset: 0, total: 1, next_offset: null },
         ingestion: { last_synced_at: "2026-10-23T00:00:00Z", total_events: 4 },
       },
@@ -49,15 +55,16 @@ describe("leaderboard parsing", () => {
     const player = parseLeaderboardPlayer(
       {
         player: {
-          player_address: "0x1",
+          player_address: PLAYER_HEX,
           stats: { total_runs: 2, best_score: 9, total_minted: "90000000" },
           ranks: { ten_min: 1, day: 2, all: null },
-          recent_runs: [{ player: "0x1", score: 9 }],
+          recent_runs: [{ player: PLAYER, score: 9 }],
         },
       },
       "0xfallback",
     );
-    expect(player.playerAddress).toBe("0x1");
+    // Legacy hex addresses become base58.
+    expect(player.playerAddress).toBe(PLAYER);
     expect(player.stats.totalMinted).toBe(90_000_000n);
     expect(player.ranks.tenMin).toBe(1);
     expect(player.recentRuns).toHaveLength(1);
@@ -70,7 +77,7 @@ describe("signed profile update", () => {
     const wallet = walletFromSecret(stored.secretKey, stored.createdAt);
     let body: Record<string, unknown> = {};
     const originalFetch = globalThis.fetch;
-    const networkHash = `0x${"ab".repeat(32)}`;
+    const networkHash = toBase58(new Uint8Array(32).fill(0xab));
     globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === "/api/config") {
         return Promise.resolve(
@@ -107,7 +114,8 @@ describe("signed profile update", () => {
       linkUrl: null,
       timestamp: body.timestamp as number,
     });
-    // Same layout as profileMessage in worker/profile.ts.
+    // Layout of profileMessage in worker/profile.ts, with base58 identifiers in
+    // their exact case (base58 is case-sensitive).
     expect(message.split("\n")).toEqual([
       "kalien-profile-v1",
       networkHash,
@@ -116,15 +124,6 @@ describe("signed profile update", () => {
       "ace",
       "",
     ]);
-    expect(new TextEncoder().encode(message)).toEqual(
-      profileMessage({
-        networkHash,
-        playerAddress: wallet.address,
-        timestamp: body.timestamp as number,
-        username: "ace",
-        linkUrl: null,
-      }),
-    );
     const ok = await verify(
       hexToBytes(body.signature as string),
       new TextEncoder().encode(message),

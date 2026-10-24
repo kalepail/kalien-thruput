@@ -4,6 +4,7 @@ import {
   clearStoredWallet,
   encodeBackupFile,
   encodeBackupString,
+  encodeStrkeySecret,
   generateStoredWallet,
   loadOrCreateStoredWallet,
   parseBackup,
@@ -28,9 +29,12 @@ export interface UseWalletReturn {
   isEphemeral: boolean;
   address: string;
   pubkeyHex: string;
+  /** The public key as a Stellar `G...` StrKey (secondary identity). */
+  publicKeyStrkey: string;
   sign: (message: Uint8Array) => Promise<Uint8Array>;
   exportBackupString: () => Promise<string>;
   exportBackupFile: () => Promise<WalletBackupFile>;
+  exportStrkeySecret: () => string;
   importBackup: (input: string) => Promise<boolean>;
   resetKey: () => Promise<boolean>;
   clearError: () => void;
@@ -109,6 +113,13 @@ export function useWallet(): UseWalletReturn {
     return encodeBackupFile(state.stored);
   }, [state.stored]);
 
+  const exportStrkeySecret = useCallback(() => {
+    if (!state.stored) {
+      throw new Error("the player key is not ready yet");
+    }
+    return encodeStrkeySecret(state.stored);
+  }, [state.stored]);
+
   const importBackup = useCallback(async (input: string) => {
     setAction("importing");
     setError(null);
@@ -155,9 +166,11 @@ export function useWallet(): UseWalletReturn {
     isEphemeral: state.ephemeral,
     address: wallet?.address ?? "",
     pubkeyHex: wallet?.pubkeyHex ?? "",
+    publicKeyStrkey: wallet?.publicKeyStrkey ?? "",
     sign,
     exportBackupString,
     exportBackupFile,
+    exportStrkeySecret,
     importBackup,
     resetKey,
     clearError,

@@ -1,9 +1,7 @@
-import { createContext, useContext } from "react";
+import { useContext } from "react";
 import { useWallet, type UseWalletReturn } from "@/hooks/useWallet";
 import { useTokenBalance, type UseTokenBalanceReturn } from "@/hooks/useTokenBalance";
-
-const WalletStateContext = createContext<UseWalletReturn | null>(null);
-const TokenBalanceContext = createContext<UseTokenBalanceReturn | null>(null);
+import { TokenBalanceContext, WalletStateContext } from "./walletContextObjects";
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const wallet = useWallet();

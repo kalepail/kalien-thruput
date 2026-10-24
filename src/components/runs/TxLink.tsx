@@ -3,22 +3,23 @@ import { useThruputConfig } from "@/hooks/useThruputConfig";
 import { explorerAddressUrl, explorerTxUrl } from "@/thruput/config";
 import { DEFAULT_EXPLORER_URL } from "@/consts";
 import { abbreviateHex } from "@/lib/format";
-import { with0x } from "@/lib/hex";
+import { canonicalIdOr } from "@/thruput/ids";
 import { cn } from "@/lib/utils";
 
 /** Explorer link for a transaction hash. */
 export function TxLink({ txHash, className }: { txHash: string; className?: string }) {
   const { config } = useThruputConfig();
   const href = explorerTxUrl(config?.explorerUrl ?? DEFAULT_EXPLORER_URL, txHash);
+  const display = canonicalIdOr(txHash);
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
       className={cn("inline-flex items-center gap-1 break-all text-link", className)}
-      title={with0x(txHash)}
+      title={display}
     >
-      <code>{abbreviateHex(with0x(txHash), 10)}</code>
+      <code>{abbreviateHex(display, 8)}</code>
       <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
     </a>
   );

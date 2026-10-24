@@ -50,7 +50,7 @@ function Warning({ children }: { children: React.ReactNode }) {
 
 function BackupCard() {
   const wallet = useWalletState();
-  const [revealed, setRevealed] = useState<string | null>(null);
+  const [revealed, setRevealed] = useState<{ label: string; value: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, copy] = useCopied();
 
@@ -59,14 +59,21 @@ function BackupCard() {
     setRevealed(null);
   }, [wallet.address]);
 
-  const reveal = useCallback(async () => {
-    setError(null);
-    try {
-      setRevealed(await wallet.exportBackupString());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "failed to export key");
-    }
-  }, [wallet]);
+  const reveal = useCallback(
+    async (kind: "backup" | "stellar") => {
+      setError(null);
+      try {
+        setRevealed(
+          kind === "backup"
+            ? { label: "Backup string", value: await wallet.exportBackupString() }
+            : { label: "Stellar secret key (S...)", value: wallet.exportStrkeySecret() },
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "failed to export key");
+      }
+    },
+    [wallet],
+  );
 
   const download = useCallback(async () => {
     setError(null);
@@ -76,7 +83,7 @@ function BackupCard() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `kalien-key-${wallet.address.slice(2, 10)}.json`;
+      anchor.download = `kalien-key-${wallet.address.slice(0, 8)}.json`;
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (err) {
@@ -102,19 +109,19 @@ function BackupCard() {
         {revealed ? (
           <div className="grid gap-2">
             <label htmlFor="backup-string" className={fieldLabel}>
-              Backup string
+              {revealed.label}
             </label>
             <textarea
               id="backup-string"
               readOnly
-              value={revealed}
+              value={revealed.value}
               rows={3}
               data-testid="backup-string"
               className="w-full resize-none rounded-md border border-border/40 bg-surface-dim px-3 py-2 font-mono text-xs break-all text-card-foreground focus:border-primary/60 focus:outline-none"
               onFocus={(event) => event.currentTarget.select()}
             />
             <div className="flex flex-wrap gap-2">
-              <Button variant="active" size="sm" onClick={() => copy(revealed)}>
+              <Button variant="active" size="sm" onClick={() => copy(revealed.value)}>
                 {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                 {copied ? "Copied" : "Copy Backup"}
               </Button>
@@ -126,13 +133,17 @@ function BackupCard() {
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <Button variant="active" size="sm" onClick={() => void reveal()}>
+            <Button variant="active" size="sm" onClick={() => void reveal("backup")}>
               <Eye className="size-3.5" />
               Show Backup String
             </Button>
             <Button variant="space" size="sm" onClick={() => void download()}>
               <Download className="size-3.5" />
               Download Backup File
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => void reveal("stellar")}>
+              <Eye className="size-3.5" />
+              Show as Stellar Secret
             </Button>
           </div>
         )}
@@ -194,7 +205,7 @@ function ImportCard() {
             id="import-backup"
             value={input}
             rows={3}
-            placeholder="kalien-key-v1:..."
+            placeholder="kalien-key-v1:... or S..."
             data-testid="import-backup"
             onChange={(event) => {
               setInput(event.target.value);
@@ -263,6 +274,7 @@ export function WalletPage() {
   const wallet = useWalletState();
   const balance = useBalanceState();
   const [copied, copy] = useCopied();
+  const [copiedStrkey, copyStrkey] = useCopied();
 
   return (
     <PageShell glow className="content-start">
@@ -307,6 +319,30 @@ export function WalletPage() {
                     Player page
                   </Link>
                 </div>
+              </div>
+              <div>
+                <p className={fieldLabel}>Stellar public key</p>
+                <button
+                  onClick={() => copyStrkey(wallet.publicKeyStrkey)}
+                  className="mt-0.5 flex w-full cursor-pointer items-center gap-1.5 rounded bg-transparent p-0 text-left transition-colors hover:text-primary"
+                  title="Copy Stellar public key"
+                >
+                  <span
+                    className="min-w-0 flex-1 font-mono text-xs break-all text-text-soft"
+                    data-testid="wallet-strkey"
+                  >
+                    {wallet.publicKeyStrkey}
+                  </span>
+                  {copiedStrkey ? (
+                    <Check className="size-3.5 shrink-0 text-secondary" aria-hidden="true" />
+                  ) : (
+                    <Copy className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  )}
+                </button>
+                <p className="m-0 mt-0.5 text-xs text-text-dim">
+                  The same Ed25519 key in Stellar G... form. Your Thruput address above is derived
+                  from it.
+                </p>
               </div>
               <div className="grid gap-1">
                 <p className={fieldLabel}>Balance</p>

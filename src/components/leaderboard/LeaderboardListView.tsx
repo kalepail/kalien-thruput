@@ -8,6 +8,7 @@ import {
 } from "@/leaderboard/api";
 import { formatUtcDateTime, timeAgo } from "@/lib/time";
 import { toNullableTrimmed } from "@/lib/validation";
+import { parseAddressInput } from "@/thruput/ids";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -104,7 +105,18 @@ export function LeaderboardListView() {
   }, []);
 
   const applyFind = useCallback(() => {
-    const next = toNullableTrimmed(searchInput);
+    if (!toNullableTrimmed(searchInput)) {
+      setFindAddress(null);
+      setOffset(0);
+      return;
+    }
+    const next = parseAddressInput(searchInput);
+    if (!next) {
+      setError("enter a Thruput address (base58, or a C... StrKey)");
+      return;
+    }
+    setError(null);
+    setSearchInput(next);
     setFindAddress(next);
     setOffset(0);
   }, [searchInput]);

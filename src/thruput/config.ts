@@ -4,15 +4,15 @@
 
 import { fetchWithTimeout } from "@/lib/api";
 import { DEFAULT_EXPLORER_URL, DEFAULT_THRUPUT_RPC_URL } from "@/consts";
-import { strip0x, with0x } from "@/lib/hex";
+import { toCanonicalId } from "./ids";
 
 export interface ThruputConfig {
-  /** Network hash, `0x`-prefixed lowercase hex. */
+  /** Network hash, base58. */
   networkHash: string;
   rpcUrl: string;
-  /** Score contract address, `0x`-prefixed lowercase hex. */
+  /** Score contract address, base58. */
   scoreContract: string;
-  /** KALIEN token contract address, `0x`-prefixed lowercase hex. */
+  /** KALIEN token contract address, base58. */
   tokenContract: string;
   /** Explorer base URL without a trailing slash. */
   explorerUrl: string;
@@ -37,18 +37,18 @@ export function parseThruputConfig(payload: unknown): ThruputConfig {
     throw new Error("config response is not an object");
   }
   const record = payload as Record<string, unknown>;
-  const networkHash = readString(record, "networkHash", "network_hash");
-  const scoreContract = readString(record, "scoreContract", "score_contract");
-  const tokenContract = readString(record, "tokenContract", "token_contract");
+  const networkHash = toCanonicalId(readString(record, "networkHash", "network_hash"));
+  const scoreContract = toCanonicalId(readString(record, "scoreContract", "score_contract"));
+  const tokenContract = toCanonicalId(readString(record, "tokenContract", "token_contract"));
   if (!networkHash || !scoreContract || !tokenContract) {
-    throw new Error("config response is missing networkHash, scoreContract, or tokenContract");
+    throw new Error("config response needs 32-byte networkHash, scoreContract, and tokenContract");
   }
   const explorerUrl = readString(record, "explorerUrl", "explorer_url") ?? DEFAULT_EXPLORER_URL;
   return {
-    networkHash: with0x(strip0x(networkHash)),
+    networkHash,
     rpcUrl: readString(record, "rpcUrl", "rpc_url") ?? DEFAULT_THRUPUT_RPC_URL,
-    scoreContract: with0x(strip0x(scoreContract)),
-    tokenContract: with0x(strip0x(tokenContract)),
+    scoreContract,
+    tokenContract,
     explorerUrl: explorerUrl.replace(/\/+$/, ""),
   };
 }
@@ -80,9 +80,9 @@ export function getThruputConfig(): Promise<ThruputConfig> {
 }
 
 export function explorerTxUrl(explorerUrl: string, txHash: string): string {
-  return `${explorerUrl}/tx/${with0x(txHash)}`;
+  return `${explorerUrl}/tx/${encodeURIComponent(toCanonicalId(txHash) ?? txHash)}`;
 }
 
 export function explorerAddressUrl(explorerUrl: string, address: string): string {
-  return `${explorerUrl}/address/${with0x(address)}`;
+  return `${explorerUrl}/address/${encodeURIComponent(toCanonicalId(address) ?? address)}`;
 }

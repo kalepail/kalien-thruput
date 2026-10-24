@@ -10,6 +10,7 @@ import {
 } from "../consts";
 import { fetchWithTimeout as baseFetchWithTimeout } from "../lib/api";
 import { parseBaseUnits } from "../lib/format";
+import { toCanonicalId } from "../thruput/ids";
 
 export type RunStatus = "queued" | "submitting" | "confirmed" | "rejected" | "failed";
 
@@ -108,12 +109,12 @@ export function parseRunRecord(payload: unknown): RunRecord {
   return {
     runId,
     status,
-    txHash: asString(pick(record, "txHash", "tx_hash")),
+    txHash: toCanonicalId(asString(pick(record, "txHash", "tx_hash"))),
     score: asNumber(pick(record, "score", "claimedScore", "finalScore", "final_score")),
     previousBest: asNumber(pick(record, "previousBest", "previous_best")),
     minted: parseBaseUnits(pick(record, "minted", "mintedDelta", "minted_delta")),
     error: asString(pick(record, "error")),
-    player: asString(pick(record, "player", "playerAddress", "player_address")),
+    player: toCanonicalId(asString(pick(record, "player", "playerAddress", "player_address"))),
     seedId: asNumber(pick(record, "seedId", "seed_id")),
     seed: asNumber(pick(record, "seed")),
     frameCount: asNumber(pick(record, "frameCount", "frame_count")),

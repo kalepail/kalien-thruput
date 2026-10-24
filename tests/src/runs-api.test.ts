@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { toBase58 } from "@thruputchain/client";
 import {
   getRun,
   isTerminalRunStatus,
@@ -19,12 +20,14 @@ function mockFetch(handler: (url: string, init?: RequestInit) => Response) {
     Promise.resolve(handler(String(input), init))) as typeof fetch;
 }
 
+const TX = toBase58(new Uint8Array(32).fill(0xab));
+
 describe("parseRunRecord", () => {
   it("reads the API v0 camelCase shape", () => {
     const run = parseRunRecord({
       runId: "r1",
       status: "confirmed",
-      txHash: "0xabc",
+      txHash: TX,
       score: 1500,
       previousBest: 900,
       minted: "6000000000",
@@ -34,7 +37,7 @@ describe("parseRunRecord", () => {
     expect(run).toMatchObject({
       runId: "r1",
       status: "confirmed",
-      txHash: "0xabc",
+      txHash: TX,
       score: 1500,
       previousBest: 900,
       minted: 6_000_000_000n,

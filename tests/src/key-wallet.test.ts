@@ -1,15 +1,23 @@
 import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import { verify } from "@noble/ed25519";
-import { createPubkeyAccount, PrivateKeySigner, toHex0x } from "@thruputchain/client";
+import { verifyAsync as verify } from "@noble/ed25519";
+import {
+  createPubkeyAccount,
+  Ed25519Signer,
+  parseSecretSeed,
+  publicKeyToStrkey,
+  toBase58,
+} from "@thruputchain/client";
 import {
   encodeBackupFile,
   encodeBackupString,
+  encodeStrkeySecret,
   generateStoredWallet,
   parseBackup,
   pubkeyAccountAddress,
   walletFromSecret,
 } from "../../src/wallet/keyWallet";
+import { isHex32 } from "../../src/thruput/ids";
 import { hexToBytes, strip0x } from "../../src/lib/hex";
 
 const VECTORS_PATH = new URL("../../shared/thruput/claim-vectors.json", import.meta.url);
@@ -25,9 +33,10 @@ describe("key wallet", () => {
     const stored = generateStoredWallet();
     const wallet = walletFromSecret(stored.secretKey, stored.createdAt);
     const account = createPubkeyAccount({
-      signer: new PrivateKeySigner(hexToBytes(stored.secretKey)),
+      signer: Ed25519Signer.fromSeed(hexToBytes(stored.secretKey)),
     });
-    expect(wallet.address).toBe(toHex0x(account.address).toLowerCase());
+    expect(wallet.address).toBe(toBase58(account.address));
+    expect(isHex32(wallet.address)).toBe(false);
     expect(pubkeyAccountAddress(hexToBytes(wallet.pubkeyHex))).toBe(wallet.address);
   });
 
@@ -48,11 +57,18 @@ describe("key wallet", () => {
       addresses: AddressVector[];
     };
     for (const vector of vectors.addresses) {
-      expect(pubkeyAccountAddress(hexToBytes(vector.pubkey))).toBe(vector.address.toLowerCase());
+      // Vectors from before the wire-14 upgrade carry hex addresses from the old
+      // derivation; only base58 addresses are checked.
+      const checkAddress = !isHex32(vector.address);
+      if (checkAddress) {
+        expect(pubkeyAccountAddress(hexToBytes(vector.pubkey))).toBe(vector.address);
+      }
       if (vector.secretKey) {
         const wallet = walletFromSecret(strip0x(vector.secretKey), "2026-01-01T00:00:00.000Z");
         expect(`0x${wallet.pubkeyHex}`).toBe(vector.pubkey.toLowerCase());
-        expect(wallet.address).toBe(vector.address.toLowerCase());
+        if (checkAddress) {
+          expect(wallet.address).toBe(vector.address);
+        }
       }
     }
   });
@@ -105,9 +121,33 @@ describe("key backup", () => {
     expect(parsed.createdAt).toBe("2026-10-01T00:00:00.000Z");
   });
 
+  it("shows the key as a Stellar G StrKey and round-trips the S StrKey secret", async () => {
+    const stored = generateStoredWallet();
+    const wallet = walletFromSecret(stored.secretKey, stored.createdAt);
+    expect(wallet.publicKeyStrkey).toMatch(/^G[A-Z2-7]{55}$/);
+    expect(wallet.publicKeyStrkey).toBe(publicKeyToStrkey(hexToBytes(wallet.pubkeyHex)));
+    const strkey = encodeStrkeySecret(stored);
+    expect(strkey).toMatch(/^S[A-Z2-7]{55}$/);
+    expect(parseSecretSeed(strkey)).toEqual(hexToBytes(stored.secretKey));
+    expect((await parseBackup(strkey)).secretKey).toBe(stored.secretKey);
+  });
+
+  it("imports a pre-upgrade backup file that holds a hex address", async () => {
+    const stored = generateStoredWallet();
+    const legacy = {
+      format: "kalien-key-v1",
+      address: `0x${"ab".repeat(32)}`,
+      pubkey: "00",
+      secretKey: stored.secretKey,
+      createdAt: "2026-10-23T00:00:00.000Z",
+      network: "thruput-devnet",
+    };
+    expect((await parseBackup(JSON.stringify(legacy))).secretKey).toBe(stored.secretKey);
+  });
+
   it("rejects input that is not a key", async () => {
     await expect(parseBackup("")).rejects.toThrow();
-    await expect(parseBackup("hello")).rejects.toThrow(/32-byte/);
+    await expect(parseBackup("hello!")).rejects.toThrow(/32-byte/);
     await expect(parseBackup('{"foo":1}')).rejects.toThrow(/not a Kalien key backup/);
   });
 });
