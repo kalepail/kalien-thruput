@@ -1,7 +1,7 @@
 # Asteroids Tape Reuse and Replay Policy
 
 This page describes how the Thruput version stops a run from paying twice, where it does not,
-and the open decision about copied tapes. The ZK-era policy (journal digests) is in
+and the decision about copied tapes. The ZK-era policy (journal digests) is in
 `docs/archive/zk/asteroids/11-TAPE-REUSE-AND-REPLAY-POLICY.md`.
 
 ## Current behavior (contract v2)
@@ -50,9 +50,16 @@ score and KALIEN on that seed. kt-contract's adversarial test
 front-runner can also try to submit an exact copy first; relay-only mode makes that harder,
 because the copy must go through the Worker.
 
-## Open decision (for the user)
+## Decision
 
-**TODO(lead): choose one option, or accept the gap on devnet.**
+**Decision 2026-10-24: accepted for devnet; options kept for a future mainnet-like deployment.**
+The contract does not change for this gap on devnet. The options below stay documented for a
+deployment where KALIEN has value.
+
+Separate from this decision: a deploy must not leave fixture seeds with public solutions in a
+live epoch (see `docs/thruput/review.md`, finding 2).
+
+## Options for a future deployment
 
 | Option | Stops | Cost |
 |---|---|---|

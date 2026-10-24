@@ -246,7 +246,7 @@ Details and commands: [OPERATIONS.md](OPERATIONS.md).
 - Contracts are immutable. A change needs a redeploy, and players' old best scores and balances
   stay on the old contract.
 
-## Open decision: copycat tapes
+## Copycat tapes (decided)
 
 All players share one seed per epoch, and tapes are public (on-chain calldata and the Worker
 replay endpoint). Tape dedupe is by `sha256(tape)`. A copier can take a confirmed top tape,
@@ -262,7 +262,7 @@ serve tapes only after their epoch closes, require tapes to end soon after game 
 (`sha256(epoch_seed || player_pubkey)`), which ends copying but also ends the shared asteroid
 layout per epoch.
 
-**TODO(lead): this is a product decision for the user.**
+**Decision 2026-10-24: accepted for devnet; options kept for a future mainnet-like deployment.**
 
 ## Other TODO(lead) items
 

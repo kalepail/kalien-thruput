@@ -7,7 +7,7 @@ KALIEN for new best scores. There is no zero-knowledge proof in this version.
 
 - [ARCHITECTURE.md](ARCHITECTURE.md): components, game core and tape, contracts and gas,
   Worker relay lanes and API, key wallet, leaderboard, CLI, devnet operations, trust model, and
-  the open copycat decision.
+  the copycat decision.
 - [OPERATIONS.md](OPERATIONS.md): versions, setup, tests, deploy, devnet reset after a wipe,
   funding, secrets.
 - [games/asteroids/](games/asteroids/README.md): game rules, tape format, verification, and the

@@ -52,7 +52,8 @@ bun run asteroids-core/parity/parity.ts                         # TS/Rust replay
 Deploy the Worker with `bun run deploy` (see `worker/ops/deploy.sh`). Contracts, devnet reset
 after a wipe, funding, secrets, and every test command: [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-Open decision: copied tapes can earn the same reward under another key. See
+Copied tapes can earn the same reward under another key. Decision 2026-10-24: accepted for
+devnet; options kept for a future mainnet-like deployment. See
 [docs/games/asteroids/04-TAPE-REUSE-AND-REPLAY-POLICY.md](docs/games/asteroids/04-TAPE-REUSE-AND-REPLAY-POLICY.md).
 
 ## Docs
