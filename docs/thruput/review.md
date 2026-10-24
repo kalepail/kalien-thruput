@@ -16,7 +16,9 @@ Severity: **High** = honest users lose runs or funds, or an attacker gains value
 
 ## Summary
 
-| # | Severity | Area | Finding | Status |
+Status column: as found on 2026-10-24 (code `23e16ce`). Current status: see "Verification pass".
+
+| # | Severity | Area | Finding | Status when found |
 |---|---|---|---|---|
 | 1 | High | Worker gas / shared | Valid dense tapes need up to 2,716 gas per frame (corpus) and 3,073 (searched worst, 110.6M); old relay limits (2,300 and 2,200 per frame) run them out of gas | Worker raised in `88a0476` (thin margin, see below); `shared/thruput/kalien.ts` still 2,200 |
 | 2 | Medium (time-limited) | Deploy | Fixture epoch 2988058 (seed `0x5F41772E`) is live, and an unclaimed 911,260-point tape for it is public in the repo | Open until about 2026-10-25 09:40 UTC |
@@ -27,6 +29,33 @@ Severity: **High** = honest users lose runs or funds, or an attacker gains value
 | 7 | Low-medium | Worker | `POST /api/runs` buffers a body of any size when `Content-Length` is missing | Open |
 | 8 | Low | Worker | Public `/api/health` fans out to RPC and every relay Durable Object, and forces relay ticks | Open |
 | 9–17 | Low | various | See "Low findings" | Open |
+
+## Verification pass (2026-10-24, code at `ffd0972`, Worker `d2cc7b39` from `8491d9a`)
+
+For each finding I read the fix in the code. Where it was cheap and harmless, I also checked the
+deployed Worker with a request that is rejected before any chain write.
+
+| # | Finding | Status | Fix | How I verified |
+|---|---|---|---|---|
+| 1 | Relay gas too low for dense tapes | **Fixed** | `e535039` (Worker 5M + 4,500 × frames, max 167M; out-of-gas retry 2.5× up to 400M), `eb10818` (`submitGasLimit` same bound) | `wrangler.jsonc` vars; `SUBMIT_BASE_GAS` / `SUBMIT_GAS_PER_FRAME` in `shared/thruput/kalien.ts`. Covers the worst measured tape (110.9M) by 1.5×. |
+| 2 | Fixture epoch with a public, unclaimed solution | **Fixed** | `12b55aa` (`BLOCKED_SEED_IDS` 2988058–2988060), `eb10818` (deploy claims every repo tape for fixture seeds, records `fixtureSeedIds`) | Live: `POST /api/runs?seed_id=2988058` → 403 `seed_blocked`. |
+| 3 | Key import accepts public values | **Fixed** | `b33ab18` | My Bun reproduction now gets "this is an address or public key, not a secret key" for the address and the public key. |
+| 4 | Committed run without a receipt never settles | **Fixed** | `20781c0` (`unknown` state frees the slot; reconciled with backoff via receipt, then `is_claimed`; never re-sent automatically) | Code in `worker/relay/engine.ts`; `/api/health` now reports an `unknown` count (live). |
+| 5 | Rate limiter: lockout before signature; per isolate | **Fixed** (lockout) / **Accepted** (per isolate) | `20781c0` (per-player token taken after `verifyEd25519`) | `worker/api/runs.ts:178` verify, `:183` take. Per-isolate memory limits accepted for devnet. |
+| 6 | Seed depends on the local clock | **Fixed** | `b33ab18` (server-clock offset) | Code in `src/hooks/useSeed.ts`; kt-client's test and browser run with a clock 17 min off. |
+| 7 | Unbounded request body | **Fixed** | `20781c0` (streamed cap; profile JSON 4 KiB) | Live: 40,000-byte chunked body without `Content-Length` → 413 `tape_too_large`. |
+| 8 | `/api/health` amplification | **Fixed** | `20781c0` (public view cached 15 s per isolate, never kicks; admin view fresh) | `worker/api/routes.ts` `HEALTH_TTL_MS`; `status(lane, kick = false)` in `worker/durable/relay.ts`. |
+| 9 | Seed touch can run twice | **Fixed** | `20781c0` (overlapping calls share one promise per epoch in `worker/relay/service.ts`) | Code. |
+| 10 | Failed runs re-posted without limit | **Fixed** | `20781c0` (deterministic faults and a second out-of-gas are `final`; `enqueue` re-queues only non-final failures) | `worker/relay/store.ts` `enqueue`. |
+| 11 | Indexer cannot recover from a bad cursor | **Fixed** | `20781c0` (`POST /api/admin/indexer/reset?fromHeight=N`; no re-scan of quiet ranges) | Code. |
+| 12 | Admin key compare not constant-time | **Fixed** | `20781c0` (`constantTimeEqual`) | Code; live: wrong key → 404. |
+| 13 | Deploy script re-run and secret file | **Fixed** | `eb10818` (refuses a live network without `--force`; secrets written atomically) | `deploy-devnet.sh` header and code. |
+| 14 | Client keeps stale chain config after a reset | **Open** (low) | — | `src/thruput/config.ts` resets the promise only on a fetch error. Workaround: reload. |
+| 15 | Client polling never ends on permanent errors | **Open** (low) | — | `useRunSubmission.ts` retries errors (including 404) without a limit. |
+| 16 | Seed fetch race; endless-mode gate | Race: **likely fixed** by `b33ab18` (server epoch trusted); gate: **Open** (low) | — | Race not re-tested. `GamePageWrapper.tsx:571` still notes a queued endless score. |
+| 17 | Dev proxy env in builds; stale error text; no CSP | Error text **fixed** (`20781c0`); proxy env and CSP **Open** (low) | — | `deploy.sh` builds a clean `git archive` of HEAD but does not clear `KALIEN_*_PROXY`; no CSP header. |
+
+Copycat tapes: accepted for devnet (decision 2026-10-24), not a finding.
 
 ## 1. High: relay gas limit too low for valid dense tapes
 
@@ -43,7 +72,7 @@ Severity: **High** = honest users lose runs or funds, or an attacker gains value
   retried that fault as a relay fault up to five times at the same gas.
 - **Status:** `88a0476` / `7822745` moved the Worker to 5M + 3,000 × frames (max 113M) with one
   out-of-gas retry at 1.5× (cap 150M). For `pattern-01028` that gives 57.1M, which is enough.
-  TODO(lead): confirm the deployed Worker runs these commits.
+  The deployed Worker (version `d2cc7b39`, from `8491d9a`) runs these commits.
 - **Worst case (measured after the review, `kt-core.md` round 6):** a searched valid 36,000-frame
   tape needs 110.64M gas (3,073 per frame), and the search had not converged. 5M + 3,000 × frames
   covers it by only about 2%; the 1.5× retry rescues it. Recommended: 5M + 4,500 × frames with a

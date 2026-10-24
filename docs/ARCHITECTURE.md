@@ -81,15 +81,23 @@ changes (see "Devnet operations").
 
 ## On-chain contracts
 
-Source: `kalien-contract/contracts/`. Interface: `docs/thruput/PORT-PLAN.md` ("Interface v2").
+Source: `kalien-contract/contracts/`. Interface: `docs/thruput/PORT-PLAN.md` ("Interface v3").
 Deployment record: `shared/thruput/deployments/devnet.json`.
 
-TODO(lead): the contract is at v3 in code (bounded relay allowlist of up to 8 relays,
-`ScoreSubmitted` with `relay` and `submitted_at`, claimed tapes keep their `seed_id`,
-permissionless pruning of expired runs and seeds, admin token handover) and migrated to
-`thruput-sdk =0.54.0`, but it is not deployed on the new devnet yet. Update this section and the
-interface from the kt-contract report after the redeploy. The rules below are v2 plus what v3 is
-known to keep.
+Deployed on the wire-14 devnet (network `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj`), v3,
+`thruput-sdk =0.54.0`:
+
+| Item | Value |
+|---|---|
+| Score contract | `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT` |
+| Token contract | `AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87` |
+| Relays | 4 lanes on the allowlist (up to 8), about 999 HOG each |
+| Settings | relay-only on, seeding locked |
+
+v3 adds to the v2 rules below: a bounded relay allowlist (`add_relay` / `remove_relay`, at most
+8), `ScoreSubmitted` with `relay` and `submitted_at`, claimed tapes that keep their `seed_id`,
+permissionless pruning of expired runs and seeds (`prune_run`, `prune_seed`), and an admin token
+handover (`handover_token`).
 
 ### `kalien_score`
 
@@ -119,11 +127,14 @@ known to keep.
 - **Rejections are cheap.** Every rejection except a lying footer score costs at most about
   0.45M gas. `ScoreMismatch` needs the full replay (about 74M gas for a full tape), which is why
   the Worker replays the tape in TS first.
-- **Cost of a run.** About 2,065 gas per frame + 0.2M. A 36,000-frame tape uses 67M–74M gas.
-  The Worker relay sets the gas limit from the frame count (`RELAY_GAS_BASE` 3,000,000 +
-  `RELAY_GAS_PER_FRAME` 2,300 × frames, at most `RELAY_GAS_MAX` 90M, plus 100,000 for the wallet
-  root; the contract scripts use `3,000,000 + 2,200 × frames`). Gas is reserved against the
-  sender's free HOG, not burned.
+- **Cost of a run.** Typical play costs about 2,065 gas per frame + 0.2M (a 36,000-frame game
+  67M–74M). Dense valid games cost more: up to 2,716 gas per frame in the parity corpus, and
+  110.6M (3,073 per frame) for the worst full-length tape found by search
+  (`asteroids-core/tests/fixtures/gas-worst/`). Gas limit: **5,000,000 + 4,500 × frames**
+  (at most 167M) in the Worker (`RELAY_GAS_*`) and in `submitGasLimit`
+  (`shared/thruput/kalien.ts`), plus 100,000 for the wallet root. An out-of-gas fault gets one
+  retry at 2.5× (at most 400M; the chain allows 1,000,000,000 per transaction). Gas is reserved
+  against the sender's free HOG, not burned.
 - **Storage.** Each accepted run that creates a new best entry costs the score contract about
   0.0036 HOG of storage deposit, plus about 0.002 HOG on the token per new holder. The contracts
   pay from their own balance (50 HOG each at deploy covers about 14,000 runs). When it runs out,
@@ -158,7 +169,12 @@ Stellar". API: `docs/thruput/PORT-PLAN.md` ("Worker API v0 (as built)").
 - **Reads.** `/api/config`, `/api/seed/current`, `/api/runs/:id`, `/api/runs?player=` (merged
   across lanes, paged), `/api/runs/:id/tape` (only after confirmation), leaderboard, player page,
   signed profiles, `/api/health`.
-- **Limits.** Per-IP 120 submissions / 10 min, per key 30 / 10 min (in memory, per isolate).
+- **Limits.** Per-IP 120 submissions / 10 min, per key 30 / 10 min. Known limit, accepted for
+  devnet: the counters live in memory per isolate, so they do not hold across isolates or
+  locations.
+- **Blocked epochs.** The Worker refuses the deploy record's `fixtureSeedIds` and any ids in
+  `BLOCKED_SEED_IDS` (`wrangler.jsonc`). On this devnet these are the fixture epochs
+  2988058–2988060, whose seeds have public solutions.
 - **RPC rules (wire 14).** Named params objects, base58 identifiers, lowercase `0x` hex
   payloads, decimal-string heights and gas. Admission (`sendTransaction`) is not commitment
   (`getTransactionStatus`), and commitment is not success (`receipt.execution.result`). Cursor
@@ -180,8 +196,10 @@ Source: `src/wallet/keyWallet.ts`, `src/hooks/useWallet.ts`.
 - After a run, the browser serializes the tape, signs the claim digest, posts the run, and polls
   `/api/runs/:id` until the run is `confirmed`, `rejected`, or `failed`.
 - The browser uses the wire-14 address rules and base58 addresses (`src/wallet/keyWallet.ts`).
-  TODO(lead): kt-client's report predates that migration; confirm the browser and CLI give the
-  same address for one key against the shared vectors.
+  The browser and the CLI derive the same address: both pass the shared wire-14 vectors
+  (`shared/thruput/claim-vectors.json`), and both give `D4E11uoczkwDh6eUMTXs29SrALae4yn6g8xYQtP1bDiQ`
+  for the RFC 8032 test key.
+- Import refuses public values (the address or public key) as a secret.
 
 ## Leaderboard indexing
 
@@ -228,7 +246,8 @@ Details and commands: [OPERATIONS.md](OPERATIONS.md).
   reads the contracts from `devnet.json`; its state is per score contract, so it starts clean.
 - **Funding:** the devnet faucet is the RPC method `faucet_requestAirdrop` (through
   `client.requestAirdrop`). Each relay lane needs free HOG for the gas limits of its in-flight
-  runs (up to about 9 HOG per full-length run). Each contract needs HOG for storage deposits.
+  runs: 16.7 HOG per full-length run (40 HOG while an out-of-gas retry is in flight). Each of the
+  4 lanes holds about 999 HOG. Each contract needs HOG for storage deposits.
 - **Secrets:** relay seeds in `~/.config/kalien-thruput/` (`relay.secret`, `relay-2.secret`, …,
   mode 600) and the Worker secrets `RELAY_SECRETS` and `DEV_API_KEY`; deploy keys in
   `~/.config/thruput/keys/`; browser keys only in the player's browser. Never in git or logs.
@@ -264,11 +283,12 @@ layout per epoch.
 
 **Decision 2026-10-24: accepted for devnet; options kept for a future mainnet-like deployment.**
 
-## Other TODO(lead) items
+## Deployment status (2026-10-24)
 
-- TODO(lead): final devnet addresses (score, token, relays) after the redeploy on the wiped
-  devnet. They will be in `shared/thruput/deployments/devnet.json`.
-- TODO(lead): the Worker URL `https://kalien-thruput.sdf-ecosystem.workers.dev` is not confirmed
-  live on the new devnet.
-- TODO(lead): number of relay lanes and their HOG funding for launch.
-- TODO(lead): rate limits are per isolate and in memory.
+- Worker live at `https://kalien-thruput.sdf-ecosystem.workers.dev` (version `d2cc7b39`, built from
+  `8491d9a`); the smoke test passed.
+- Contracts v3 on the wire-14 devnet; addresses in `shared/thruput/deployments/devnet.json` and
+  the table under "On-chain contracts".
+- 4 relay lanes, about 999 HOG each.
+- Known limits accepted for devnet: per-isolate rate limits; copycat tapes (see above).
+- Review findings and their status: `docs/thruput/review.md`.

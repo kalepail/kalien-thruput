@@ -9,12 +9,13 @@ KALIEN for each improvement.
 There is no zero-knowledge proof and no wallet setup. The browser makes an Ed25519 key on your
 first visit. A relay pays the transaction, and your signature binds the run to your address.
 
-- App: `https://kalien-thruput.sdf-ecosystem.workers.dev` (TODO(lead): confirm it is live on
-  the new devnet)
+- App: `https://kalien-thruput.sdf-ecosystem.workers.dev` (live; Worker version `d2cc7b39`)
 - Chain: Thruput devnet (wire format 14, base58 identifiers), RPC `https://rpc.thruput.network`,
   explorer `https://explorer.thruput.network/`
-- Contract addresses: `shared/thruput/deployments/devnet.json` (TODO(lead): the file still holds
-  the addresses from before the 2026-10-24 devnet wipe until kt-contract redeploys)
+- Contracts (v3): score `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`, token
+  `AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87` on network
+  `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj` (source of truth:
+  `shared/thruput/deployments/devnet.json`)
 
 ## Components
 
@@ -33,24 +34,62 @@ first visit. A relay pays the transaction, and your signature binds the run to y
 
 How the parts fit: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Quick start
+## How to run and deploy
+
+### Play against the live devnet (fastest)
 
 ```bash
 export GH_NPM_TOKEN="$(gh auth token)"   # @thruputchain packages come from GitHub Packages
 bun install
-bun run dev                              # browser app + Worker
+bun run dev                              # browser app + Worker; contracts from shared/thruput/deployments/devnet.json
 ```
 
-Checks:
+The local Worker needs `.dev.vars` (copy `.dev.vars.example`: `RELAY_SECRETS`, `DEV_API_KEY`).
+To use the deployed API instead: `KALIEN_API_PROXY=https://kalien-thruput.sdf-ecosystem.workers.dev bun run dev`.
+
+### Full stack on a local node
 
 ```bash
-bun run check                                                   # types, lint, format
-cargo test --release --manifest-path asteroids-core/Cargo.toml  # with CARGO_HOME=$HOME/.cargo-thruput
-bun run asteroids-core/parity/parity.ts                         # TS/Rust replay parity
+export CARGO_HOME=$HOME/.cargo-thruput
+# 1. A local chain (CLI 0.36.0, hog-devnode rc.14). The key gets 1,000 HOG at genesis.
+thruput node --port 9745 --key <your-key> --initial-account-hog 1000
+# 2. Contracts on it: deploy-devnet.sh in rehearsal mode (separate deployment file and secrets).
+KALIEN_RPC_URL=http://127.0.0.1:9745 KALIEN_DEPLOYMENT_FILE=$TMPDIR/local-deploy.json \
+KALIEN_SECRETS_DIR=$TMPDIR/kalien-secrets KALIEN_FIXTURE_RUNS_FILE=$TMPDIR/local-fixtures.json \
+  kalien-contract/scripts/deploy-devnet.sh --skip-fixtures
+# 3. Worker + app against the node: copy .dev.vars.example to .dev.vars.local and fill the
+#    local-node block (THRUPUT_RPC_URL, SCORE_CONTRACT, TOKEN_CONTRACT) and the relay secrets.
+CLOUDFLARE_ENV=local node node_modules/vite/bin/vite.js dev --port 5174
 ```
 
-Deploy the Worker with `bun run deploy` (see `worker/ops/deploy.sh`). Contracts, devnet reset
-after a wipe, funding, secrets, and every test command: [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Details: `kalien-contract/README.md` (rehearsal overrides, including `XDG_CONFIG_HOME` for
+separate keys), `worker/README.md` ("Local run"), `docs/OPERATIONS.md` (second node on one
+machine).
+
+### Tests
+
+```bash
+bun run check                                                       # types, lint, format
+bun test tests/                                                     # Worker, browser, CLI preflight
+(cd cli && bun test src)                                            # CLI
+bun test shared/thruput/                                            # shared chain helpers
+cargo test --release --manifest-path asteroids-core/Cargo.toml      # game core, golden, regressions
+cargo test --release --manifest-path autopilot/Cargo.toml
+kalien-contract/scripts/test.sh                                     # contracts: native + RV32 + vectors
+bun run asteroids-core/parity/parity.ts                             # TS/Rust replay parity
+```
+
+### Deploy after a devnet wipe
+
+```bash
+kalien-contract/scripts/deploy-devnet.sh   # new contracts, relay lanes allowed, writes devnet.json
+                                            # (the Worker refuses its fixtureSeedIds by itself)
+bun worker/ops/relay-keys.ts --fund         # fund relay lanes below 50 HOG
+bash worker/ops/deploy.sh --secrets         # checks, build from HEAD, D1 migrations, deploy, secrets
+bun run smoke                               # smoke test against the deployed Worker
+```
+
+Step by step, with funding and secrets: [docs/OPERATIONS.md](docs/OPERATIONS.md#devnet-reset-after-a-wipe).
 
 Copied tapes can earn the same reward under another key. Decision 2026-10-24: accepted for
 devnet; options kept for a future mainnet-like deployment. See

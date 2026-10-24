@@ -1,9 +1,37 @@
 # kt-core report: simulation core and gas measurement
 
-Agent: `kt-core`. Branch: `thruput-devnet`. Status: **round 6 done (2026-10-24)**: independent
-review (`docs/thruput/review.md`), copycat decision recorded, worst-case replay gas. Round 5:
-shared/stellar removal, sweep, full test run. Round 3: strict-rule fix, gas probe on `thruput-sdk =0.54.0` / CLI
+Agent: `kt-core`. Branch: `thruput-devnet`. Status: **final round done (2026-10-24)**: docs
+TODOs resolved, review verified, full suite green. Round 6: independent review, copycat
+decision, worst-case replay gas. Round 3: strict-rule fix, gas probe on `thruput-sdk =0.54.0` / CLI
 0.36.0 / hog-devnode rc.14. Rounds 1–2 below.
+
+## Final round (2026-10-24)
+
+- Resolved every `TODO(lead)` in `README.md`, `docs/ARCHITECTURE.md`, `docs/OPERATIONS.md`, and
+  `docs/thruput/review.md`: Worker live (`d2cc7b39` from `8491d9a`), v3 addresses, 4 lanes at
+  about 999 HOG, fixture epochs refused, browser/CLI address parity (I re-derived
+  `D4E11uoczkwDh6eUMTXs29SrALae4yn6g8xYQtP1bDiQ` for the RFC 8032 key in the browser code), gas
+  policy 5M + 4,500 × frames with a 2.5× retry up to 400M, per-isolate rate limits accepted.
+- README now has "How to run and deploy" (live devnet, full local stack, tests, deploy after a
+  wipe).
+- Review verification (`docs/thruput/review.md`, "Verification pass"): 13 findings fixed,
+  1 partly accepted (per-isolate limits), 4 low client items open (14, 15, the endless-mode gate
+  in 16, proxy env and CSP in 17).
+- Full suite (code at `ffd0972` + docs):
+
+| Suite | Result |
+|---|---|
+| `bun run check` | pass (0 lint warnings) |
+| `bun test tests/` | 151 pass, 0 fail |
+| `cd cli && bun test src` | 23 pass, 0 fail |
+| `bun test shared/thruput/` | 15 pass, 3 skip (live), 0 fail |
+| asteroids-core `cargo test --release` | 65 passed |
+| asteroids-core no_std build | ok |
+| autopilot `cargo test --release` | 5 passed |
+| gas-probe native / RV32 | 2 passed (5 ignored) / 4 passed |
+| kalien-contract native `cargo test --workspace` | 38 passed (8 ignored: RV32) |
+| kalien-contract RV32 `thruput test -p kalien_score` | 8 passed |
+| TS/Rust parity (`--count 60 --autopilot 8`) | 179 tapes, 2,552,506 frames, 0 mismatches, 0 strict-only |
 
 ## Round 6: worst-case replay gas (2026-10-24)
 

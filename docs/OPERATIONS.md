@@ -77,18 +77,30 @@ Read the devnet's version and network hash with the RPC (`getVersionInfo`, `getN
 ### Contracts (devnet)
 
 ```bash
-kalien-contract/scripts/deploy-devnet.sh
+kalien-contract/scripts/deploy-devnet.sh [--skip-fixtures] [--force]
 ```
 
-The script creates or reuses the keys `kalien-deployer`, `kalien-relay`, and
-`kalien-test-player`, funds them, deploys `kalien_token` and `kalien_score`, hands the token to
-the score contract, creates the current seed, submits the fixture tapes, allows the relay
-addresses, turns on relay-only mode, locks seeding, writes
-`shared/thruput/deployments/devnet.json`, and writes the relay secret to
-`~/.config/kalien-thruput/relay.secret` (mode 600).
+The script (v3 contracts):
 
-TODO(lead): v3 contract on the new devnet (relay allowlist up to 8, pruning, new event fields).
-Confirm the script steps and the addresses after kt-contract's redeploy.
+1. Refuses to run if `shared/thruput/deployments/devnet.json` already names the live network
+   (a live deploy); `--force` deploys a second pair anyway.
+2. Builds both RV32 artifacts and the TS bindings.
+3. Creates the keys `kalien-deployer`, `kalien-test-player`, and the relay lanes `kalien-relay`,
+   `kalien-relay-2` … `kalien-relay-4` if missing, and funds them from the faucet when they hold
+   less than 100 HOG.
+4. Deploys `kalien_token` and `kalien_score`, links them, and writes `devnet.json`.
+5. Creates the current seed, allows the relay lanes, and turns on relay-only mode.
+6. Unless `--skip-fixtures`: fixes fixture seeds on three old epochs that expire within about an
+   hour, submits the fixture tapes, claims every other repo tape with a fixture seed, and records
+   `fixtureSeedIds` in `devnet.json`. The Worker refuses those epochs by itself (it also reads
+   extra ids from `BLOCKED_SEED_IDS`).
+7. Locks seeding for good, and writes the relay secret to `~/.config/kalien-thruput/relay.secret`
+   (mode 600; other lanes go to `relay-N.secret`, written only when missing).
+
+Current deployment (2026-10-24, wire-14 devnet `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj`):
+score `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`, token
+`AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87`, 4 relay lanes (allowlist up to 8), fixture epochs
+2988058–2988060 blocked.
 
 ### Worker
 
@@ -105,8 +117,14 @@ bun run smoke                        # worker/ops/smoke.ts against the deployed 
   `shared/thruput/deployments/devnet.json`; `wrangler.jsonc` vars can override them.
 - `worker/ops/relay-keys.ts` lists, funds, and exports lane keys. Each lane address must be
   allowed on the score contract (relay allowlist).
-- Target: `https://kalien-thruput.sdf-ecosystem.workers.dev`. TODO(lead): confirm it is live on
-  the new devnet.
+- Live at `https://kalien-thruput.sdf-ecosystem.workers.dev` (version `d2cc7b39`, built from
+  `8491d9a`; smoke test passed).
+- Gas policy (`wrangler.jsonc`): `RELAY_GAS_BASE` 5,000,000 + `RELAY_GAS_PER_FRAME` 4,500 × frames
+  (max `RELAY_GAS_MAX` 167M), one out-of-gas retry at 2.5× (`RELAY_GAS_RETRY_TENTHS` 25) up to
+  `RELAY_GAS_RETRY_MAX` 400M. Worst valid tape measured: 110.9M with contract overhead.
+- The Worker refuses the deploy record's `fixtureSeedIds` and any extra ids in `BLOCKED_SEED_IDS`
+  (fixture epochs with public solutions).
+- Rate limits are in memory per isolate (known limit, accepted for devnet).
 
 ## Devnet reset (after a wipe)
 
@@ -129,7 +147,9 @@ A wipe changes the network hash, all addresses, and all balances. Keys in
 ## Funding and monitoring
 
 - **Relay lanes.** Gas is reserved, not burned. A lane needs free HOG at least equal to the gas
-  limits of its in-flight runs: up to about 9 HOG for one 36,000-frame run.
+  limits of its in-flight runs: 16.7 HOG for one 36,000-frame run, 40 HOG during an out-of-gas
+  retry. With `RELAY_MAX_IN_FLIGHT` 4, keep at least about 160 HOG per lane; each lane holds about
+  999 HOG now. `bun worker/ops/relay-keys.ts` shows the balances.
 - **Contracts.** Storage deposits come from the contract's own HOG: about 0.0036 HOG per new best
   entry on the score contract and about 0.002 HOG per new KALIEN holder on the token. Alert when
   a contract balance drops below 5 HOG; top up with `thruput transfer`. An empty contract stalls
