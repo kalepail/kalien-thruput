@@ -28,7 +28,7 @@ Status column: as found on 2026-10-24 (code `23e16ce`). Current status: see "Ver
 | 6 | Medium-low | Browser seed | The seed never loads when the local clock is off by 10 minutes or more | Open |
 | 7 | Low-medium | Worker | `POST /api/runs` buffers a body of any size when `Content-Length` is missing | Open |
 | 8 | Low | Worker | Public `/api/health` fans out to RPC and every relay Durable Object, and forces relay ticks | Open |
-| 9–17 | Low | various | See "Low findings" | Open |
+| 9–17 | Low | various | See "Low findings" | Fixed (see verification table) |
 
 ## Verification pass (2026-10-24, code at `ffd0972`, Worker `d2cc7b39` from `8491d9a`)
 
@@ -50,10 +50,10 @@ deployed Worker with a request that is rejected before any chain write.
 | 11 | Indexer cannot recover from a bad cursor | **Fixed** | `20781c0` (`POST /api/admin/indexer/reset?fromHeight=N`; no re-scan of quiet ranges) | Code. |
 | 12 | Admin key compare not constant-time | **Fixed** | `20781c0` (`constantTimeEqual`) | Code; live: wrong key → 404. |
 | 13 | Deploy script re-run and secret file | **Fixed** | `eb10818` (refuses a live network without `--force`; secrets written atomically) | `deploy-devnet.sh` header and code. |
-| 14 | Client keeps stale chain config after a reset | **Open** (low) | — | `src/thruput/config.ts` resets the promise only on a fetch error. Workaround: reload. |
-| 15 | Client polling never ends on permanent errors | **Open** (low) | — | `useRunSubmission.ts` retries errors (including 404) without a limit. |
-| 16 | Seed fetch race; endless-mode gate | Race: **likely fixed** by `b33ab18` (server epoch trusted); gate: **Open** (low) | — | Race not re-tested. `GamePageWrapper.tsx:571` still notes a queued endless score. |
-| 17 | Dev proxy env in builds; stale error text; no CSP | Error text **fixed** (`20781c0`); proxy env and CSP **Open** (low) | — | `deploy.sh` builds a clean `git archive` of HEAD but does not clear `KALIEN_*_PROXY`; no CSP header. |
+| 14 | Client keeps stale chain config after a reset | **Fixed** | `0e9b175` (config re-read on focus, every 5 min, and on `bad_signature`; a new network hash or contract swaps the client, clears the seed cache, re-reads the balance, shows a notice, and re-signs a refused submit once) | `tests/src/review-low-findings.test.ts`; browser: a changed `/api/config` shows the reset notice (kt-client round 7). |
+| 15 | Client polling never ends on permanent errors | **Fixed** | `0e9b175` (`nextPollStep`: stop on 404 and after 15 min; errors back off 5 s → 60 s) | `tests/src/review-low-findings.test.ts`. |
+| 16 | Seed fetch race; endless-mode gate | **Fixed** | Race: `b33ab18` (server epoch trusted). Gate: `0e9b175` (`src/runs/endlessGate.ts`: only confirmed scores count; a stronger queued run blocks weaker ones, a rejected/failed one does not) | `tests/src/review-low-findings.test.ts` (6 gate cases). |
+| 17 | Dev proxy env in builds; stale error text; no CSP | **Fixed** | Error text `20781c0`; proxies and CSP `0e9b175` (`resolveDevProxies`: proxies only in `vite dev`; `public/_headers`: CSP `default-src/script-src/style-src 'self'`, `connect-src 'self' https://rpc.thruput.network`, `media-src https://api.smol.xyz`, `frame-ancestors 'none'`, plus nosniff, `X-Frame-Options: DENY`, referrer policy) | Build with both proxy vars set has no proxy code; live Worker `082aa0c7`: header on `/`, `/replay/*`, `/tx/*`, `/wallet`; a real run, tx page, replay, wallet, runs, leaderboard with 0 CSP violations. |
 
 Copycat tapes: accepted for devnet (decision 2026-10-24), not a finding.
 

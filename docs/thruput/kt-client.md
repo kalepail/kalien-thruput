@@ -3,6 +3,41 @@
 Agent: `kt-client`. Scope: `src/` (not `src/game/`), `index.html`, `public/`, `vite.config.ts`,
 `.env.example`, browser deps in root `package.json`, and the `tests/src/` tests for those modules.
 
+## Round 7 (2026-10-24): review items 14–17, deployed
+
+**Status: fixed, deployed, verified live.** Commit `0e9b175`; Worker version
+`082aa0c7-2fe1-4d7c-910c-7691584d4626` (built by `worker/ops/deploy.sh` from clean HEAD, proxy
+variables unset; its checks passed: 84 worker tests, lint, format). `review.md` marks 14–17 fixed.
+
+| Item | Fix |
+|---|---|
+| 14 stale config after a reset | `src/thruput/config.ts`: `refreshThruputConfig()` re-reads `/api/config`; a new network hash or contract notifies subscribers. `NetworkChangeNotice` checks on focus/visibility (at most every 30 s) and every 5 min, and shows "The Thruput devnet was reset…". Subscribers: the client (new pinned client), `useSeed` (clears the seed cache), `useTokenBalance` (re-reads), `useThruputConfig`. A submit refused with `bad_signature` refreshes the config and, if it changed, re-signs once (the POST was refused, no chain write). |
+| 15 polling | `nextPollStep`: stop on 404 ("the Worker has no record of this run…"), stop after 15 min ("may still confirm; check My Runs"), errors back off 5 s, 10 s, 20 s, 40 s, 60 s. A stopped run is no longer shown as busy. |
+| 16 endless gate | `src/runs/endlessGate.ts` `decideEndlessSubmit`: the confirmed chain best decides; a pending run blocks a weaker one only while it is queued/submitting (or still posting); rejected, failed or unknown pending runs do not block; a best is recorded only on confirmation. |
+| 17 proxies + CSP | `vite.config.ts` `resolveDevProxies`: `KALIEN_API_PROXY`/`KALIEN_RPC_PROXY` work only for `vite dev`. `public/_headers` (`/*`): `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://rpc.thruput.network; media-src 'self' https://api.smol.xyz; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`, plus `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`. `media-src` covers the game music (`src/game/AudioSystem.ts`). If `/api/config` ever names another RPC, update `connect-src`. |
+
+Tests: `tests/src/review-low-findings.test.ts` (11 cases: config change and notify; 404 stop,
+backoff, time limit; 6 gate cases; proxies ignored in a build; CSP directives, incl. the
+`devnet.json` RPC origin). `bun test tests/src`: 78 pass, 0 fail. Typecheck (app, node), lint,
+format clean.
+
+Checks before deploy: a build with `KALIEN_API_PROXY` and `KALIEN_RPC_PROXY` set contains neither
+the `/rpc` override nor the proxy host, and still includes the Worker. A production build served
+with the `_headers` rules (Bun test server, `/api` proxied to the live Worker) ran the game,
+wallet balance, `/runs`, leaderboard, player page, `/tx`, and replay with 0 CSP violations (a
+`securitypolicyviolation` recorder; a deliberate fetch to another origin was caught, so the
+recorder works). A changed `/api/config` showed the reset notice.
+
+Live (`https://kalien-thruput.sdf-ecosystem.workers.dev`, fresh key): CSP header on `/`,
+`/replay/*`, `/tx/*`, `/wallet`, `/assets/`; a run of 1,430 confirmed in 6 s (+1,430 KALIEN, tx
+`6Diiedkj…KTfXk5B3`, block 29,887); tx page, replay, wallet (1,430 KALIEN), `/runs`, leaderboard
+all work; 0 CSP violations, 0 CSP console lines.
+
+Screenshots: `/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/c5af48fa-61eb-44a6-b03d-e26eb2b4d2c5/scratchpad/live1417/` (`01-confirmed.png`, `02-tx.png`, `03-replay.png`, `04-wallet.png`,
+`05-leaderboard.png`); `/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/c5af48fa-61eb-44a6-b03d-e26eb2b4d2c5/scratchpad/csp/` (`tx.png`, `replay.png`, `network-change-notice.png`).
+
+Processes: the CSP test server and all agent-browser sessions are stopped.
+
 ## Round 6 (2026-10-24): review items 3 and 6
 
 **Status: fixed and tested; not deployed.** Commit `b33ab18`. I did not run `worker/ops/deploy.sh`:
