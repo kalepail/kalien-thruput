@@ -260,7 +260,7 @@ export class AsteroidsGame {
   // Game time for animations (star twinkle, etc.)
   private gameTime = 0;
 
-  // Game seed for deterministic RNG (ZK-friendly)
+  // Game seed for the deterministic game RNG (replayed on chain)
   private gameSeed = 0;
   private gameSeedId = 0;
 
@@ -1697,7 +1697,7 @@ export class AsteroidsGame {
     return this.gameSeed;
   }
 
-  /** Snapshot the current recorded run (no claimant binding). */
+  /** Snapshot the current recorded run (unsigned; the player signs the claim later). */
   getRunRecord(): GameRunRecord | null {
     // For replay sessions: keep the tape inputs, but report the score produced by
     // the local engine so replay UI stays aligned with verifier semantics.

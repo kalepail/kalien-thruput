@@ -2,10 +2,10 @@ import { WORLD_HEIGHT, WORLD_HEIGHT_Q12_4, WORLD_WIDTH, WORLD_WIDTH_Q12_4 } from
 import { SeededRng } from "./rng";
 import type { Vec2 } from "./types";
 
-// Global game RNG instance (deterministic — used in ZK proofs)
+// Global game RNG instance (deterministic; the on-chain replay recomputes it)
 let gameRng: SeededRng = new SeededRng(Date.now());
 
-// Visual-only RNG instance (NOT used in ZK proofs)
+// Visual-only RNG instance (never affects game state or the replay)
 let visualRng: SeededRng = new SeededRng(Date.now() ^ 0x12345678);
 
 export function setGameSeed(seed: number): void {
@@ -29,7 +29,7 @@ export function randomInt(min: number, maxExclusive: number): number {
   return gameRng.nextRange(min, maxExclusive);
 }
 
-// Visual-only random functions (NOT used in ZK proofs)
+// Visual-only random functions (never affect game state or the replay)
 export function visualRandomRange(min: number, max: number): number {
   return visualRng.nextFloatRange(min, max);
 }

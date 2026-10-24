@@ -1,7 +1,7 @@
 /**
- * Xorshift32 - ZK-friendly seeded PRNG
+ * Xorshift32 - deterministic seeded PRNG
  * Uses only 32-bit integer operations: XOR and bit shifts
- * Identical output in JS, Rust, and RISC-V
+ * Identical output in JS, Rust, and the RV32 on-chain replay
  */
 export class SeededRng {
   private state: number;

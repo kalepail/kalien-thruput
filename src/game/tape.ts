@@ -4,7 +4,7 @@
  * Tape layout (little-endian):
  *
  * HEADER (16 bytes):
- *   [0..3]   u32    magic           = 0x5A4B5450 ("ZKTP")
+ *   [0..3]   u32    magic           = 0x5A4B5450 ("ZKTP", a historical name)
  *   [4]      u8     version         = 4
  *   [5]      u8     rules_tag       = 4
  *   [6..7]   u8[2]  reserved        = 0
