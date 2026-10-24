@@ -2,6 +2,58 @@
 
 Agent: `kt-worker` (Cloudflare Worker API, relay, leaderboard). Branch `thruput-devnet`.
 
+## Round 5 (2026-10-24): gas margin, out-of-gas retry, failed-run investigation
+
+**Status: deployed (version `d5b258ad-0c86-4d2b-b89d-87c7d5cdf403`) and smoke-tested.**
+URL: https://kalien-thruput.sdf-ecosystem.workers.dev
+
+### Gas policy
+
+- Child gas = `RELAY_GAS_BASE` 5,000,000 + `RELAY_GAS_PER_FRAME` 3,000 × frames, capped at
+  `RELAY_GAS_MAX` 113,000,000 (36,000 frames: 113M ≈ 11.3 HOG reserved per in-flight tx; gas is
+  not burned). Root = child + 100,000. All in `wrangler.jsonc` vars.
+- Measured range: 1,758–2,501 gas/frame (kt-cli round 4 and the run below); 36,000 frames 67–74.5M.
+  Margin at the worst seen rate: 16,096 frames needs 40.3M, limit 53.3M.
+- Out of gas is detected from the committed receipt (no guessing; wire-14 rules):
+  - root `fault` with `gasUsed` ≥ root limit, or
+  - root `abort` without a contract `ScoreError` and `gasUsed` ≥ child limit (the DefaultWallet
+    re-throws a failed child call; this is how it shows on devnet).
+  A committed failure changed no state, so the run gets **exactly one** new transaction at 1.5×
+  child gas (max `RELAY_GAS_RETRY_MAX` 150M). That attempt checks `is_claimed` first, as every
+  retry does, and the contract rejects a claimed tape hash, so no double submit is possible. A
+  second out-of-gas, or any other fault, fails the run at once (a fault repeats for the same input).
+
+### The failed run on lane 3 (cause: ours, fixed)
+
+New ops routes (`Authorization: Bearer <DEV_API_KEY>`): `GET /api/admin/runs?status=failed,rejected`
+and `POST /api/admin/runs/:id/retry`.
+
+- Run `02206b1f8592bb768b32d15b1e9a6a3cc157b3a7231bbb259b1197bd97abc457`, player
+  `BEC6xsJrnZiFtqNELgqCNzzAWSBrx9iXsaiBmoW6ZFkh`, seed 2988062, 16,096 frames, score 39,730.
+  Failed at 10:32 UTC after 5 attempts with "aborted without a ScoreError".
+- Receipt of the last attempt (`Dz2UDA3yAoGacaye6YLcUAWyU2hFN5sEhD2hBwsVhmP9`): `abort`,
+  `abortData 0xffdf1b7dd397321d9306` (a wallet error, not `ScoreError`), `gasUsed` 40,020,950.
+  The child budget was 3,000,000 + 2,300 × 16,096 = 40,020,800. So the child ran out of gas
+  (≈ 2,486 gas/frame for this game), and the wallet root aborted. The old code saw a generic
+  relay fault and retried 5 times with the same gas.
+- Fix: the wider gas policy, and an undeclared abort that used the whole child budget now counts as
+  out of gas (one boosted retry). I re-queued the run with the admin route: **confirmed** at block
+  28193, tx `9cRRPSmzJG4xi2TZxGScVhVGaFnh67X7pjPPYkEiWL1F`, gas used 40,252,424 (2,501/frame),
+  minted 378500000000. No failed or rejected runs remain.
+- The first retry call returned 500 right after the deploy (Durable Object code restart); the
+  second call worked.
+
+### Tests and results
+
+| Check | Result |
+|---|---|
+| `bun run check` | green |
+| `bun test tests/worker` | 74 pass, 0 fail (new: out-of-gas fault retry, wallet-abort out of gas, second OOG fails, other fault fails at once, admin list, admin retry) |
+| Deployed smoke (`bun worker/ops/smoke.ts`), 16:15 UTC | PASS, 2,257 frames, confirmed in 4.3 s |
+| `/api/admin/runs?status=failed,rejected` after the fix | 0 runs |
+| Indexer | synced 16:14:35 UTC, 34 events |
+| Remote D1 | `migrations apply --remote` now reports "No migrations to apply" (no 7403 this time) |
+
 ## Round 4 (2026-10-24): deployed on the wire-14 devnet (v3)
 
 **Status: deployed and smoke-tested. URL: https://kalien-thruput.sdf-ecosystem.workers.dev**
