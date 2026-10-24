@@ -5,6 +5,10 @@ paths, `test-fixtures/`.
 
 ## Status
 
+**Round 5 (full-length burst and epoch boundary) passed.** Eight 36,000-frame
+runs at once confirmed in 8.3 s, and `kalien run` worked across a seed epoch
+change. A 36,000-frame run can use up to 83.6M gas. See "Round 5 results".
+
 **Round 4 (deployed Worker, wire-14 devnet) passed.** The e2e script, the CLI
 (`submit`, `status`, `run`), all rejection paths, and two 8-player concurrency
 rounds work against `https://kalien-thruput.sdf-ecosystem.workers.dev`. All 33
@@ -26,6 +30,7 @@ old devnet) passed; its addresses and run ids are gone with the devnet wipe.
 | `69cc9b5` | CLI handles `code` / `bestScore`; run loop handles `not_improved` and `already_claimed`; e2e covers dedupe and refusals |
 | `0517091` | Wire-14 migration: `Ed25519Signer`, base58 addresses and keys, new derivation, legacy key file upgrade, import/export formats |
 | `9d0fef4` | Vector test checks `pubkeyHash` and the hex forms of the claim inputs |
+| `4b068ca` | `scripts/find-full-tapes.ts`; `concurrency-runs --tapes-dir`; `@/` path alias in `scripts/tsconfig.json` |
 | `a2a2450` | e2e logs gas and lane spread, checks malformed tapes; new `scripts/concurrency-runs.ts`; `scripts/lib/probe.ts` |
 | `86b18f0` | `generate-tape.ts --random-config`; `submit --json` includes `code`, `bestScore`, `existing` |
 
@@ -394,10 +399,89 @@ and `conc-2.log` (also `e2e-deployed-1.log`, `d-run.log`).
   and signature check in the Worker).
 - No request failed during this session, so no retry was needed.
 
+## Round 5 results (deployed Worker, 2026-10-24)
+
+kt-worker was raising the gas limit. `/api/health` has no version field, so I
+waited the full 10 minutes (16:08–16:18 UTC). The per-lane counts changed in that
+time (lane 3 `failed` 1 → 0), so a redeploy probably happened.
+
+### Full-length tapes
+
+The Rust autopilot bots lost all lives early on the current seed (12k–60k
+points, `lives=0`). The TS autopilot hill-climb (`scripts/find-full-tapes.ts`,
+the CLI farm's mutation code, 4 processes) found 8 distinct tapes that survive
+all 36,000 frames in **14 s (589 games)** on seed `0x06bed286`, seed_id 2988097.
+Each tape is 18,024 bytes (the maximum) and passes `scripts/verify-tape.ts`.
+
+### Burst: 8 × 36,000 frames at once (`concurrency-runs --tapes-dir`)
+
+**8/8 confirmed in 8.3 s wall, 58.1 runs/min. Lane spread: lane0 +2, lane1 +0,
+lane2 +4, lane3 +2.** Total gas 516.0M.
+
+| Player | Score | Post | Done | Gas | Run id | Tx |
+|---|---:|---:|---:|---:|---|---|
+| p0 | 117,840 | 1.3 s | 7.7 s | 59,751,192 | `2c488f9e…9e18b1` | `FcS3dujMuZkomq5SG2mEbRVG2wGQxN9fSg8xbUg4xPWP` |
+| p1 | 83,610 | 1.4 s | 7.8 s | 63,235,954 | `427d855a…497fc8` | `GgW9CjvLSwf6Z22CQMfUWU6wi1TicwcvYFbZhaintkie` |
+| p2 | 100,800 | 1.2 s | 6.5 s | 69,638,433 | `acf73070…85e13` | `D5LV4NN8L5rpSqQ1yTQoezqpdqe4PQzhpZb6q35wbtnH` |
+| p3 | 92,720 | 1.4 s | 6.8 s | 68,985,685 | `b23d591b…7d1eb` | `HSGcJLmDxwWD5J9MmC7kptj2Jw4p6mVqHCd2Spz2wq9r` |
+| p4 | 62,700 | 1.5 s | 8.1 s | 62,121,811 | `08f8b72a…d1f7` | `GVQEQr7f4geyZqbGVv8bNtV8BADVGkEAFMYfNtptdbdb` |
+| p5 | 65,660 | 1.3 s | 7.7 s | 63,388,450 | `1becc25a…541ea` | `6fuCaNCCRC3XoyQNJc15MJKm4FVurS9scoGQybbmmgyR` |
+| p6 | 53,740 | 1.9 s | 8.3 s | 66,291,197 | `9e8b9f98…85724` | `Doprx3bRdjwkxtdXoVhcF5kfDny12VMpUVTQP8FU6yfH` |
+| p7 | 62,470 | 1.4 s | 5.7 s | 63,620,832 | `e5c67f93…42098` | `89qHsDFTZWhR69qx8EY17meLThZCfahVFpZLrxyvw1ih` |
+
+Full run ids: `/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/cfb386b3-55e4-434b-8d68-49329aa4c69e/scratchpad/conc-full-1.log`.
+
+Lane 1 took no run in this burst. Lane 2 took 4. If the relay picks a lane by
+current load, this can be correct, but **kt-worker** may want to check the lane
+choice.
+
+### `kalien run` across a seed epoch change
+
+Run B is the real test. Run A started only 2 s before the change (my wait loop
+read `secondsLeft` at the boundary), so it shows only the switch.
+
+Run A (key `DfQb6NRAyuyX5nnE7X5ovYUb9GXbCriSdwpYBe1WZz2k`, 16:19:58–16:23:00 UTC,
+20,839 games): seed `0x06BED286` → about 4.5 s "fetching" → `0x2361197D`
+(seed_id 2988098). 2 runs on the new seed:
+
+| Run id | Seed id | Score | Previous | Minted | Gas | Time | Tx |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `a10e16dd…8add5` | 2988098 | 147,940 | 0 | 1479400000000 | 67,987,114 | 4.1 s | `F78Ld2M97ZQmiGjxTMeBgyPHC23ndmDK1yG75xovH8d` |
+| `ab44c8b9…dedb8e` | 2988098 | 170,980 | 147,940 | 230400000000 | 68,055,052 | 3.1 s | `127M5ibkWWBRMWqf28ZaXTAewt4xUuPkrqY9rpoCJ68f` |
+
+Run B (key `DR42NZMnpm98tztNuvrY5XNdkYLAyjcmJnntJXte5jS3`, started 149 s before
+the change, 16:27:31–16:33:00 UTC, 29,971 games, 5 submissions): 2 runs on
+seed_id 2988098, then the dashboard showed "new seed_id interval — fetching
+seed…" for about 4.5 s, then "new seed_id materialized (0x2AF907B3)". It then
+made 3 runs on seed_id 2988099. The per-seed best started again at 0, as it
+should. The shutdown flush had nothing left to send.
+
+| Run id | Seed id | Score | Previous | Minted | Gas | Time | Tx |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `22b351ac…58df` | 2988098 | 103,910 | 0 | 1039100000000 | 66,467,520 | 3.9 s | `25jTXk8ArijdszAKNSfrauWCxMRFJdN5gVNfCtzpxxGx` |
+| `6fc82747…63c4` | 2988098 | 145,620 | 103,910 | 417100000000 | 77,622,774 | 3.8 s | `E6VM88GLRUbahqUdHJWF5AP4BBhnfFtsVPrG4snAv84H` |
+| `f6a96cc3…f333` | 2988099 | 144,970 | 0 | 1449700000000 | 81,017,037 | 3.4 s | `49A9oRTe7ZNKn2JBrV1xnjQs6BL8PzBwaKAp6dMbVXnZ` |
+| `bfe31263…0ede` | 2988099 | 165,200 | 144,970 | 202300000000 | 83,601,130 | 3.2 s | `CZQNAjPJhoyLAucQqLKtHcUjud4376SADLYQwaow7R6u` |
+| `3660c5c5…2d380` | 2988099 | 166,990 | 165,200 | 17900000000 | 69,304,041 | 4.1 s | `AFv14SFVy7s5BcZ2HtRbo7RU4qgnvvJ6Ri8jjP6kmaCf` |
+
+(Time = run record `updatedAt − createdAt`.) In both runs no better tape was
+waiting at the change, so the "drain before epoch reset" code path did not have
+to submit. That path is still not proven by a live run.
+
+### Gas finding (for kt-worker and kt-contract)
+
+36,000-frame runs used **59.8M–83.6M gas** this session. Two farmed runs used
+81.0M and 83.6M. That is more than the interface estimate (67–74M) and more than
+the old relay limit `3,000,000 + 2,200 × frames` = 82.2M. The run that used
+83.6M confirmed, so the raised limit is in place. Gas depends on the game, not
+only on the frame count: high-score farmed games (many objects) cost more.
+Keep a margin above 84M, or measure the worst case with the farm's best tapes.
+
 ## Open issues
 
-- Epoch-change behavior of `kalien run` is untested (no run crossed a seed epoch).
-- A concurrency round with eight 36,000-frame tapes (worst-case gas reservation
-  per lane) is not done. It needs farmed full-length tapes.
+- The epoch-change drain path (submit a waiting better tape before the reset) is
+  not proven by a live run; it needs a better tape that is still settling at the
+  boundary.
+- Gas for 36,000 frames reached 83.6M (see "Gas finding").
 - The 372 s `queued` delay from round 2 (kt-worker). It did not happen again in
   round 4.
