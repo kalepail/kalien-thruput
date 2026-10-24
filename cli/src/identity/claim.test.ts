@@ -1,12 +1,22 @@
 import { describe, expect, test } from "bun:test";
 import { createPublicKey, verify } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { bytesToHex, claimMessage, claimMessageFromTapeHash, hexToBytes, sha256 } from "./claim";
+import { fromBase58, toBase58 } from "@thruputchain/client";
+import {
+  bytesToHex,
+  claimMessage,
+  claimMessageFromTapeHash,
+  decodeBytes32,
+  hexToBytes,
+  sha256,
+} from "./claim";
 import {
   addressFromPublicKey,
+  exportSecret,
   exportSecretHex,
+  parseSecretKey,
   identityFromSecret,
   importIdentity,
   loadOrCreateIdentity,
@@ -22,8 +32,14 @@ const RFC_SECRET = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae
 const RFC_PUBLIC = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
 const RFC_EMPTY_SIG =
   "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b";
-// Address from `thruput keys import` (thruput 0.29.2) for RFC_PUBLIC, nonce 0.
-const RFC_ADDRESS = "0xc9770e44593153c55045c4abd80234834272752f37cd3c3791f3ff0504ccc7db";
+// From `thruput keys import` + `keys ls --json` (thruput 0.36.0, devnet wire 14) for RFC_SECRET.
+const RFC_PUBLIC_B58 = "FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z";
+const RFC_PUBLIC_KEY_HASH_B58 = "9xarfCYUWxzeV2RSX5B9h6fZK4CoR2WfVvBf2rfvc1yB";
+const RFC_ADDRESS = "D4E11uoczkwDh6eUMTXs29SrALae4yn6g8xYQtP1bDiQ";
+
+function toB58(bytes: Uint8Array): string {
+  return toBase58(bytes);
+}
 
 describe("claimMessage", () => {
   // Expected digests computed independently with Python hashlib.
@@ -95,21 +111,48 @@ describe("identity", () => {
   test("derives the RFC 8032 public key and the thruput CLI address", () => {
     const id = identityFromSecret(hexToBytes(RFC_SECRET));
     expect(id.publicKeyHex).toBe(RFC_PUBLIC);
+    expect(id.publicKeyBase58).toBe(RFC_PUBLIC_B58);
     expect(id.address).toBe(RFC_ADDRESS);
     expect(addressFromPublicKey(RFC_PUBLIC)).toBe(RFC_ADDRESS);
+    expect(addressFromPublicKey(RFC_PUBLIC_B58)).toBe(RFC_ADDRESS);
   });
 
-  test("address matches the contract's byte layout (kalien_score claim.rs)", () => {
-    // sha256(CXS DomainSeparator "PubkeyAccount" || scheme 0x00 || pubkey || nonce 0x00)
-    const preimage = new Uint8Array([
-      0x00,
-      0x0d,
-      ...new TextEncoder().encode("PubkeyAccount"),
-      0x00,
-      ...hexToBytes(RFC_PUBLIC),
-      0x00,
-    ]);
-    expect(`0x${bytesToHex(sha256(preimage))}`).toBe(RFC_ADDRESS);
+  test("address byte layout (wire 14): the account names its key by hash", () => {
+    const enc = new TextEncoder();
+    // publicKeyHash = sha256(cxs DomainSeparator "PublicKey" || cxs PublicKey{Ed25519 (0x00), pk})
+    const pkHash = sha256(
+      new Uint8Array([0x00, 0x09, ...enc.encode("PublicKey"), 0x00, ...hexToBytes(RFC_PUBLIC)]),
+    );
+    expect(pkHash).toEqual(decodeBytes32(RFC_PUBLIC_KEY_HASH_B58));
+    // address = sha256(cxs DomainSeparator "PubkeyAccount" || pubkey_hash || nonce 0x00)
+    const address = sha256(
+      new Uint8Array([0x00, 0x0d, ...enc.encode("PubkeyAccount"), ...pkHash, 0x00]),
+    );
+    expect(address).toEqual(decodeBytes32(RFC_ADDRESS));
+  });
+
+  test("decodeBytes32 takes base58 and hex for the same bytes", () => {
+    expect(decodeBytes32(RFC_PUBLIC_B58)).toEqual(hexToBytes(RFC_PUBLIC));
+    expect(decodeBytes32(`0x${RFC_PUBLIC}`)).toEqual(hexToBytes(RFC_PUBLIC));
+    expect(() => decodeBytes32("not-an-id")).toThrow();
+  });
+
+  test("claimMessage gives the same digest for base58 and hex identifiers", () => {
+    const network = new Uint8Array(32).fill(3);
+    const contract = new Uint8Array(32).fill(4);
+    const a = claimMessage({
+      networkHash: network,
+      scoreContract: contract,
+      seedId: 9,
+      tape: shortTape,
+    });
+    const b = claimMessage({
+      networkHash: toB58(network),
+      scoreContract: toB58(contract),
+      seedId: 9,
+      tape: shortTape,
+    });
+    expect(bytesToHex(b)).toBe(bytesToHex(a));
   });
 
   test("signs raw messages per RFC 8032", async () => {
@@ -164,7 +207,11 @@ const vectors = existsSync(vectorsPath)
       claims: ClaimVector[];
     })
   : { addresses: [], claims: [] };
-const strip = (hex: string) => hex.replace(/^0x/, "").toLowerCase();
+/** Vector values are hex (0x) before the wire-14 migration and may be base58 after it. */
+const bytesOf = (text: string): Uint8Array =>
+  /^0x[0-9a-fA-F]*$/.test(text) || /^[0-9a-f]+$/.test(text)
+    ? hexToBytes(text)
+    : fromBase58(text, 64);
 
 describe.skipIf(!existsSync(vectorsPath))("shared/thruput/claim-vectors.json", () => {
   test("has address and claim vectors", () => {
@@ -174,11 +221,14 @@ describe.skipIf(!existsSync(vectorsPath))("shared/thruput/claim-vectors.json", (
 
   test("pubkeys and pubkey account addresses match", () => {
     for (const v of vectors.addresses) {
-      expect(addressFromPublicKey(v.pubkey)).toBe(v.address.toLowerCase());
+      // A 0x address is a pre-upgrade vector (old derivation); only check the key then.
+      const legacy = v.address.startsWith("0x");
+      if (!legacy)
+        expect(decodeBytes32(addressFromPublicKey(v.pubkey))).toEqual(bytesOf(v.address));
       if (v.secretKey) {
-        const id = identityFromSecret(hexToBytes(v.secretKey));
-        expect(id.publicKeyHex).toBe(strip(v.pubkey));
-        expect(id.address).toBe(v.address.toLowerCase());
+        const id = identityFromSecret(bytesOf(v.secretKey));
+        expect(id.publicKey).toEqual(bytesOf(v.pubkey));
+        if (!legacy) expect(id.address).toBe(addressFromPublicKey(v.pubkey));
       }
     }
   });
@@ -186,14 +236,14 @@ describe.skipIf(!existsSync(vectorsPath))("shared/thruput/claim-vectors.json", (
   test("claim digests and signatures match", async () => {
     for (const v of vectors.claims) {
       const tape = new Uint8Array(readFileSync(join(repoRoot, "kalien-contract/fixtures", v.tape)));
-      expect(bytesToHex(sha256(tape))).toBe(strip(v.tapeHash));
+      expect(sha256(tape)).toEqual(bytesOf(v.tapeHash));
       const digest = claimMessage({
         networkHash: v.networkHash,
         scoreContract: v.scoreContract,
         seedId: v.seedId,
         tape,
       });
-      expect(bytesToHex(digest)).toBe(strip(v.digest));
+      expect(digest).toEqual(bytesOf(v.digest));
       expect(
         bytesToHex(
           claimMessageFromTapeHash({
@@ -203,12 +253,12 @@ describe.skipIf(!existsSync(vectorsPath))("shared/thruput/claim-vectors.json", (
             tapeHash: v.tapeHash,
           }),
         ),
-      ).toBe(strip(v.digest));
-      const id = identityFromSecret(hexToBytes(v.secretKey));
-      expect(id.publicKeyHex).toBe(strip(v.pubkey));
+      ).toBe(bytesToHex(bytesOf(v.digest)));
+      const id = identityFromSecret(bytesOf(v.secretKey));
+      expect(id.publicKey).toEqual(bytesOf(v.pubkey));
       // Ed25519 is deterministic, so the signature must match byte for byte.
       // eslint-disable-next-line no-await-in-loop -- vectors are checked one by one
-      expect(bytesToHex(await signClaim(id, digest))).toBe(strip(v.signature));
+      expect(bytesToHex(await signClaim(id, digest))).toBe(bytesToHex(bytesOf(v.signature)));
     }
   });
 });
@@ -238,5 +288,58 @@ describe("key file", () => {
     const imported = importIdentity(b, hexToBytes(secret));
     expect(imported.address).toBe(made.address);
     expect(() => importIdentity(b, hexToBytes(secret))).toThrow(/already exists/);
+  });
+
+  test("upgrades a pre-wire-14 key file in place and keeps mode 0600", () => {
+    const dir = mkdtempSync(join(tmpdir(), "kalien-key-"));
+    const path = join(dir, "legacy.json");
+    const legacy = {
+      version: 1,
+      secretKey: `0x${RFC_SECRET}`,
+      publicKey: `0x${RFC_PUBLIC}`,
+      address: "0xc9770e44593153c55045c4abd80234834272752f37cd3c3791f3ff0504ccc7db",
+      createdAt: "2026-10-23T00:00:00.000Z",
+    };
+    writeFileSync(path, JSON.stringify(legacy), { mode: 0o600 });
+    expect(readKeyFile(path).address).toBe(RFC_ADDRESS);
+    const updated = JSON.parse(readFileSync(path, "utf-8")) as Record<string, string>;
+    expect(updated).toMatchObject({
+      secretKey: `0x${RFC_SECRET}`,
+      publicKey: RFC_PUBLIC_B58,
+      address: RFC_ADDRESS,
+      createdAt: legacy.createdAt,
+    });
+    if (process.platform !== "win32") expect(statSync(path).mode & 0o777).toBe(0o600);
+  });
+
+  test("rejects a key file whose base58 address does not match", () => {
+    const dir = mkdtempSync(join(tmpdir(), "kalien-key-"));
+    const path = join(dir, "bad.json");
+    writeFileSync(
+      path,
+      JSON.stringify({ version: 1, secretKey: RFC_SECRET, address: RFC_PUBLIC_B58 }),
+    );
+    expect(() => readKeyFile(path)).toThrow(/does not match/);
+  });
+
+  test("parses every secret format and exports round trip", () => {
+    const secret = hexToBytes(RFC_SECRET);
+    const checksum = bytesToHex(sha256(secret).subarray(0, 4));
+    const dir = mkdtempSync(join(tmpdir(), "kalien-key-"));
+    const path = join(dir, "key.json");
+    importIdentity(path, secret);
+    const forms = [
+      RFC_SECRET,
+      `0x${RFC_SECRET}`,
+      exportSecret(path, "base58"),
+      exportSecret(path, "strkey"),
+      `kalien-key-v1:${RFC_SECRET}:${checksum}`,
+      JSON.stringify({ format: "kalien-key-v1", secretKey: RFC_SECRET }),
+      readFileSync(path, "utf-8"),
+    ];
+    expect(exportSecret(path, "strkey")).toMatch(/^S[A-Z2-7]{55}$/);
+    for (const form of forms) expect(parseSecretKey(form)).toEqual(secret);
+    expect(() => parseSecretKey(`kalien-key-v1:${RFC_SECRET}:00000000`)).toThrow(/checksum/);
+    expect(() => parseSecretKey("nope")).toThrow();
   });
 });

@@ -1,13 +1,14 @@
 import { existsSync } from "fs";
 import { KalienApi } from "../api/client";
 import {
-  exportSecretHex,
+  exportSecret,
   importIdentity,
   keyFileIsExposed,
   loadOrCreateIdentity,
   parseSecretKey,
   readKeyFile,
   type Identity,
+  type SecretFormat,
 } from "../identity/keyfile";
 import * as ansi from "../display/ansi";
 
@@ -36,14 +37,15 @@ export async function whoamiCommand(keyPath: string, apiUrl: string, json: boole
     console.log(
       JSON.stringify({
         address: identity.address,
-        publicKey: `0x${identity.publicKeyHex}`,
+        publicKey: identity.publicKeyBase58,
+        publicKeyHex: identity.publicKeyHex,
         keyFile: keyPath,
       }),
     );
     return;
   }
   console.log(`  ${ansi.color(ansi.gray, "Address:")}    ${identity.address}`);
-  console.log(`  ${ansi.color(ansi.gray, "Public key:")} 0x${identity.publicKeyHex}`);
+  console.log(`  ${ansi.color(ansi.gray, "Public key:")} ${identity.publicKeyBase58}`);
   console.log(`  ${ansi.color(ansi.gray, "Key file:")}   ${keyPath}`);
   if (explorerUrl) {
     console.log(
@@ -52,7 +54,12 @@ export async function whoamiCommand(keyPath: string, apiUrl: string, json: boole
   }
 }
 
-export function keyCommand(action: string, keyPath: string, secretArg: string | undefined): void {
+export function keyCommand(
+  action: string,
+  keyPath: string,
+  secretArg: string | undefined,
+  format: string = "hex",
+): void {
   switch (action) {
     case "path":
       console.log(keyPath);
@@ -67,13 +74,16 @@ export function keyCommand(action: string, keyPath: string, secretArg: string | 
           "  This is your player secret key. Anyone with it controls your runs.",
         ),
       );
-      console.log(exportSecretHex(keyPath));
+      if (format !== "hex" && format !== "base58" && format !== "strkey") {
+        throw new Error("--format must be hex, base58, or strkey");
+      }
+      console.log(exportSecret(keyPath, format as SecretFormat));
       return;
     }
     case "import": {
       const raw = secretArg ?? process.env.KALIEN_SECRET_KEY;
       if (!raw) {
-        throw new Error("usage: kalien key import <0x-secret-hex> (or set KALIEN_SECRET_KEY)");
+        throw new Error("usage: kalien key import <secret|-> (or set KALIEN_SECRET_KEY)");
       }
       const identity = importIdentity(keyPath, parseSecretKey(raw));
       console.log(`  ${ansi.color(ansi.green, "Imported key")} -> ${keyPath}`);

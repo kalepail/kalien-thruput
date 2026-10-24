@@ -15,11 +15,15 @@ The CLI keeps one player key file. It makes the file on first use.
 - Default path: `$KALIEN_KEY_FILE`, else `$XDG_CONFIG_HOME/kalien/key.json`, else
   `~/.config/kalien/key.json`. Override with `--key <path>`.
 - The file has mode `0600`. It holds a 32-byte Ed25519 seed as `0x` hex, plus the
-  public key and the address for reference.
+  public key and the address (base58) for reference. The browser wallet can
+  import this file.
 - Your player address is the Thruput pubkey account address of the public key
-  (nonce 0). `kalien whoami` prints it.
-- Back up the key with `kalien key export`. Anyone with the secret controls your
-  runs.
+  (nonce 0, devnet wire 14 rules), in base58. `kalien whoami` prints it.
+- A key file from before the 2026-10-24 devnet upgrade (hex `0x` address) is
+  upgraded in place on first use. The secret does not change; the address does.
+- Back up the key with `kalien key export` (`--format hex|base58|strkey`; hex is
+  the default). `--format strkey` or `base58` imports into `thruput keys import`.
+  Anyone with the secret controls your runs.
 
 ## Commands
 
@@ -30,8 +34,10 @@ The CLI keeps one player key file. It makes the file on first use.
 - `kalien status <run-id> [--wait]`: show one run.
 - `kalien whoami [--json]`: show the address, public key, and key file.
 - `kalien key path|export|import|new`: manage the key file. `import` takes the
-  secret as an argument, as `-` for stdin, or from `KALIEN_SECRET_KEY`. It never
-  overwrites a key file.
+  secret as an argument, as `-` for stdin, or from `KALIEN_SECRET_KEY`. It accepts
+  hex, base58, an S StrKey, the browser backup string
+  (`kalien-key-v1:<hex>:<checksum>`), or the text of a key or backup JSON file.
+  It never overwrites a key file.
 - `kalien replay <file.tape>`: ASCII replay in the terminal.
 - `kalien ps`: list active `kalien run` processes.
 - `kalien cleanup [options]`: terminate stale `kalien run` processes.

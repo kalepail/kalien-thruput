@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createPublicKey, verify } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { toBase58 } from "@thruputchain/client";
 import { KalienApi, parseRunRecord } from "./client";
 import { claimMessage, hexToBytes } from "../identity/claim";
 import { identityFromSecret } from "../identity/keyfile";
@@ -10,8 +11,9 @@ const repoRoot = resolve(import.meta.dir, "../../..");
 const tape = new Uint8Array(readFileSync(join(repoRoot, "test-fixtures/test-short.tape")));
 const identity = identityFromSecret(new Uint8Array(32).fill(5));
 
-const NETWORK_HASH = `0x${"aa".repeat(32)}`;
-const SCORE_CONTRACT = `0x${"bb".repeat(32)}`;
+// Thruput serves identifiers as base58 since the wire-14 devnet upgrade.
+const NETWORK_HASH = toBase58(new Uint8Array(32).fill(0xaa));
+const SCORE_CONTRACT = toBase58(new Uint8Array(32).fill(0xbb));
 
 // Minimal mock of Worker API v0, served through a stubbed global fetch. It
 // verifies the claim signature the same way the Worker and the contract do.
@@ -36,7 +38,7 @@ async function handle(req: Request): Promise<Response> {
       networkHash: NETWORK_HASH,
       rpcUrl: "https://rpc.thruput.network",
       scoreContract: SCORE_CONTRACT,
-      tokenContract: `0x${"cc".repeat(32)}`,
+      tokenContract: toBase58(new Uint8Array(32).fill(0xcc)),
       explorerUrl: "https://explorer.thruput.network/",
     });
   }

@@ -20,7 +20,7 @@ ${ansi.bold}USAGE${ansi.reset}
   kalien submit <tape-file> [--seed-id <n>] [--no-wait] [--json]
   kalien status <run-id> [--wait]
   kalien whoami [--json]
-  kalien key <path|export|import|new> [secret|-]
+  kalien key <path|export|import|new> [secret|-] [--format hex|base58|strkey]
   kalien replay <tape-file>
   kalien ps
   kalien cleanup [options]
@@ -30,7 +30,8 @@ ${ansi.bold}COMMANDS${ansi.reset}
   submit    Sign and submit one tape file, then wait for the result
   status    Show the status of a submitted run
   whoami    Show the player address for the local key
-  key       Show the key path, export or import the player secret key
+  key       Show the key path, export or import the player secret key. import takes
+            hex, base58, an S StrKey, a browser backup string, or key file JSON
   replay    ASCII replay of a .tape file in the terminal
   ps        List active kalien run processes
   cleanup   Terminate stale kalien run processes
@@ -62,8 +63,9 @@ ${ansi.bold}EXAMPLES${ansi.reset}
   kalien run --threads 4
   kalien run --threads 25% --api-url http://localhost:8787
   kalien submit game.tape
-  kalien status 01J...
+  kalien status <run-id>
   kalien key export > kalien-key-backup.txt
+  kalien key export --format strkey | thruput keys import kalien
   kalien key import - < kalien-key-backup.txt
   kalien replay game.tape
   kalien cleanup --orphan-only --older-than 5m
@@ -188,7 +190,7 @@ async function main(): Promise<void> {
       if (action === "import" && secret === "-") {
         secret = readFileSync(0, "utf-8").trim();
       }
-      keyCommand(action, keyPath, secret);
+      keyCommand(action, keyPath, secret, args["format"]);
       break;
     }
 

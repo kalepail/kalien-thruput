@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { fixedFromBase58 } from "@thruputchain/client";
 
 // Claim message bound into every run submission. The score contract verifies
 // an Ed25519 signature over this digest, so the relay cannot redirect a run.
@@ -12,9 +13,9 @@ import { createHash } from "node:crypto";
 export const CLAIM_DOMAIN = "kalien-claim-v1";
 
 export interface ClaimMessageInput {
-  /** 32-byte network hash, raw bytes or 0x/plain hex. */
+  /** 32-byte network hash: raw bytes, base58, or 0x/plain hex. */
   networkHash: Uint8Array | string;
-  /** 32-byte score contract address, raw bytes or 0x/plain hex. */
+  /** 32-byte score contract address: raw bytes, base58, or 0x/plain hex. */
   scoreContract: Uint8Array | string;
   seedId: number;
   tape: Uint8Array;
@@ -38,8 +39,22 @@ export function bytesToHex(bytes: Uint8Array): string {
   return out;
 }
 
+/**
+ * Decode a 32-byte identifier. Thruput tools and RPC use base58 (43-44 chars);
+ * 64 hex chars (optional 0x) are also accepted. The two never overlap in length.
+ */
+export function decodeBytes32(value: string, name = "value"): Uint8Array {
+  const text = value.trim();
+  if (/^(0x)?[0-9a-fA-F]{64}$/.test(text)) return hexToBytes(text);
+  try {
+    return fixedFromBase58(text, 32);
+  } catch {
+    throw new Error(`${name} must be 32 bytes as base58 or hex, got ${value}`);
+  }
+}
+
 function bytes32(value: Uint8Array | string, name: string): Uint8Array {
-  const bytes = typeof value === "string" ? hexToBytes(value) : value;
+  const bytes = typeof value === "string" ? decodeBytes32(value, name) : value;
   if (bytes.length !== 32) {
     throw new Error(`${name} must be 32 bytes, got ${bytes.length}`);
   }
