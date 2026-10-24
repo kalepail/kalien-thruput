@@ -9,14 +9,16 @@
  *                                       [--max-frames <n>] [--timeout-sec <n>]
  *
  * Defaults: --api-url $KALIEN_API_URL or http://localhost:8787, --players 8,
- * --max-frames 6000.
+ * --max-frames 6000. --tapes-dir <dir> submits pre-made tapes instead
+ * (`full-*.tape` plus `seed.json`, as written by scripts/find-full-tapes.ts).
  */
 
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AsteroidsGame } from "../src/game/AsteroidsGame";
 import { Autopilot, type AutopilotConfig } from "../src/game/Autopilot";
+import { deserializeTape } from "../src/game/tape";
 import { KalienApi, type RunRecord } from "../cli/src/api/client";
 import { loadOrCreateIdentity } from "../cli/src/identity/keyfile";
 import { fetchGasUsed, fetchLaneCounts, laneSpread } from "./lib/probe";
@@ -25,6 +27,7 @@ let apiUrl = process.env.KALIEN_API_URL ?? "http://localhost:8787";
 let players = 8;
 let maxFrames = 6_000;
 let timeoutSec = 600;
+let tapesDir = "";
 
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
@@ -32,6 +35,7 @@ for (let i = 0; i < args.length; i++) {
   else if (args[i] === "--players" && args[i + 1]) players = Number.parseInt(args[++i], 10);
   else if (args[i] === "--max-frames" && args[i + 1]) maxFrames = Number.parseInt(args[++i], 10);
   else if (args[i] === "--timeout-sec" && args[i + 1]) timeoutSec = Number.parseInt(args[++i], 10);
+  else if (args[i] === "--tapes-dir" && args[i + 1]) tapesDir = args[++i];
 }
 
 function log(msg: string): void {
@@ -69,26 +73,49 @@ function generateTape(seed: number, seedId: number) {
 
 const api = new KalienApi(apiUrl);
 const config = await api.config();
-const seedRes = (await (await fetch(`${api.baseUrl}/api/seed/current`)).json()) as {
-  secondsLeft?: number;
-};
-if ((seedRes.secondsLeft ?? 600) < 120) {
-  log(`Waiting ${seedRes.secondsLeft}s for the next seed epoch...`);
-  await new Promise((r) => setTimeout(r, ((seedRes.secondsLeft ?? 0) + 15) * 1000));
+let seedId: number;
+let seed: number;
+if (tapesDir) {
+  ({ seedId, seed } = JSON.parse(readFileSync(join(tapesDir, "seed.json"), "utf-8")) as {
+    seedId: number;
+    seed: number;
+  });
+} else {
+  const seedRes = (await (await fetch(`${api.baseUrl}/api/seed/current`)).json()) as {
+    secondsLeft?: number;
+  };
+  if ((seedRes.secondsLeft ?? 600) < 120) {
+    log(`Waiting ${seedRes.secondsLeft}s for the next seed epoch...`);
+    await new Promise((r) => setTimeout(r, ((seedRes.secondsLeft ?? 0) + 15) * 1000));
+  }
+  let current = await api.currentSeed().catch(() => null);
+  for (let i = 0; !current && i < 20; i++) {
+    // eslint-disable-next-line no-await-in-loop -- the seed appears a few seconds after the epoch starts
+    await new Promise((r) => setTimeout(r, 3000));
+    // eslint-disable-next-line no-await-in-loop -- see above
+    current = await api.currentSeed().catch(() => null);
+  }
+  if (!current) throw new Error("no current seed");
+  ({ seedId, seed } = current);
 }
-let current = await api.currentSeed().catch(() => null);
-for (let i = 0; !current && i < 20; i++) {
-  // eslint-disable-next-line no-await-in-loop -- the seed appears a few seconds after the epoch starts
-  await new Promise((r) => setTimeout(r, 3000));
-  // eslint-disable-next-line no-await-in-loop -- see above
-  current = await api.currentSeed().catch(() => null);
-}
-if (!current) throw new Error("no current seed");
-const { seedId, seed } = current;
 
 const keyDir = mkdtempSync(join(tmpdir(), "kalien-conc-"));
+const preMade = tapesDir
+  ? readdirSync(tapesDir)
+      .filter((f) => /^full-.*\.tape$/.test(f))
+      .slice(0, players)
+      .map((f) => {
+        const tape = new Uint8Array(readFileSync(join(tapesDir, f)));
+        const t = deserializeTape(tape, 36_000);
+        return { tape, score: t.footer.finalScore, frames: t.header.frameCount };
+      })
+  : null;
+if (preMade && preMade.length < players) {
+  throw new Error(`only ${preMade.length} tapes in ${tapesDir}, need ${players}`);
+}
 const jobs = Array.from({ length: players }, (_, i) => {
   const identity = loadOrCreateIdentity(join(keyDir, `p${i}.json`)).identity;
+  if (preMade) return { i, identity, ...preMade[i] };
   let t = generateTape(seed, seedId);
   while (t.score === 0) t = generateTape(seed, seedId);
   return { i, identity, ...t };
