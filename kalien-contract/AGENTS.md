@@ -1,6 +1,6 @@
 # kalien-contract agent guide
 
-Thruput RV32 contracts (`thruput new` layout, SDK `=0.51.1`, CLI 0.29.2). Read `README.md`
+Thruput RV32 contracts (`thruput new` layout, SDK `=0.54.0`, CLI 0.36.0). Read `README.md`
 first, then `thruput skill show contracts` for the SDK model.
 
 - Run cargo and thruput with `CARGO_HOME=$HOME/.cargo-thruput` (`source scripts/env.sh`).

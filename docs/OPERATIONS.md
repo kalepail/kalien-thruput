@@ -17,7 +17,8 @@ Read the devnet's version and network hash with the RPC (`getVersionInfo`, `getN
 
 ## Setup
 
-- **Bun dependencies.** `@thruputchain/*` packages come from GitHub Packages (see `.npmrc`).
+- **Bun dependencies.** `@thruputchain/*` packages come from GitHub Packages. `.npmrc` reads the
+  token from `GH_NPM_TOKEN`, which needs the `read:packages` scope. Set it before every install.
 
   ```bash
   export GH_NPM_TOKEN="$(gh auth token)"

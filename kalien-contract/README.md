@@ -1,6 +1,6 @@
 # Kalien Thruput contracts
 
-Two Rust `no_std` contracts for the Thruput RV32 VM (SDK `=0.51.1`, CLI 0.29.2):
+Two Rust `no_std` contracts for the Thruput RV32 VM (SDK `=0.54.0`, CLI 0.36.0):
 
 - `contracts/kalien_score/`: replays an Asteroids tape on-chain with `asteroids-core`
   (strict rules, up to 36,000 frames), keeps the best score per player per 10-minute seed

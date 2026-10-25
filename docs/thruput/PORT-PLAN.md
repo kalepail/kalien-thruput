@@ -85,8 +85,8 @@ relay funds). Current devnet (from `getVersionInfo`): wire format **14.1.0**, im
   `CARGO_HOME=/Users/kalepail/.cargo-thruput`. The global `~/.cargo` names the registry
   `groundhog`, which clashes with `thruput`. Do not edit `~/.cargo`.
 - **npm/bun:** `export GH_NPM_TOKEN="$(gh auth token)"` before `bun install`/`bun add`. The repo
-  `.npmrc` maps `@thruputchain` to GitHub Packages. Root deps are already installed.
-- CLI: `thruput 0.29.2` matches devnet. Do not install another version.
+  `.npmrc` maps `@thruputchain` to GitHub Packages and reads the token from `GH_NPM_TOKEN`.
+- CLI: `thruput 0.36.0` and `hog-devnode 0.1.31-rc.14` match devnet (wire 14.1.0).
 - Keys: devnet only. Keep secrets out of git (`.dev.vars`, `.env`, `~/.config/thruput`). Never
   print secret keys in logs or commit them.
 - **Git:** all agents share this one worktree and branch. Commit often, but only your own paths:
