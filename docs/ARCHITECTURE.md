@@ -8,7 +8,7 @@ seed epoch, the contract mints KALIEN for the improvement.
 There is no zero-knowledge proof. The chain runs the replay itself. One transaction replays a
 full 36,000-frame (10-minute) tape.
 
-Network: Thruput devnet, wire format 14.x (implementation 0.36.0 on 2026-10-24). Identifiers
+Network: Thruput devnet, wire format 14.x (implementation 0.40.0 on 2026-10-25). Identifiers
 (addresses, hashes, the network hash) are base58. The devnet can be wiped; then every address
 changes (see "Devnet operations").
 
@@ -43,7 +43,7 @@ changes (see "Devnet operations").
 |---|---|---|
 | `asteroids-core/` | Rust game core: simulation, tape format, strict verifier. `no_std`, no allocation while it steps. Also the gas probe and the parity tool. | `asteroids-core/README.md`, `docs/thruput/kt-core.md` |
 | `src/game/` | TypeScript twin of the game core. The browser plays it; the Worker pre-checks with it. | `docs/games/asteroids/` |
-| `kalien-contract/` | Thruput contracts `kalien_score` and `kalien_token` (`thruput-sdk =0.54.0`), deploy and test scripts. | `kalien-contract/README.md`, `docs/thruput/kt-contract.md` |
+| `kalien-contract/` | Thruput contracts `kalien_score` and `kalien_token` (`thruput-sdk =0.57.0`), deploy and test scripts. | `kalien-contract/README.md`, `docs/thruput/kt-contract.md` |
 | `shared/thruput/` | Claim digest helper, read/event/relay helpers (`kalien.ts`), generated TS bindings, devnet deployment record. | `shared/thruput/README.md` |
 | `worker/` | Cloudflare Worker API, relay lanes (Durable Objects), seed cron, event indexer, deploy scripts. | `worker/README.md`, `docs/thruput/kt-worker.md` |
 | `src/` (not `src/game/`) | React client: key wallet, play, submit, run history, leaderboard, replay. | `docs/thruput/kt-client.md` |
@@ -85,7 +85,7 @@ Source: `kalien-contract/contracts/`. Interface: `docs/thruput/PORT-PLAN.md` ("I
 Deployment record: `shared/thruput/deployments/devnet.json`.
 
 Deployed on the wire-14 devnet (network `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj`), v3,
-`thruput-sdk =0.54.0`:
+`thruput-sdk =0.57.0`:
 
 | Item | Value |
 |---|---|
@@ -174,7 +174,7 @@ Stellar". API: `docs/thruput/PORT-PLAN.md` ("Worker API v0 (as built)").
   locations.
 - **Blocked epochs.** The Worker refuses the deploy record's `fixtureSeedIds` and any ids in
   `BLOCKED_SEED_IDS` (`wrangler.jsonc`). On this devnet these are the fixture epochs
-  2988058–2988060, whose seeds have public solutions.
+  2988105–2988107, whose seeds have public solutions.
 - **RPC rules (wire 14).** Named params objects, base58 identifiers, lowercase `0x` hex
   payloads, decimal-string heights and gas. Admission (`sendTransaction`) is not commitment
   (`getTransactionStatus`), and commitment is not success (`receipt.execution.result`). Cursor
@@ -286,7 +286,7 @@ layout per epoch.
 ## Deployment status (2026-10-24)
 
 - Worker live at `https://thruput.kalien.xyz` (custom domain; also
-  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `f5793b16`, built from `a425ec0`.
+  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `5f12b0df` (2026-10-25, after the devnet wipe).
 - Contracts v3 on the wire-14 devnet; addresses in `shared/thruput/deployments/devnet.json` and
   the table under "On-chain contracts".
 - 4 relay lanes, about 999 HOG each.

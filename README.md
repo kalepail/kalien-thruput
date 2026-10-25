@@ -13,9 +13,9 @@ first visit. A relay pays the transaction, and your signature binds the run to y
   `https://kalien-thruput.sdf-ecosystem.workers.dev`)
 - Chain: Thruput devnet (wire format 14, base58 identifiers), RPC `https://rpc.thruput.network`,
   explorer `https://explorer.thruput.network/`
-- Contracts (v3): score `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`, token
-  `AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87` on network
-  `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj` (source of truth:
+- Contracts (v3): score `EBTr2RMKd4bdv2yvrChvRHmV7qcRrqW89vJFDYrgQP73`, token
+  `FLVWcma7YdSPbfSPESD185wUNWemURHA1xA2L86Qnm5i` on network
+  `6RgqYi69r94rCG1qKZ5NfCMAxonNAMXbDsFZMgGwgP2J` (source of truth:
   `shared/thruput/deployments/devnet.json`)
 
 ## Components
@@ -24,7 +24,7 @@ first visit. A relay pays the transaction, and your signature binds the run to y
 |---|---|
 | [`asteroids-core/`](asteroids-core/README.md) | Rust game core and strict tape verifier (`no_std`, used on chain) |
 | [`src/game/`](src/game/) | TypeScript twin of the game core (browser play, Worker pre-check) |
-| [`kalien-contract/`](kalien-contract/README.md) | Thruput contracts (`thruput-sdk =0.54.0`): `kalien_score` (on-chain replay, best scores, mint) and `kalien_token` (KALIEN) |
+| [`kalien-contract/`](kalien-contract/README.md) | Thruput contracts (`thruput-sdk =0.57.0`): `kalien_score` (on-chain replay, best scores, mint) and `kalien_token` (KALIEN) |
 | [`shared/thruput/`](shared/thruput/README.md) | Claim digest helper, generated TS bindings, devnet deployment record |
 | [`worker/`](worker/README.md) | Cloudflare Worker: API, relay lanes (Durable Objects), seed cron, leaderboard indexer |
 | [`src/`](src/) | React client: key wallet, play, submit, run history, leaderboard, replay |
@@ -52,7 +52,7 @@ To use the deployed API instead: `KALIEN_API_PROXY=https://thruput.kalien.xyz bu
 
 ```bash
 export CARGO_HOME=$HOME/.cargo-thruput
-# 1. A local chain (CLI 0.36.0, hog-devnode rc.14). The key gets 1,000 HOG at genesis.
+# 1. A local chain (CLI 0.40.0, hog-devnode rc.16). The key gets 1,000 HOG at genesis.
 thruput node --port 9745 --key <your-key> --initial-account-hog 1000
 # 2. Contracts on it: deploy-devnet.sh in rehearsal mode (separate deployment file and secrets).
 KALIEN_RPC_URL=http://127.0.0.1:9745 KALIEN_DEPLOYMENT_FILE=$TMPDIR/local-deploy.json \

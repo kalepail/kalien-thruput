@@ -2,14 +2,14 @@
 
 Commands for every part of Kalien on the Thruput devnet. Each component README has more detail.
 
-## Versions (2026-10-24)
+## Versions (2026-10-25)
 
 | Item | Version |
 |---|---|
-| Devnet | wire format 14.1.0, implementation 0.36.0 |
-| Thruput CLI | `thruput 0.36.0` |
-| Local node bundle | `hog-devnode 0.1.31-rc.14` |
-| Contract SDK | `thruput-sdk =0.54.0` (registry `thruput`) |
+| Devnet | wire format 14.1.1, implementation 0.40.0 |
+| Thruput CLI | `thruput 0.40.0` |
+| Local node bundle | `hog-devnode 0.1.31-rc.16` |
+| Contract SDK | `thruput-sdk =0.57.0` (registry `thruput`) |
 | TS client | `@thruputchain/client@0.23.0` + `@thruputchain/protocol@0.18.0` |
 
 Read the devnet's version and network hash with the RPC (`getVersionInfo`, `getNetworkInfo`,
@@ -98,10 +98,10 @@ The script (v3 contracts):
 7. Locks seeding for good, and writes the relay secret to `~/.config/kalien-thruput/relay.secret`
    (mode 600; other lanes go to `relay-N.secret`, written only when missing).
 
-Current deployment (2026-10-24, wire-14 devnet `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj`):
-score `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`, token
-`AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87`, 4 relay lanes (allowlist up to 8), fixture epochs
-2988058–2988060 blocked.
+Current deployment (2026-10-25, wire-14 devnet `6RgqYi69r94rCG1qKZ5NfCMAxonNAMXbDsFZMgGwgP2J`):
+score `EBTr2RMKd4bdv2yvrChvRHmV7qcRrqW89vJFDYrgQP73`, token
+`FLVWcma7YdSPbfSPESD185wUNWemURHA1xA2L86Qnm5i`, 4 relay lanes (allowlist up to 8), fixture epochs
+2988105–2988107 blocked.
 
 ### Worker
 
@@ -119,7 +119,7 @@ bun run smoke                        # worker/ops/smoke.ts against the deployed 
 - `worker/ops/relay-keys.ts` lists, funds, and exports lane keys. Each lane address must be
   allowed on the score contract (relay allowlist).
 - Live at `https://thruput.kalien.xyz` (custom domain on the `kalien.xyz` zone; also
-  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `f5793b16`, built from `a425ec0`.
+  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `5f12b0df` (2026-10-25, after the devnet wipe).
 - Gas policy (`wrangler.jsonc`): `RELAY_GAS_BASE` 5,000,000 + `RELAY_GAS_PER_FRAME` 4,500 × frames
   (max `RELAY_GAS_MAX` 167M), one out-of-gas retry at 2.5× (`RELAY_GAS_RETRY_TENTHS` 25) up to
   `RELAY_GAS_RETRY_MAX` 400M. Worst valid tape measured: 110.9M with contract overhead.

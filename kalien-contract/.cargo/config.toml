@@ -10,11 +10,11 @@ rustflags = [
     # the rest goes to the heap, which holds the 18,024-byte calldata of a
     # 36,000-frame tape. Must precede -T: lld ignores a --defsym after it.
     "-C", "link-arg=--defsym=__stack_size=16384",
-    "-C", "link-arg=-Tgroundhog-rv32.ld",
+    "-C", "link-arg=-Tthruput-rv32.ld",
     "-C", "link-arg=-static",
     "-C", "link-arg=--no-dynamic-linker",
     "-C", "link-arg=--gc-sections",
-    # The groundhog-rv32 linker script deliberately overlaps the CODE and DATA
+    # The thruput-rv32 linker script deliberately overlaps the CODE and DATA
     # VMAs (modified-Harvard: separate VM address spaces) so DATA starts near 0
     # and the stored image carries no code-sized zero shadow. Tell lld the
     # overlap is intentional.
@@ -23,7 +23,7 @@ rustflags = [
     # here — nothing compares function pointers for identity (the dispatch
     # table wrappers are only ever called).
     "-C", "link-arg=--icf=all",
-    # gp relaxation: with the __global_pointer$ anchor in groundhog-rv32.ld and
+    # gp relaxation: with the __global_pointer$ anchor in thruput-rv32.ld and
     # the gp init in the SDK's _start, lld folds static-address lui+addi pairs
     # into single gp-relative accesses for statics within +/-2 KiB of the
     # anchor. lld needs this explicit opt-in (GNU ld relaxes gp by default;

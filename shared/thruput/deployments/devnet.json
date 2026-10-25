@@ -1,47 +1,47 @@
 {
   "network": "devnet",
-  "networkHash": "DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj",
+  "networkHash": "6RgqYi69r94rCG1qKZ5NfCMAxonNAMXbDsFZMgGwgP2J",
   "rpcUrl": "https://rpc.thruput.network",
   "explorerUrl": "https://explorer.thruput.network/",
-  "scoreContract": "8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT",
-  "tokenContract": "AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87",
+  "scoreContract": "EBTr2RMKd4bdv2yvrChvRHmV7qcRrqW89vJFDYrgQP73",
+  "tokenContract": "FLVWcma7YdSPbfSPESD185wUNWemURHA1xA2L86Qnm5i",
   "admin": "5y9nbDvLXhF87vezDQQKKfHd9DccibjUutkHrhE5UojK",
-  "deployedAt": "2026-10-24T10:15:33.743Z",
+  "deployedAt": "2026-10-25T16:43:41.578Z",
   "deployTxs": {
-    "deployToken": "3nHJYy3YmCD76g1cT5PNjUWxvWbNDrk6nc2MAibgUzmE",
-    "deployScore": "5aRwEVTD89GSCkRcdvrFVxwGoQfVakQfyWCMtQsBjY9j",
-    "setTokenAdministrator": "7omh79J7atpisv16Li867Htzw3wMdrghxRfc5aqEVr6i"
+    "deployToken": "G7nrAaKfCmhBroN2YkSVFJVxWMifYQ6LjvAreL6udgHj",
+    "deployScore": "3sHdUVpRd61v3Q33eah1o7SBuYvNAiPJzC9sq46Wggdw",
+    "setTokenAdministrator": "4eft19FBWJwBeqj1L1UvtsFouAxJRdzbB5Uiu2tufb15"
   },
   "artifacts": {
     "kalien_token": {
-      "sha256": "0xa43d2e9c73e01fae18e57db4e41233cd54f533ae0cb1d693364a3f4dbf7f8ece",
-      "bytes": 27252
+      "sha256": "0x552900afc39d85f32ad5102bc77a8e4ee1a483bf33221363d510e7711b6eb162",
+      "bytes": 27192
     },
     "kalien_score": {
-      "sha256": "0x7503a8d512163fc72f4979ef54ed845bdc84c3a0b6dd7660015cf657eb6627f8",
-      "bytes": 64400
+      "sha256": "0x25bcbded7e2f0b0a522b20ff6ab7271d5879babf83e8ca5428eaf282db94738b",
+      "bytes": 64344
     }
   },
   "fixtureSeedIds": [
-    2988058,
-    2988059,
-    2988060
+    2988105,
+    2988106,
+    2988107
   ],
   "fixtureEpochs": [
     {
-      "seedId": 2988058,
-      "seed": 1598125870,
-      "activeUntil": "2026-10-25T09:40:00.000Z"
-    },
-    {
-      "seedId": 2988059,
-      "seed": 1137297101,
-      "activeUntil": "2026-10-25T09:50:00.000Z"
-    },
-    {
-      "seedId": 2988060,
+      "seedId": 2988105,
       "seed": 3735928559,
-      "activeUntil": "2026-10-25T10:00:00.000Z"
+      "activeUntil": "2026-10-25T17:30:00.000Z"
+    },
+    {
+      "seedId": 2988106,
+      "seed": 1137297101,
+      "activeUntil": "2026-10-25T17:40:00.000Z"
+    },
+    {
+      "seedId": 2988107,
+      "seed": 1598125870,
+      "activeUntil": "2026-10-25T17:50:00.000Z"
     }
   ]
 }
