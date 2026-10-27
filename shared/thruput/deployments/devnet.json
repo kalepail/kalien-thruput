@@ -1,16 +1,16 @@
 {
   "network": "devnet",
-  "networkHash": "6RgqYi69r94rCG1qKZ5NfCMAxonNAMXbDsFZMgGwgP2J",
+  "networkHash": "DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7FcNT",
   "rpcUrl": "https://rpc.thruput.network",
   "explorerUrl": "https://explorer.thruput.network/",
-  "scoreContract": "EBTr2RMKd4bdv2yvrChvRHmV7qcRrqW89vJFDYrgQP73",
-  "tokenContract": "FLVWcma7YdSPbfSPESD185wUNWemURHA1xA2L86Qnm5i",
+  "scoreContract": "C56KRpv5dFR5EEynb3FVWcyt8Gst85SEQ611ZL3zdgmo",
+  "tokenContract": "HmuwsXqTSooVKLLkREKxWHB93Tea1B6ASh8Z9ywXxNMp",
   "admin": "5y9nbDvLXhF87vezDQQKKfHd9DccibjUutkHrhE5UojK",
-  "deployedAt": "2026-10-25T16:43:41.578Z",
+  "deployedAt": "2026-10-27T18:00:41.643Z",
   "deployTxs": {
-    "deployToken": "G7nrAaKfCmhBroN2YkSVFJVxWMifYQ6LjvAreL6udgHj",
-    "deployScore": "3sHdUVpRd61v3Q33eah1o7SBuYvNAiPJzC9sq46Wggdw",
-    "setTokenAdministrator": "4eft19FBWJwBeqj1L1UvtsFouAxJRdzbB5Uiu2tufb15"
+    "deployToken": "GuB4iaC6hqsz1nu6yD6YA8cAJ9EydAZcibKTnNSGprEU",
+    "deployScore": "DJ4SkVrH62zfQAwYff7RiM1PAowvh116rWotx4WqLbJi",
+    "setTokenAdministrator": "nTLgUKdNVDe9tvdmYCTqTX5272rXjcwtQrh2H2sn8Uw"
   },
   "artifacts": {
     "kalien_token": {
@@ -23,25 +23,25 @@
     }
   },
   "fixtureSeedIds": [
-    2988105,
-    2988106,
-    2988107
+    2988401,
+    2988402,
+    2988403
   ],
   "fixtureEpochs": [
     {
-      "seedId": 2988105,
+      "seedId": 2988401,
       "seed": 3735928559,
-      "activeUntil": "2026-10-25T17:30:00.000Z"
+      "activeUntil": "2026-10-27T18:50:00.000Z"
     },
     {
-      "seedId": 2988106,
+      "seedId": 2988402,
       "seed": 1137297101,
-      "activeUntil": "2026-10-25T17:40:00.000Z"
+      "activeUntil": "2026-10-27T19:00:00.000Z"
     },
     {
-      "seedId": 2988107,
+      "seedId": 2988403,
       "seed": 1598125870,
-      "activeUntil": "2026-10-25T17:50:00.000Z"
+      "activeUntil": "2026-10-27T19:10:00.000Z"
     }
   ]
 }
