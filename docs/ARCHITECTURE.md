@@ -8,7 +8,7 @@ seed epoch, the contract mints KALIEN for the improvement.
 There is no zero-knowledge proof. The chain runs the replay itself. One transaction replays a
 full 36,000-frame (10-minute) tape.
 
-Network: Thruput devnet, wire format 14.x (implementation 0.40.0 on 2026-10-25). Identifiers
+Network: Thruput devnet, wire format 14.x (implementation 0.41.0 on 2026-10-27). Identifiers
 (addresses, hashes, the network hash) are base58. The devnet can be wiped; then every address
 changes (see "Devnet operations").
 
@@ -84,13 +84,13 @@ changes (see "Devnet operations").
 Source: `kalien-contract/contracts/`. Interface: `docs/thruput/PORT-PLAN.md` ("Interface v3").
 Deployment record: `shared/thruput/deployments/devnet.json`.
 
-Deployed on the wire-14 devnet (network `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj`), v3,
+Deployed on the wire-14 devnet (network `DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7FcNT`), v3,
 `thruput-sdk =0.57.0`:
 
 | Item | Value |
 |---|---|
-| Score contract | `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT` |
-| Token contract | `AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87` |
+| Score contract | `C56KRpv5dFR5EEynb3FVWcyt8Gst85SEQ611ZL3zdgmo` |
+| Token contract | `HmuwsXqTSooVKLLkREKxWHB93Tea1B6ASh8Z9ywXxNMp` |
 | Relays | 4 lanes on the allowlist (up to 8), about 999 HOG each |
 | Settings | relay-only on, seeding locked |
 
@@ -283,10 +283,10 @@ layout per epoch.
 
 **Decision 2026-10-24: accepted for devnet; options kept for a future mainnet-like deployment.**
 
-## Deployment status (2026-10-24)
+## Deployment status (2026-10-27)
 
 - Worker live at `https://thruput.kalien.xyz` (custom domain; also
-  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `5f12b0df` (2026-10-25, after the devnet wipe).
+  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `457563ca` (2026-10-27, after the devnet wipe).
 - Contracts v3 on the wire-14 devnet; addresses in `shared/thruput/deployments/devnet.json` and
   the table under "On-chain contracts".
 - 4 relay lanes, about 999 HOG each.
