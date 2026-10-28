@@ -208,7 +208,7 @@ It is **not deployed** yet: I wait for the lead (kt-contract v3 on the new devne
   `getTransactionReceipt` / `getBlockByHeight` / `getEvents` via the SDK. Worker-owned types in
   `chain/types.ts` (`ChainReceipt`, `ChainStatus`), so the engine and tests do not depend on
   SDK shapes. Unfamiliar outcome variants map to `other` (never success).
-- Relay rules from `docs/thruput/reference/json-rpc-alpha-guide.md`:
+- Relay rules from the Thruput JSON-RPC reference (https://www.thruput.network/docs/reference/json-rpc-api/):
   - The relay saves the signed bytes and hash before it sends them.
   - If a status was ever `committed`, the relay never replaces the transaction; it waits for the receipt (indexer lag).
   - `retry`, `dropped`, `unknown`, `recentFailure`, and a refused re-send do not prove non-execution. Until the expiry height, the relay only re-sends the same bytes.

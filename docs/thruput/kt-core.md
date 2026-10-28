@@ -431,7 +431,7 @@ The `&[u8]` argument borrows the calldata, so the tape is not copied.
 
 ## How I tested
 
-All commands use `CARGO_HOME=/Users/kalepail/.cargo-thruput`.
+All commands use `CARGO_HOME=$HOME/.cargo-thruput`.
 
 | command | result |
 |---|---|
@@ -449,7 +449,7 @@ All commands use `CARGO_HOME=/Users/kalepail/.cargo-thruput`.
 ## Environment notes for other agents
 
 - `~/.cargo/config.toml` is read for every project under `$HOME`, even with
-  `CARGO_HOME=/Users/kalepail/.cargo-thruput`. Its `groundhog` registry clashes with `thruput`.
+  `CARGO_HOME=$HOME/.cargo-thruput`. Its `groundhog` registry clashes with `thruput`.
   `CARGO_REGISTRIES_GROUNDHOG_INDEX` does not fix it. Add
   `groundhog = { index = "sparse+https://groundhog-registry-unused.invalid/" }` under
   `[registries]` in the project `.cargo/config.toml` (the contract agent does the same).

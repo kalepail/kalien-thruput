@@ -2,6 +2,13 @@
   "name": "kalien",
   "private": true,
   "version": "1.0.0",
+  "description": "Kalien: deterministic Asteroids on the Thruput devnet with on-chain tape replay",
+  "homepage": "https://thruput.kalien.xyz",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kalepail/kalien-thruput.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "node node_modules/vite/bin/vite.js dev",

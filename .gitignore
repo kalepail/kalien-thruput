@@ -43,3 +43,12 @@ generated-tapes/
 *-autopilot/
 /benchmarks/
 /checkpoints/
+
+# Keys and secrets that must never be committed
+# (browser wallet backups, CLI key files, relay seeds, admin keys)
+kalien-key-*.json
+key.json
+*.secret
+*.key
+*.pem
+.agents/

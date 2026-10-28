@@ -1,7 +1,7 @@
 # Kalien on Thruput devnet: port plan
 
-Branch `thruput-devnet`, worktree `/Users/kalepail/Desktop/Web/Soroban/kalien-thruput`.
-Final home: private repo `kalepail/kalien-thruput`, Worker `kalien-thruput` at
+Working plan for the port (agents used it as their shared brief). Some sections are historical;
+the "Interface v3" section is current. Repo `kalepail/kalien-thruput`, Worker `kalien-thruput` at
 `https://thruput.kalien.xyz` (custom domain; also `https://kalien-thruput.sdf-ecosystem.workers.dev`) (Cloudflare account "Ecosystem - Stellar",
 `ba55b7ae9acfb3ed152103e3497c0752`).
 
@@ -27,8 +27,7 @@ relay funds). Current devnet (from `getVersionInfo`): wire format **14.1.0**, im
   `getChainTip`, `getChainConfig`, `getServerLimits`, `sendTransaction`, `getTransactionStatus`,
   `getTransactionReceipt`, `getBalance`, `getStorage`, `simulateInvocation(s)`, `getEvents`,
   `getBlockByHeight` (block times now exist), `getTransactionsByBlock`, `faucet_requestAirdrop`.
-  Doc: `git -C /Users/kalepail/Desktop/groundhog/developers-site show origin/HEAD:src/content/docs/reference/json-rpc-api.md`
-  (the lead fetched upstream; checkouts are not fast-forwarded, read `origin/HEAD`).
+  Doc: https://www.thruput.network/docs/reference/json-rpc-api/.
 - Identifiers (addresses, hashes, network hash) are **base58** on the wire and in tools.
 - CLI: `thruput 0.36.0` is installed (matches devnet). Local node bundle: `hog-devnode
   0.1.31-rc.14` installed and active. The devnet profile has the new network hash.
@@ -36,26 +35,22 @@ relay funds). Current devnet (from `getVersionInfo`): wire format **14.1.0**, im
   `thruput new` scaffold for the exact `Cargo.toml`, `.cargo/config.toml`, `build.rs` layout.
 - TS: root deps are now **`@thruputchain/client@0.23.0` + `@thruputchain/protocol@0.18.0`**
   (wire 14). `PrivateKeySigner` is renamed `Ed25519Signer` (with `fromSeed`); `createRpcClient`
-  exposes the native wire-14 methods. Docs: `client-ts` `origin/HEAD` README and
-  `developers-site` `origin/HEAD:src/content/docs/typescript/`.
+  exposes the native wire-14 methods. Docs: https://www.thruput.network/docs/typescript/.
 - Keys in `~/.config/thruput/keys` still exist; their devnet accounts are empty. Refund with
   `faucet_requestAirdrop`. Network hash and all contract addresses must come from config.
 
-- **Migration guide from the Thruput team:** `docs/thruput/reference/json-rpc-alpha-guide.md`
+- **JSON-RPC reference:** https://www.thruput.network/docs/reference/json-rpc-api/
   (wire 14 method map, named `params` objects, base58 identifiers, lowercase `0x` hex payloads,
   decimal-string heights/gas, admission vs commitment, `execution.result` in receipts,
   cursor pagination that ends only at `nextCursor: null`, `error.data.kind` handling).
 - **Firehose:** `wss://firehose.thruput.network` streams committed block records (XDR) with
-  resumable replay from a height and per-block ACK. Docs: `developers-site` `origin/HEAD:`
-  `src/content/docs/reference/firehose.md` and `guides/consume-the-firehose.md`.
+  resumable replay from a height and per-block ACK. Docs: https://www.thruput.network/docs/reference/firehose/.
 - Devnet now has some support for Stellar G/C StrKey addresses (Ed25519 keys only; ML-DSA-65
   keys exist too but have no StrKey form). We keep Ed25519 browser keys.
 
 ## Thruput facts that shape the design
 
-- Docs authority: `/Users/kalepail/Desktop/groundhog/developers-site/src/content/docs/`.
-  Agent skill: `~/.agents/skills/thruput/SKILL.md` (still says `@groundhogchain`; the packages
-  are now `@thruputchain/*`). Workspace notes: `/Users/kalepail/Desktop/groundhog/CLAUDE.md`.
+- Docs authority: https://www.thruput.network/docs/. Agent skill: `thruput skill show`.
 - Contracts: Rust `no_std`, RV32IM, no floats, `sdk =0.51.1` from registry `thruput`.
   Guest memory is **64 KiB total** (stack + statics + heap + calldata). The allocator is a
   **bump allocator that never frees**. So the replay must not allocate per frame and must not
@@ -76,13 +71,12 @@ relay funds). Current devnet (from `getVersionInfo`): wire format **14.1.0**, im
   `https://explorer.thruput.network/`. Faucet: `thruput airdrop`, `wallet.requestAirdrop()`,
   `https://thruput-faucet.up.railway.app` (about 10 HOG / address / 24 h).
 - TS client: pin `@thruputchain/client@0.18.0` + `@thruputchain/protocol@0.15.0` (devnet wire
-  format 11.x). Do **not** upgrade to 0.20+. Reference usage: `/Users/kalepail/Desktop/groundhog/thruput-spray-pray/worker/`
-  (server-side signing in Durable Objects) and `/Users/kalepail/Desktop/groundhog/groundhog-wall/public-site/funding-service.mjs`.
+  format 11.x). Do **not** upgrade to 0.20+.
 
 ## Environment rules (every agent)
 
 - **Cargo:** always run cargo / `thruput build` / `thruput test` / `thruput deploy` with
-  `CARGO_HOME=/Users/kalepail/.cargo-thruput`. The global `~/.cargo` names the registry
+  `CARGO_HOME=$HOME/.cargo-thruput`. The global `~/.cargo` names the registry
   `groundhog`, which clashes with `thruput`. Do not edit `~/.cargo`.
 - **npm/bun:** `export GH_NPM_TOKEN="$(gh auth token)"` before `bun install`/`bun add`. The repo
   `.npmrc` maps `@thruputchain` to GitHub Packages and reads the token from `GH_NPM_TOKEN`.

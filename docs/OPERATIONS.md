@@ -33,8 +33,8 @@ Read the devnet's version and network hash with the RPC (`getVersionInfo`, `getN
   project's `.cargo/config.toml` points `groundhog` to an unused index.
 - **Contract stack size.** Contracts that replay tapes put
   `"-C", "link-arg=--defsym=__stack_size=16384",` in `.cargo/config.toml` rustflags **before**
-  the `-Tgroundhog-rv32.ld` line (after it, the linker ignores it).
-- **RPC rules (wire 14).** Follow `docs/thruput/reference/json-rpc-alpha-guide.md`: named
+  the `-Tthruput-rv32.ld` line (after it, the linker ignores it).
+- **RPC rules (wire 14).** Follow the [Thruput JSON-RPC reference](https://www.thruput.network/docs/reference/json-rpc-api/): named
   params objects, base58 identifiers, lowercase `0x` hex payloads, decimal-string heights and
   gas, admission vs commitment vs `receipt.execution.result`, cursor walks to
   `nextCursor: null`, `error.data.kind`, and no automatic resubmission after an uncertain send.

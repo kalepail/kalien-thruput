@@ -9,6 +9,7 @@ members = [
 [workspace.package]
 edition = "2024"
 version = "0.1.0"
+license = "Apache-2.0"
 publish = false
 
 # Profiles live in `.cargo/config.toml` (copied from the `thruput new` scaffold).

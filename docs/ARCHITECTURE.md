@@ -179,7 +179,7 @@ Stellar". API: `docs/thruput/PORT-PLAN.md` ("Worker API v0 (as built)").
   payloads, decimal-string heights and gas. Admission (`sendTransaction`) is not commitment
   (`getTransactionStatus`), and commitment is not success (`receipt.execution.result`). Cursor
   walks end only at `nextCursor: null`. Never resubmit automatically after an uncertain send.
-  Guide: `docs/thruput/reference/json-rpc-alpha-guide.md`.
+  Reference: https://www.thruput.network/docs/reference/json-rpc-api/.
 
 ## Browser key wallet
 

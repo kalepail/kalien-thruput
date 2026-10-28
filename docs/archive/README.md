@@ -10,7 +10,6 @@ of truth for the current (Thruput) system.
   - `zk/asteroids/`: the old Asteroids proof, contract, gateway, and optimization specs.
   - `zk/references/`: the curated Stellar/ZK reference library.
 - `asteroids-variance/`: the ruleset variance audit and plans.
-- `leaderboard-reconstruction/`: date-scoped reconstruction and prompt-history artifacts.
 - `d1-migration/`: a completed one-time migration runbook.
 - `deferred-plans/`: deferred or superseded plans (mainnet checklist, SSR migration).
 - `social-drafts/`: social posts, including the ZK launch article (`TWITTER-zk-launch.md`).

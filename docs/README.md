@@ -20,8 +20,8 @@ exact test commands:
 
 - [thruput/PORT-PLAN.md](thruput/PORT-PLAN.md): goal, the 2026-10-24 devnet upgrade, environment
   rules, and the contract and Worker interfaces.
-- [thruput/reference/json-rpc-alpha-guide.md](thruput/reference/json-rpc-alpha-guide.md): the
-  official wire-14 JSON-RPC migration guide (follow it for every RPC call).
+- [Thruput JSON-RPC reference](https://www.thruput.network/docs/reference/json-rpc-api/): the public wire-14
+  JSON-RPC reference (follow it for every RPC call).
 - [thruput/kt-core.md](thruput/kt-core.md): game core, gas and memory, TS/Rust parity.
 - [thruput/kt-contract.md](thruput/kt-contract.md): contracts and devnet deployment.
 - [thruput/kt-worker.md](thruput/kt-worker.md): Worker, relay, leaderboard indexer.

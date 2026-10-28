@@ -1,6 +1,13 @@
 {
   "name": "kalien-cli",
+  "private": true,
   "version": "1.0.0",
+  "description": "Kalien terminal client: key file, bots, submit, status",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kalepail/kalien-thruput.git"
+  },
   "type": "module",
   "bin": {
     "kalien": "./src/index.ts"

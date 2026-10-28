@@ -3,6 +3,7 @@ name = "kalien_score"
 description = "Kalien score contract: on-chain Asteroids tape replay and KALIEN rewards"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [lib]

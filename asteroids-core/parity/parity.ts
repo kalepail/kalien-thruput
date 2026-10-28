@@ -18,12 +18,12 @@
  * `--self-test` flips thrust and fire from frame 150 on, on the TS side only (in tapes of 200+ frames) and
  * expects every such tape to be reported as a mismatch, to prove the comparison can fail.
  *
- * Needs `cargo` (CARGO_HOME defaults to /Users/kalepail/.cargo-thruput when unset) and builds
+ * Needs `cargo` (CARGO_HOME defaults to ~/.cargo-thruput when unset) and builds
  * `asteroids-core/parity` and `autopilot` in release mode.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, copyFileSync } from "fs";
-import { availableParallelism, tmpdir } from "os";
+import { availableParallelism, homedir, tmpdir } from "os";
 import { join, resolve } from "path";
 import { AsteroidsGame } from "../../src/game/AsteroidsGame";
 import { TapeInputSource } from "../../src/game/input-source";
@@ -78,7 +78,7 @@ function parseArgs(argv: string[]): Options {
 
 const cargoEnv = {
   ...process.env,
-  CARGO_HOME: process.env.CARGO_HOME ?? "/Users/kalepail/.cargo-thruput",
+  CARGO_HOME: process.env.CARGO_HOME ?? join(homedir(), ".cargo-thruput"),
 };
 
 function run(cmd: string[], cwd: string): string {

@@ -33,8 +33,8 @@ Live (`https://kalien-thruput.sdf-ecosystem.workers.dev`, fresh key): CSP header
 `6Diiedkj…KTfXk5B3`, block 29,887); tx page, replay, wallet (1,430 KALIEN), `/runs`, leaderboard
 all work; 0 CSP violations, 0 CSP console lines.
 
-Screenshots: `/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/c5af48fa-61eb-44a6-b03d-e26eb2b4d2c5/scratchpad/live1417/` (`01-confirmed.png`, `02-tx.png`, `03-replay.png`, `04-wallet.png`,
-`05-leaderboard.png`); `/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/c5af48fa-61eb-44a6-b03d-e26eb2b4d2c5/scratchpad/csp/` (`tx.png`, `replay.png`, `network-change-notice.png`).
+Screenshots: `<local scratchpad>/live1417/` (`01-confirmed.png`, `02-tx.png`, `03-replay.png`, `04-wallet.png`,
+`05-leaderboard.png`); `<local scratchpad>/csp/` (`tx.png`, `replay.png`, `network-change-notice.png`).
 
 Processes: the CSP test server and all agent-browser sessions are stopped.
 
@@ -77,7 +77,7 @@ the next Worker deploy (kt-worker, or me on the lead's go).
 
 Checks: typecheck, lint, format clean for `src`; `bun test tests/src` 67 pass, 0 fail.
 
-Screenshots (`/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/c5af48fa-61eb-44a6-b03d-e26eb2b4d2c5/scratchpad/review/`): `import-raw-confirm.png`, `skew-17min-playing.png`,
+Screenshots (`<local scratchpad>/review/`): `import-raw-confirm.png`, `skew-17min-playing.png`,
 `skew-17min-confirmed.png`.
 
 Processes: local Vite and both agent-browser sessions are stopped.
@@ -121,7 +121,7 @@ Tests (deployed site, fresh key):
 | 375 px | 0 px horizontal overflow; hash wraps |
 | Old run `4J5JPfWX…` (local Vite proxied to the deployed API) | block 17,863, gas 3,616,081, run 1,880, Replay `33d2553a…` |
 
-Screenshots (`/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/c5af48fa-61eb-44a6-b03d-e26eb2b4d2c5/scratchpad/txview/`): `prod-01-confirmed.png`, `prod-02-tx-page.png`, `prod-03-player-page.png`,
+Screenshots (`<local scratchpad>/txview/`): `prod-01-confirmed.png`, `prod-02-tx-page.png`, `prod-03-player-page.png`,
 `prod-04-replay.png`, `prod-05-tx-m375.png`, `local-tx.png`, `local-tx-unknown.png`,
 `local-tx-m375b.png`.
 
@@ -151,7 +151,7 @@ No bug found in client paths; no code change this round.
 | Mobile 375 / 768 | Game, wallet, `/runs`, leaderboard, player page, replay: 0 px horizontal overflow; result card is a full-screen sheet on phones |
 | Explorer link format | `https://explorer.thruput.network/tx/<base58>` and `/address/<base58>`. This matches the explorer source (`src/app/api/search/route.ts`, `hashFromBase58`). The explorer returns **HTTP 401 on every path** (even `/`), so the page did not open (`04-explorer-tx.png` is blank) |
 
-Screenshots (`/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/c5af48fa-61eb-44a6-b03d-e26eb2b4d2c5/scratchpad/deployed/`):
+Screenshots (`<local scratchpad>/deployed/`):
 `01-wallet-fresh.png`, `02-game-over.png`, `03-confirmed.png`, `05-runs.png`, `06-leaderboard.png`,
 `07-player-profile.png`, `08-replay.png`, `09-endless-start.png`, `10-endless-running.png`,
 `11-wallet-source.png`, `12-wallet-imported.png`, `m375-{game,wallet,runs,leaderboard,player,replay,result-card}.png`,

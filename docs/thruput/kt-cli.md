@@ -162,7 +162,7 @@ kt-client backup format and the root `typecheck:cli` item are still open.
 
 Worker `http://127.0.0.1:5174`, network hash `0xb69e…5047`, score contract
 `0xed51…ed81`, token `0x6782…4844`. Logs:
-`/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/cfb386b3-55e4-434b-8d68-49329aa4c69e/scratchpad/e2e-local-3.log`
+`<local scratchpad>/e2e-local-3.log`
 and `run.log` in the same directory.
 
 ### Vectors
@@ -383,7 +383,7 @@ case.
 | p7 | 17,070 | 7,144 | 1.0 s | 5.2 s | 16,434,963 | `533cb51c4784…` | `FyYXewPBernSKDmKunP2W33MbhsiYY2DcfEHVoL84kur` |
 
 Full run ids are in the logs:
-`/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/cfb386b3-55e4-434b-8d68-49329aa4c69e/scratchpad/conc-1.log`
+`<local scratchpad>/conc-1.log`
 and `conc-2.log` (also `e2e-deployed-1.log`, `d-run.log`).
 
 ### Observations
@@ -429,7 +429,7 @@ lane2 +4, lane3 +2.** Total gas 517.0M.
 | p6 | 53,740 | 1.9 s | 8.3 s | 66,291,197 | `9e8b9f98…85724` | `Doprx3bRdjwkxtdXoVhcF5kfDny12VMpUVTQP8FU6yfH` |
 | p7 | 62,470 | 1.4 s | 5.7 s | 63,620,832 | `e5c67f93…42098` | `89qHsDFTZWhR69qx8EY17meLThZCfahVFpZLrxyvw1ih` |
 
-Full run ids: `/private/tmp/claude-501/-Users-kalepail-Desktop-Web-Soroban-kalien-thruput/cfb386b3-55e4-434b-8d68-49329aa4c69e/scratchpad/conc-full-1.log`.
+Full run ids: `<local scratchpad>/conc-full-1.log`.
 
 Lane 1 took no run in this burst. Lane 2 took 4. If the relay picks a lane by
 current load, this can be correct, but **kt-worker** may want to check the lane

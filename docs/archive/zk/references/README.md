@@ -3,7 +3,7 @@
 Background reference material for Stellar and ZK design work.
 
 This directory is **not** the canonical source for current Asteroids implementation behavior.
-For product-spec truth, use [docs/games/asteroids/README.md](../../games/asteroids/README.md).
+For product-spec truth, use [docs/games/asteroids/README.md](../../../games/asteroids/README.md).
 
 ## Index
 

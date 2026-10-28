@@ -37,6 +37,11 @@ How the parts fit: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## How to run and deploy
 
+> **Access note.** The build needs `@thruputchain/client` and `@thruputchain/protocol`, which
+> Project Thruput publishes as private GitHub Packages. Without access to them, `bun install`
+> fails. You can still read the code, run the Rust game core and its tests, and play the live
+> app at `https://thruput.kalien.xyz`.
+
 ### Play against the live devnet (fastest)
 
 ```bash
@@ -109,4 +114,8 @@ devnet; options kept for a future mainnet-like deployment. See
 - Secrets live in `.dev.vars`, `.env`, `~/.config/thruput/keys/`, and
   `~/.config/kalien-thruput/` (never in git).
 - Devnet can be wiped. Then the network hash and all addresses change; see
-  [docs/OPERATIONS.md](docs/OPERATIONS.md#devnet-reset).
+  [docs/OPERATIONS.md](docs/OPERATIONS.md#devnet-reset-after-a-wipe).
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
