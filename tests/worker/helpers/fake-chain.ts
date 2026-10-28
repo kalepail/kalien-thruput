@@ -57,7 +57,7 @@ export class FakeChain {
   minGasToSucceed: bigint | null = null;
   /** When true, submit_score faults (not out of gas). */
   forceFault = false;
-  /** When true, an out-of-gas child shows as a wallet abort (as on devnet). */
+  /** When true, an out-of-gas child shows as a wallet abort (as on Futurenet). */
   childOutOfGasAborts = false;
   private counter = 0;
   readonly gasSeen: bigint[] = [];

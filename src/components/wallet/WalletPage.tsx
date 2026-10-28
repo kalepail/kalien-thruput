@@ -320,7 +320,7 @@ export function WalletPage() {
 
   return (
     <PageShell glow className="content-start">
-      <PageHero title="Wallet" subtitle="Your player key and KALIEN on the Thruput devnet." />
+      <PageHero title="Wallet" subtitle="Your player key and KALIEN on Thruput Futurenet." />
 
       {!wallet.isConnected && (
         <Card className="animate-rise">

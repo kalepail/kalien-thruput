@@ -94,7 +94,7 @@ let fetchPending = false;
 let observedSeedId = currentSeedId();
 let missingSeedRetryMs = NULL_SEED_RETRY_MS;
 
-// After a devnet reset the old epoch seeds belong to the old contract.
+// After a Futurenet reset the old epoch seeds belong to the old contract.
 onThruputConfigChange(() => {
   seedCache = null;
   state = { seed: null, seedId: null, secondsLeft: getSecondsUntilNext() };

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Full Kalien devnet deploy. Run it again after a devnet wipe.
+# Full Kalien Futurenet deploy. Run it again after a Futurenet wipe.
 #
-#   kalien-contract/scripts/deploy-devnet.sh [--skip-fixtures] [--force]
+#   kalien-contract/scripts/deploy-futurenet.sh [--skip-fixtures] [--force]
 #
-# Refuses to run when shared/thruput/deployments/devnet.json already names the endpoint's
+# Refuses to run when shared/thruput/deployments/futurenet.json already names the endpoint's
 # current network (a live deploy: the old relays stay allowed on the old contract, and the
 # Worker would lose its contracts). Pass --force to deploy a second pair anyway.
 #
@@ -13,21 +13,21 @@
 # 3. Funds deployer and relays from the faucet (faucet_requestAirdrop, ~1,000 HOG) when they
 #    hold < 100 HOG.
 # 4. Deploys the token and the score contract, links them, and writes
-#    shared/thruput/deployments/devnet.json.
+#    shared/thruput/deployments/futurenet.json.
 # 5. Creates the current seed, then (unless --skip-fixtures) fixes fixture seeds on three
 #    unseeded epochs near the old end of the active window (they expire within about an
 #    hour), submits the short, medium, real-game and 911,140-point tapes signed by
 #    kalien-test-player through kalien-relay, claims every other repo tape with a fixture
-#    seed, and records `fixtureSeedIds` in devnet.json (the Worker refuses those epochs).
-#    Results go to kalien-contract/deployments/devnet-fixture-runs.json.
+#    seed, and records `fixtureSeedIds` in futurenet.json (the Worker refuses those epochs).
+#    Results go to kalien-contract/deployments/futurenet-fixture-runs.json.
 #    Then only the relay lanes may submit (relay-only mode), and set_seed is locked.
 # 6. Writes the relay secret for the Worker to ~/.config/kalien-thruput/relay.secret (0600).
 set -euo pipefail
 source "$(dirname "$0")/env.sh"
 RPC="${KALIEN_RPC_URL:-https://rpc.thruput.network}"
 # Overrides for a rehearsal against a local node (see kalien-contract/README.md).
-DEPLOYMENT="${KALIEN_DEPLOYMENT_FILE:-$KALIEN_REPO_DIR/shared/thruput/deployments/devnet.json}"
-FIXTURE_RUNS="${KALIEN_FIXTURE_RUNS_FILE:-$KALIEN_CONTRACT_DIR/deployments/devnet-fixture-runs.json}"
+DEPLOYMENT="${KALIEN_DEPLOYMENT_FILE:-$KALIEN_REPO_DIR/shared/thruput/deployments/futurenet.json}"
+FIXTURE_RUNS="${KALIEN_FIXTURE_RUNS_FILE:-$KALIEN_CONTRACT_DIR/deployments/futurenet-fixture-runs.json}"
 SECRETS_DIR="${KALIEN_SECRETS_DIR:-$HOME/.config/kalien-thruput}"
 FUND_TIMES="${KALIEN_FUND_TIMES:-1}"
 TOOL=(bun "$KALIEN_CONTRACT_DIR/scripts/kalien.ts")
@@ -47,7 +47,7 @@ if [[ -f "$DEPLOYMENT" ]] && (( FORCE == 0 )); then
   live_hash="$("${TOOL[@]}" network-hash --rpc "$RPC")"
   saved_hash="$(bun -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).networkHash)' "$DEPLOYMENT")"
   if [[ "$live_hash" == "$saved_hash" ]]; then
-    echo "devnet.json already names the live network $live_hash; refusing to redeploy (use --force)" >&2
+    echo "futurenet.json already names the live network $live_hash; refusing to redeploy (use --force)" >&2
     exit 1
   fi
 fi

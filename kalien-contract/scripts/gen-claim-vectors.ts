@@ -36,7 +36,7 @@ addresses.push(addressCase("", new Uint8Array(32).fill(7)));
 const claimCases = [
   {
     tape: "test-short.tape",
-    // Devnet network hash after the 2026-10-24 reset.
+    // Futurenet network hash after the 2026-10-24 reset.
     networkHash: "DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj",
     scoreContract: toBase58(new Uint8Array(32).fill(0x11)),
     seedId: 2_999_999,

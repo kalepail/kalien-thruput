@@ -11,7 +11,7 @@ import { getThruputConfig, onThruputConfigChange, type ThruputConfig } from "./c
 
 let clientPromise: Promise<{ client: KalienClient; config: ThruputConfig }> | null = null;
 
-// The client pins the network hash; after a devnet reset make a new one.
+// The client pins the network hash; after a Futurenet reset make a new one.
 onThruputConfigChange(() => {
   clientPromise = null;
 });

@@ -1,7 +1,7 @@
 # Kalien CLI
 
 Terminal client for autonomous Asteroids farming, run submission, and tape
-replay on the Thruput devnet.
+replay on Thruput Futurenet.
 
 The CLI plays headless games, keeps the best tape for each seed epoch, signs a
 claim with a local Ed25519 key, and submits the tape to the Kalien Worker API.
@@ -18,8 +18,8 @@ The CLI keeps one player key file. It makes the file on first use.
   public key and the address (base58) for reference. The browser wallet can
   import this file.
 - Your player address is the Thruput pubkey account address of the public key
-  (nonce 0, devnet wire 14 rules), in base58. `kalien whoami` prints it.
-- A key file from before the 2026-10-24 devnet upgrade (hex `0x` address) is
+  (nonce 0, Futurenet wire 14 rules), in base58. `kalien whoami` prints it.
+- A key file from before the 2026-10-24 Futurenet upgrade (hex `0x` address) is
   upgraded in place on first use. The secret does not change; the address does.
 - Back up the key with `kalien key export` (`--format hex|base58|strkey`; hex is
   the default). `--format strkey` or `base58` imports into `thruput keys import`.

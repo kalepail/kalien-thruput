@@ -1,4 +1,4 @@
-# Kalien architecture (Thruput devnet)
+# Kalien architecture (Thruput Futurenet)
 
 Kalien is a deterministic Asteroids game. A player plays in the browser (or a bot plays in the
 CLI). The game records every frame's input on a **tape**. A Thruput smart contract replays the
@@ -8,9 +8,9 @@ seed epoch, the contract mints KALIEN for the improvement.
 There is no zero-knowledge proof. The chain runs the replay itself. One transaction replays a
 full 36,000-frame (10-minute) tape.
 
-Network: Thruput devnet, wire format 14.x (implementation 0.41.0 on 2026-10-27). Identifiers
-(addresses, hashes, the network hash) are base58. The devnet can be wiped; then every address
-changes (see "Devnet operations").
+Network: Thruput Futurenet, wire format 14.x (implementation 0.41.0 on 2026-10-27). Identifiers
+(addresses, hashes, the network hash) are base58. Futurenet can be wiped; then every address
+changes (see "Futurenet operations").
 
 ## System map
 
@@ -31,7 +31,7 @@ changes (see "Devnet operations").
         |
         |  Thruput transaction from a relay key (gas capacity reserved in HOG)
         v
- Thruput devnet
+ Thruput Futurenet
  - kalien_score: relay-only submit; verifies the signature, replays the tape with
    asteroids-core, stores the best score, mints, emits ScoreSubmitted
  - kalien_token: KALIEN ERC20, 7 decimals, only kalien_score can mint
@@ -44,7 +44,7 @@ changes (see "Devnet operations").
 | `asteroids-core/` | Rust game core: simulation, tape format, strict verifier. `no_std`, no allocation while it steps. Also the gas probe and the parity tool. | `asteroids-core/README.md`, `docs/thruput/kt-core.md` |
 | `src/game/` | TypeScript twin of the game core. The browser plays it; the Worker pre-checks with it. | `docs/games/asteroids/` |
 | `kalien-contract/` | Thruput contracts `kalien_score` and `kalien_token` (`thruput-sdk =0.57.0`), deploy and test scripts. | `kalien-contract/README.md`, `docs/thruput/kt-contract.md` |
-| `shared/thruput/` | Claim digest helper, read/event/relay helpers (`kalien.ts`), generated TS bindings, devnet deployment record. | `shared/thruput/README.md` |
+| `shared/thruput/` | Claim digest helper, read/event/relay helpers (`kalien.ts`), generated TS bindings, Futurenet deployment record. | `shared/thruput/README.md` |
 | `worker/` | Cloudflare Worker API, relay lanes (Durable Objects), seed cron, event indexer, deploy scripts. | `worker/README.md`, `docs/thruput/kt-worker.md` |
 | `src/` (not `src/game/`) | React client: key wallet, play, submit, run history, leaderboard, replay. | `docs/thruput/kt-client.md` |
 | `cli/` | `kalien` terminal client: key file, bots, submit, status. | `cli/README.md`, `docs/thruput/kt-cli.md` |
@@ -82,9 +82,9 @@ changes (see "Devnet operations").
 ## On-chain contracts
 
 Source: `kalien-contract/contracts/`. Interface: `docs/thruput/PORT-PLAN.md` ("Interface v3").
-Deployment record: `shared/thruput/deployments/devnet.json`.
+Deployment record: `shared/thruput/deployments/futurenet.json`.
 
-Deployed on the wire-14 devnet (network `DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7FcNT`), v3,
+Deployed on wire-14 Futurenet (network `DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7FcNT`), v3,
 `thruput-sdk =0.57.0`:
 
 | Item | Value |
@@ -107,7 +107,7 @@ handover (`handover_token`).
   little-endian (0 maps to `0xDEADBEEF`). The block fields stop a caller from grinding its own
   transaction hash. An epoch stays active for 24 hours (the current epoch and the 143 before it).
   `set_seed` (admin, for fixed-seed fixture tapes) is disabled for good by `lock_seeding()`;
-  the devnet deploy locks seeding after the fixture runs.
+  Futurenet deploy locks seeding after the fixture runs.
 - **`submit_score(player_pubkey, seed_id, tape, signature)`.** Cheap checks run first: not
   paused; the caller is an allowed relay (relay-only mode); the seed exists and is active; the
   tape container (including a zero padding nibble on odd frame counts); tape seed equals the
@@ -170,10 +170,10 @@ Stellar". API: `docs/thruput/PORT-PLAN.md` ("Worker API v0 (as built)").
   across lanes, paged), `/api/runs/:id/tape` (only after confirmation), leaderboard, player page,
   signed profiles, `/api/health`.
 - **Limits.** Per-IP 120 submissions / 10 min, per key 30 / 10 min. Known limit, accepted for
-  devnet: the counters live in memory per isolate, so they do not hold across isolates or
+  Futurenet: the counters live in memory per isolate, so they do not hold across isolates or
   locations.
 - **Blocked epochs.** The Worker refuses the deploy record's `fixtureSeedIds` and any ids in
-  `BLOCKED_SEED_IDS` (`wrangler.jsonc`). On this devnet these are the fixture epochs
+  `BLOCKED_SEED_IDS` (`wrangler.jsonc`). On this Futurenet these are the fixture epochs
   2988105–2988107, whose seeds have public solutions.
 - **RPC rules (wire 14).** Named params objects, base58 identifiers, lowercase `0x` hex
   payloads, decimal-string heights and gas. Admission (`sendTransaction`) is not commitment
@@ -235,16 +235,16 @@ Source: `src/wallet/keyWallet.ts`, `src/hooks/useWallet.ts`.
    `confirmed` or `rejected` (with the contract error). Typical end-to-end time is 2–6 s.
 8. The leaderboard shows the run. Anyone can download the tape and replay it.
 
-## Devnet operations
+## Futurenet operations
 
 Details and commands: [OPERATIONS.md](OPERATIONS.md).
 
 - **After a wipe:** read the new network hash (`getNetworkInfo`), run
-  `kalien-contract/scripts/deploy-devnet.sh` (deploys, links the token, runs the fixtures,
+  `kalien-contract/scripts/deploy-futurenet.sh` (deploys, links the token, runs the fixtures,
   allows the relays, turns on relay-only mode, locks seeding, writes
-  `shared/thruput/deployments/devnet.json`), then deploy the Worker (`bun run deploy`). The Worker
-  reads the contracts from `devnet.json`; its state is per score contract, so it starts clean.
-- **Funding:** the devnet faucet is the RPC method `faucet_requestAirdrop` (through
+  `shared/thruput/deployments/futurenet.json`), then deploy the Worker (`bun run deploy`). The Worker
+  reads the contracts from `futurenet.json`; its state is per score contract, so it starts clean.
+- **Funding:** Futurenet faucet is the RPC method `faucet_requestAirdrop` (through
   `client.requestAirdrop`). Each relay lane needs free HOG for the gas limits of its in-flight
   runs: 16.7 HOG per full-length run (40 HOG while an out-of-gas retry is in flight). Each of the
   4 lanes holds about 999 HOG. Each contract needs HOG for storage deposits.
@@ -261,7 +261,7 @@ Details and commands: [OPERATIONS.md](OPERATIONS.md).
 - The admin can pause, change the admin, and change the relay allowlist. Seeding is locked after
   deploy.
 - The block proposer sets the block time, so a malicious proposer could bias new seeds. On
-  devnet the proposer is the operator.
+  Futurenet the proposer is the operator.
 - Contracts are immutable. A change needs a redeploy, and players' old best scores and balances
   stay on the old contract.
 
@@ -281,14 +281,14 @@ serve tapes only after their epoch closes, require tapes to end soon after game 
 (`sha256(epoch_seed || player_pubkey)`), which ends copying but also ends the shared asteroid
 layout per epoch.
 
-**Decision 2026-10-24: accepted for devnet; options kept for a future mainnet-like deployment.**
+**Decision 2026-10-24: accepted for Futurenet; options kept for a future mainnet-like deployment.**
 
 ## Deployment status (2026-10-27)
 
 - Worker live at `https://thruput.kalien.xyz` (custom domain; also
-  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `457563ca` (2026-10-27, after the devnet wipe).
-- Contracts v3 on the wire-14 devnet; addresses in `shared/thruput/deployments/devnet.json` and
+  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `457563ca` (2026-10-27, after Futurenet wipe).
+- Contracts v3 on wire-14 Futurenet; addresses in `shared/thruput/deployments/futurenet.json` and
   the table under "On-chain contracts".
 - 4 relay lanes, about 999 HOG each.
-- Known limits accepted for devnet: per-isolate rate limits; copycat tapes (see above).
+- Known limits accepted for Futurenet: per-isolate rate limits; copycat tapes (see above).
 - Review findings and their status: `docs/thruput/review.md`.

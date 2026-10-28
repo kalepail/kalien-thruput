@@ -171,7 +171,7 @@ export function readKeyFile(path: string): Identity {
   const secret = parseSecretKey(parsed.secretKey);
   const identity = identityFromSecret(secret, path);
   if (parsed.address?.startsWith("0x")) {
-    // Written before the 2026-10-24 devnet upgrade (hex address, old derivation).
+    // Written before the 2026-10-24 Futurenet upgrade (hex address, old derivation).
     // The secret is unchanged; refresh the reference fields in place.
     const tmp = `${path}.tmp-${process.pid}`;
     const createdAt = parsed.createdAt ?? new Date().toISOString();

@@ -49,7 +49,7 @@ deployed Worker with a request that is rejected before any chain write.
 | 10 | Failed runs re-posted without limit | **Fixed** | `20781c0` (deterministic faults and a second out-of-gas are `final`; `enqueue` re-queues only non-final failures) | `worker/relay/store.ts` `enqueue`. |
 | 11 | Indexer cannot recover from a bad cursor | **Fixed** | `20781c0` (`POST /api/admin/indexer/reset?fromHeight=N`; no re-scan of quiet ranges) | Code. |
 | 12 | Admin key compare not constant-time | **Fixed** | `20781c0` (`constantTimeEqual`) | Code; live: wrong key → 404. |
-| 13 | Deploy script re-run and secret file | **Fixed** | `eb10818` (refuses a live network without `--force`; secrets written atomically) | `deploy-devnet.sh` header and code. |
+| 13 | Deploy script re-run and secret file | **Fixed** | `eb10818` (refuses a live network without `--force`; secrets written atomically) | `deploy-futurenet.sh` header and code. |
 | 14 | Client keeps stale chain config after a reset | **Fixed** | `0e9b175` (config re-read on focus, every 5 min, and on `bad_signature`; a new network hash or contract swaps the client, clears the seed cache, re-reads the balance, shows a notice, and re-signs a refused submit once) | `tests/src/review-low-findings.test.ts`; browser: a changed `/api/config` shows the reset notice (kt-client round 7). |
 | 15 | Client polling never ends on permanent errors | **Fixed** | `0e9b175` (`nextPollStep`: stop on 404 and after 15 min; errors back off 5 s → 60 s) | `tests/src/review-low-findings.test.ts`. |
 | 16 | Seed fetch race; endless-mode gate | **Fixed** | Race: `b33ab18` (server epoch trusted). Gate: `0e9b175` (`src/runs/endlessGate.ts`: only confirmed scores count; a stronger queued run blocks weaker ones, a rejected/failed one does not) | `tests/src/review-low-findings.test.ts` (6 gate cases). |
@@ -84,7 +84,7 @@ Copycat tapes: accepted for devnet (decision 2026-10-24), not a finding.
 
 ## 2. Medium (time-limited): fixture epoch with a public, unclaimed solution
 
-- **Where:** `kalien-contract/scripts/kalien.ts:286-308` (`cmdFixtures`), `deploy-devnet.sh:53-59`.
+- **Where:** `kalien-contract/scripts/kalien.ts:286-308` (`cmdFixtures`), `deploy-futurenet.sh:53-59`.
 - **Evidence (devnet views, read-only, 2026-10-24):** current `seed_id` 2988097. `seed(2988058)`
   = 1598125870 (`0x5F41772E`), active (inside the 144-epoch window).
   `is_claimed(kalien-911260-seed1598125870-single-mutation.tape)` = false, and
@@ -178,8 +178,8 @@ Copycat tapes: accepted for devnet (decision 2026-10-24), not a finding.
     next walk at the first page's latest indexed height to avoid re-scanning quiet ranges.
 12. **Admin key compare is not constant-time** (`worker/api/http.ts:67`). Compare SHA-256 digests
     with `crypto.subtle.timingSafeEqual`. Remote exploitation is unlikely.
-13. **Deploy script re-run and secret file** (`kalien-contract/scripts/deploy-devnet.sh:47, 62`):
-    a re-run on a live devnet deploys a new pair and overwrites `devnet.json` (old relays stay
+13. **Deploy script re-run and secret file** (`kalien-contract/scripts/deploy-futurenet.sh:47, 62`):
+    a re-run on a live devnet deploys a new pair and overwrites `futurenet.json` (old relays stay
     allowed on the old contract); the shell redirect truncates `relay.secret` before
     `export-secret` runs. Guard on a matching network hash unless `--force`; write the secret to
     a temp file and `mv` it.

@@ -24,7 +24,7 @@ function configBody(networkFill: number, scoreFill: number) {
   };
 }
 
-describe("item 14: stale network config after a devnet reset", () => {
+describe("item 14: stale network config after a Futurenet reset", () => {
   const realFetch = globalThis.fetch;
   let unsubscribe: (() => void) | null = null;
   afterEach(() => {
@@ -179,7 +179,7 @@ describe("item 17: dev proxies and CSP", () => {
     });
   });
 
-  it("ships a CSP that allows only self, the devnet RPC, and the music host", () => {
+  it("ships a CSP that allows only self, the Futurenet RPC, and the music host", () => {
     const headers = readFileSync(new URL("../../public/_headers", import.meta.url), "utf8");
     const csp = headers.match(/Content-Security-Policy:\s*(.+)/)?.[1] ?? "";
     const directives = Object.fromEntries(
@@ -190,7 +190,7 @@ describe("item 17: dev proxies and CSP", () => {
     );
     const deployment = JSON.parse(
       readFileSync(
-        new URL("../../shared/thruput/deployments/devnet.json", import.meta.url),
+        new URL("../../shared/thruput/deployments/futurenet.json", import.meta.url),
         "utf8",
       ),
     ) as { rpcUrl: string };

@@ -110,9 +110,9 @@ Root `README.md` and `docs/`: the coordinator merges at the end; each agent may 
 
 v3 is built on `thruput-sdk` 0.54.0, tested on RV32, and deployed on the wire-14 devnet on
 2026-10-24 (score `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`, token
-`AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87`; always read them from `deployments/devnet.json`).
+`AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87`; always read them from `deployments/futurenet.json`).
 Changes from v0 are marked **(v1)**, from the adversarial review **(v2)**, from the final layout
-pass **(v3)**. Identifiers are base58 on the wire and in `devnet.json`.
+pass **(v3)**. Identifiers are base58 on the wire and in `futurenet.json`.
 
 ### Score contract `kalien_score`
 
@@ -201,7 +201,7 @@ Deploy order: token `initialize(deployer)`, then score `initialize(admin, token)
 
 ### Shared TS (`shared/thruput/`, owned by `contract`)
 
-- `deployments/devnet.json`: `{ network, networkHash, rpcUrl, explorerUrl, scoreContract,
+- `deployments/futurenet.json`: `{ network, networkHash, rpcUrl, explorerUrl, scoreContract,
   tokenContract, admin, deployedAt, deployTxs, artifacts, fixtureSeedIds, fixtureEpochs }`,
   identifiers in base58. `fixtureSeedIds` are the epochs the deploy seeded for public fixture
   tapes; relays must refuse them (`isFixtureSeedId(config, seedId)`) until `fixtureEpochs[].activeUntil`.

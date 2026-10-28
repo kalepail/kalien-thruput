@@ -49,7 +49,7 @@ export interface WalletBackupFile {
   stellarPublicKey: string;
   secretKey: string;
   createdAt: string;
-  network: "thruput-devnet";
+  network: "thruput-futurenet";
 }
 
 function storage(): Storage | null {
@@ -166,7 +166,7 @@ export async function encodeBackupFile(stored: StoredWallet): Promise<WalletBack
     stellarPublicKey: wallet.publicKeyStrkey,
     secretKey: stored.secretKey,
     createdAt: stored.createdAt,
-    network: "thruput-devnet",
+    network: "thruput-futurenet",
   };
 }
 
@@ -197,7 +197,7 @@ function isRawSeedText(text: string): boolean {
   return isHexOfLength(text, 32) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/u.test(text);
 }
 
-/** Every 32-byte value a public identifier text can stand for (hex, base58, G / C StrKey). */
+/** Every 32-byte value a public identifier text can stand for (hex, base58, G / Z StrKey). */
 function publicValueBytes(text: string): string[] {
   const trimmed = text.trim();
   const out: string[] = [];
@@ -287,7 +287,7 @@ export async function parseBackup(
     }
     secretText = parsed.secretKey;
     if (typeof parsed.createdAt === "string") createdAt = parsed.createdAt;
-    // Files from before the 2026-10-24 devnet upgrade hold a hex address from the
+    // Files from before the 2026-10-24 Futurenet upgrade hold a hex address from the
     // old derivation. The secret is still valid; only base58 addresses are checked.
     if (typeof parsed.address === "string" && !isHex32(parsed.address)) {
       expectedAddress = parsed.address.trim();

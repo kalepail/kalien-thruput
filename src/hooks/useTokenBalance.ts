@@ -55,10 +55,10 @@ export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
         return;
       }
       const detail = err instanceof Error ? err.message : "failed to load token balance";
-      // A devnet reset changes the network hash; the pinned client then refuses it.
+      // A Futurenet reset changes the network hash; the pinned client then refuses it.
       setError(
         /network identity|network mismatch/i.test(detail)
-          ? "the network changed (devnet reset?); reload the page"
+          ? "the network changed (Futurenet reset?); reload the page"
           : detail,
       );
     } finally {
@@ -68,7 +68,7 @@ export function useTokenBalance(walletAddress: string): UseTokenBalanceReturn {
     }
   }, [walletAddress]);
 
-  // A devnet reset replaces the token contract: read the balance again.
+  // A Futurenet reset replaces the token contract: read the balance again.
   useEffect(() => onThruputConfigChange(() => void refresh()), [refresh]);
 
   // Refresh when the address changes, then poll while the tab is visible.

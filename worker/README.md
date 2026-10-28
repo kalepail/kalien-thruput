@@ -1,6 +1,6 @@
 # Cloudflare Worker
 
-API, relay, and leaderboard for Kalien on the Thruput devnet. No ZK: the
+API, relay, and leaderboard for Kalien on Thruput Futurenet. No ZK: the
 `kalien_score` contract replays each tape on-chain.
 
 ## Responsibilities
@@ -40,7 +40,7 @@ API, relay, and leaderboard for Kalien on the Thruput devnet. No ZK: the
 ## Local run
 
 ```bash
-thruput node --port 9745 --key <key> --data-dir <dir>   # or use devnet
+thruput node --port 9745 --key <key> --data-dir <dir>   # or use Futurenet
 cp .dev.vars.example .dev.vars                            # fill in
 WRANGLER_LOG_PATH=.wrangler/logs npx wrangler d1 migrations apply kalien-thruput-leaderboard --local
 node node_modules/vite/bin/vite.js dev --port 5174

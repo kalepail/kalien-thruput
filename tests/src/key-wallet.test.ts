@@ -142,7 +142,7 @@ describe("key backup", () => {
       pubkey: "00",
       secretKey: stored.secretKey,
       createdAt: "2026-10-23T00:00:00.000Z",
-      network: "thruput-devnet",
+      network: "thruput-futurenet",
     };
     expect((await parseBackup(JSON.stringify(legacy))).stored.secretKey).toBe(stored.secretKey);
   });

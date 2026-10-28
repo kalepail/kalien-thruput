@@ -24,8 +24,6 @@ autopilot uses it on the host. The TS sim in `src/game/` must match it on every 
 
 ## Commands
 
-Set `CARGO_HOME=$HOME/.cargo-thruput` (see `docs/OPERATIONS.md`).
-
 ```bash
 cargo test --release --manifest-path asteroids-core/Cargo.toml
 UPDATE_GOLDEN=1 cargo test --release --manifest-path asteroids-core/Cargo.toml --test golden  # only for an intended rules change

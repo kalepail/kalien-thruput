@@ -16,7 +16,7 @@ function getStorageKey(walletAddress: string, networkKey: string): string | null
   if (!address) {
     return null;
   }
-  // Devnet resets change the score contract, so scope the cache to it.
+  // Futurenet resets change the score contract, so scope the cache to it.
   const network = nonEmpty(networkKey) ?? "unknown-network";
   return `${STORAGE_KEY_PREFIX}:${network}:${address}`;
 }

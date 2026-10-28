@@ -38,15 +38,15 @@ export function normalizeId(raw: string | null | undefined): string | null {
   return bytes ? id58(bytes) : null;
 }
 
-const STRKEY_CONTRACT = /^C[A-Z2-7]{55}$/u;
+const STRKEY_ADDRESS = /^Z[A-Z2-7]{55}$/u;
 
 /**
- * Normalizes address input to base58: base58, 64 hex chars, or a legacy
- * C StrKey. Null when invalid. Base58 is case-sensitive; it is kept as is.
+ * Normalizes address input to base58: base58, 64 hex chars, or a Thruput
+ * Z StrKey. Null when invalid. Base58 is case-sensitive; it is kept as is.
  */
 export function normalizeAddressInput(raw: string | null | undefined): string | null {
   const value = raw?.trim();
-  if (value && STRKEY_CONTRACT.test(value)) {
+  if (value && STRKEY_ADDRESS.test(value)) {
     try {
       return toBase58(parseAddress(value));
     } catch {

@@ -67,11 +67,3 @@ panic = "abort"
 lto = true
 codegen-units = 1
 
-[registries]
-thruput = { index = "sparse+https://crates.thruput.network/api/v1/crates/" }
-# ~/.cargo/config.toml (read because this tree sits under $HOME) names the same index
-# `groundhog`; Cargo rejects two names for one index, so point that name elsewhere.
-groundhog = { index = "sparse+https://groundhog-registry-unused.invalid/" }
-
-[source]
-thruput = { registry = "sparse+https://crates.thruput.network/api/v1/crates/" }

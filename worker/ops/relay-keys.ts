@@ -10,7 +10,7 @@
 /* eslint-disable no-await-in-loop -- operator script: polls and steps in order */
 import {
   createThruputClient,
-  devnet,
+  futurenet,
   Ed25519Signer,
   createPubkeyAccount,
   toBase58,
@@ -52,7 +52,7 @@ const client = await createThruputClient({
   cluster:
     rpcUrl.includes("127.0.0.1") || rpcUrl.includes("localhost")
       ? localnet({ rpcUrl })
-      : devnet({ rpcUrl }),
+      : futurenet({ rpcUrl }),
 });
 
 const hog = async (address: Uint8Array) =>

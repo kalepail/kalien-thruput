@@ -18,7 +18,7 @@ variables unset; its checks passed: 84 worker tests, lint, format). `review.md` 
 
 Tests: `tests/src/review-low-findings.test.ts` (11 cases: config change and notify; 404 stop,
 backoff, time limit; 6 gate cases; proxies ignored in a build; CSP directives, incl. the
-`devnet.json` RPC origin). `bun test tests/src`: 78 pass, 0 fail. Typecheck (app, node), lint,
+`futurenet.json` RPC origin). `bun test tests/src`: 78 pass, 0 fail. Typecheck (app, node), lint,
 format clean.
 
 Checks before deploy: a build with `KALIEN_API_PROXY` and `KALIEN_RPC_PROXY` set contains neither
@@ -170,7 +170,7 @@ Notes:
 
 **Status: green on the mock API.** Typecheck, lint, format clean for `src`; `bun test tests/src`
 46 pass, 0 fail. The real end-to-end pass waits for a migrated Worker and new devnet contracts
-(the local Worker on 5174 is down; `devnet.json` still holds pre-upgrade hex ids).
+(the local Worker on 5174 is down; `futurenet.json` still holds pre-upgrade hex ids).
 
 | Commit | Content |
 |---|---|
@@ -233,7 +233,7 @@ wallet, `/runs`, leaderboard, player page, replay, header menu).
   case-sensitive, so please use the canonical base58 strings unchanged (the browser signs them
   unchanged). Accept base58 addresses in `normalizeAddress`, return base58 for addresses and tx
   hashes. Tell me when a migrated local Worker runs, so I can repeat the real pass.
-- **kt-contract:** `deployments/devnet.json` still has the old hex ids; the browser accepts both.
+- **kt-contract:** `deployments/futurenet.json` still has the old hex ids; the browser accepts both.
 - **core:** `src/game/math.ts` and `src/game/Autopilot.ts` comments still mention ZK/Stellar.
 
 ## Round 1 (STOP point A)

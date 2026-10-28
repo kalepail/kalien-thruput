@@ -25,7 +25,7 @@
     "binding": "ASSETS",
   },
   "vars": {
-    // Network and contracts come from shared/thruput/deployments/devnet.json at
+    // Network and contracts come from shared/thruput/deployments/futurenet.json at
     // build time. Set these only to override it (for example, a local node:
     // set THRUPUT_RPC_URL and the contracts in .dev.vars).
     "THRUPUT_RPC_URL": "",

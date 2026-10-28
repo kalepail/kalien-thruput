@@ -1,36 +1,28 @@
-# Operations: setup, tests, deploy, devnet reset
+# Operations: setup, tests, deploy, Futurenet reset
 
-Commands for every part of Kalien on the Thruput devnet. Each component README has more detail.
+Commands for every part of Kalien on Thruput Futurenet. Each component README has more detail.
 
 ## Versions (2026-10-27)
 
 | Item | Version |
 |---|---|
-| Devnet | wire format 14.1.1, implementation 0.41.0, release 0.1.31 |
+| Futurenet | wire format 14.1.1, implementation 0.41.0, release 0.1.31 |
 | Thruput CLI | `thruput 0.41.0` |
 | Local node bundle | `hog-devnode 0.1.31` |
 | Contract SDK | `thruput-sdk =0.57.0` (registry `thruput`; 0.57.2 is current upstream) |
 | TS client | `@thruputchain/client@0.23.0` + `@thruputchain/protocol@0.18.0` (0.25.0 is current upstream) |
 
-Read the devnet's version and network hash with the RPC (`getVersionInfo`, `getNetworkInfo`,
+Read Futurenet's version and network hash with the RPC (`getVersionInfo`, `getNetworkInfo`,
 `params: {}`) before you sign anything. Identifiers are base58.
 
 ## Setup
 
-- **Bun dependencies.** `@thruputchain/*` packages come from GitHub Packages. `.npmrc` reads the
-  token from `GH_NPM_TOKEN`, which needs the `read:packages` scope. Set it before every install.
+- **Bun dependencies.** `@thruputchain/*` packages come from the public npm registry; `bun install`
+  needs no token.
 
-  ```bash
-  export GH_NPM_TOKEN="$(gh auth token)"
-  bun install
-  ```
-
-- **Rust for contracts.** Always set `CARGO_HOME=$HOME/.cargo-thruput` for `cargo`,
-  `thruput build`, `thruput test`, and `thruput deploy`. Contract projects pin their nightly
-  toolchain in `rust-toolchain.toml`. Start new contract projects from `thruput new`.
-- **Registry clash.** Cargo reads `~/.cargo/config.toml` for every project under `$HOME`. If it
-  names the Thruput index `groundhog`, Cargo refuses the second name `thruput`. Each Thruput
-  project's `.cargo/config.toml` points `groundhog` to an unused index.
+- **Rust for contracts.** Thruput crates come from crates.io; no registry setup or token is
+  needed. Contract projects pin their nightly toolchain in `rust-toolchain.toml`. Start new
+  contract projects from `thruput new`. Install the CLI with `cargo +stable install thruput --locked`.
 - **Contract stack size.** Contracts that replay tapes put
   `"-C", "link-arg=--defsym=__stack_size=16384",` in `.cargo/config.toml` rustflags **before**
   the `-Tthruput-rv32.ld` line (after it, the linker ignores it).
@@ -62,7 +54,7 @@ Read the devnet's version and network hash with the RPC (`getVersionInfo`, `getN
 | Gas and memory probe (RV32) | `cd asteroids-core/gas-probe && thruput test --show-output` |
 | Contracts (native + RV32 + claim vectors) | `kalien-contract/scripts/test.sh` |
 | Contracts on a local node | `bun kalien-contract/scripts/kalien.ts integration --rpc http://127.0.0.1:<port>` |
-| Shared TS helpers | `bun test shared/thruput/` (`KALIEN_LIVE=1` for the live devnet test) |
+| Shared TS helpers | `bun test shared/thruput/` (`KALIEN_LIVE=1` for live Futurenet test) |
 | Worker | `bun test tests/worker`, `bun run typecheck:worker` |
 | Browser modules | `bun test tests/src` |
 | CLI | `cd cli && bun test src` |
@@ -75,30 +67,30 @@ Read the devnet's version and network hash with the RPC (`getVersionInfo`, `getN
 
 ## Deploy
 
-### Contracts (devnet)
+### Contracts (Futurenet)
 
 ```bash
-kalien-contract/scripts/deploy-devnet.sh [--skip-fixtures] [--force]
+kalien-contract/scripts/deploy-futurenet.sh [--skip-fixtures] [--force]
 ```
 
 The script (v3 contracts):
 
-1. Refuses to run if `shared/thruput/deployments/devnet.json` already names the live network
+1. Refuses to run if `shared/thruput/deployments/futurenet.json` already names the live network
    (a live deploy); `--force` deploys a second pair anyway.
 2. Builds both RV32 artifacts and the TS bindings.
 3. Creates the keys `kalien-deployer`, `kalien-test-player`, and the relay lanes `kalien-relay`,
    `kalien-relay-2` … `kalien-relay-4` if missing, and funds them from the faucet when they hold
    less than 100 HOG.
-4. Deploys `kalien_token` and `kalien_score`, links them, and writes `devnet.json`.
+4. Deploys `kalien_token` and `kalien_score`, links them, and writes `futurenet.json`.
 5. Creates the current seed, allows the relay lanes, and turns on relay-only mode.
 6. Unless `--skip-fixtures`: fixes fixture seeds on three old epochs that expire within about an
    hour, submits the fixture tapes, claims every other repo tape with a fixture seed, and records
-   `fixtureSeedIds` in `devnet.json`. The Worker refuses those epochs by itself (it also reads
+   `fixtureSeedIds` in `futurenet.json`. The Worker refuses those epochs by itself (it also reads
    extra ids from `BLOCKED_SEED_IDS`).
 7. Locks seeding for good, and writes the relay secret to `~/.config/kalien-thruput/relay.secret`
    (mode 600; other lanes go to `relay-N.secret`, written only when missing).
 
-Current deployment (2026-10-27, wire-14 devnet `DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7FcNT`):
+Current deployment (2026-10-27, wire-14 Futurenet `DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7FcNT`):
 score `C56KRpv5dFR5EEynb3FVWcyt8Gst85SEQ611ZL3zdgmo`, token
 `HmuwsXqTSooVKLLkREKxWHB93Tea1B6ASh8Z9ywXxNMp`, 4 relay lanes (allowlist up to 8), fixture epochs
 2988401–2988403 blocked.
@@ -115,30 +107,30 @@ bun run smoke                        # worker/ops/smoke.ts against the deployed 
   `~/.config/kalien-thruput`): `relay.secret`, `relay-2.secret`, … (one per lane) and
   `dev-api.key`. It pipes them to wrangler and never prints them.
 - The Worker reads the contract addresses and network hash from
-  `shared/thruput/deployments/devnet.json`; `wrangler.jsonc` vars can override them.
+  `shared/thruput/deployments/futurenet.json`; `wrangler.jsonc` vars can override them.
 - `worker/ops/relay-keys.ts` lists, funds, and exports lane keys. Each lane address must be
   allowed on the score contract (relay allowlist).
 - Live at `https://thruput.kalien.xyz` (custom domain on the `kalien.xyz` zone; also
-  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `457563ca` (2026-10-27, after the devnet wipe).
+  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `457563ca` (2026-10-27, after Futurenet wipe).
 - Gas policy (`wrangler.jsonc`): `RELAY_GAS_BASE` 5,000,000 + `RELAY_GAS_PER_FRAME` 4,500 × frames
   (max `RELAY_GAS_MAX` 167M), one out-of-gas retry at 2.5× (`RELAY_GAS_RETRY_TENTHS` 25) up to
   `RELAY_GAS_RETRY_MAX` 400M. Worst valid tape measured: 110.9M with contract overhead.
 - The Worker refuses the deploy record's `fixtureSeedIds` and any extra ids in `BLOCKED_SEED_IDS`
   (fixture epochs with public solutions).
-- Rate limits are in memory per isolate (known limit, accepted for devnet).
+- Rate limits are in memory per isolate (known limit, accepted for Futurenet).
 
-## Devnet reset (after a wipe)
+## Futurenet reset (after a wipe)
 
 A wipe changes the network hash, all addresses, and all balances. Keys in
-`~/.config/thruput/keys/` survive; their devnet accounts are empty.
+`~/.config/thruput/keys/` survive; their Futurenet accounts are empty.
 
 1. Read the new network hash: `getNetworkInfo` on `https://rpc.thruput.network`. Check that
    `getVersionInfo.wireFormat` matches the pinned TS client and CLI; upgrade them first if not.
 2. Fund the deployer and every relay lane key with `faucet_requestAirdrop` (keep the request
    and its nonce; the SDK calls it once and only waits). For the lanes:
    `bun worker/ops/relay-keys.ts --fund` (airdrops to lanes under `--min` HOG, default 50).
-3. Run `kalien-contract/scripts/deploy-devnet.sh`. It writes the new
-   `shared/thruput/deployments/devnet.json`.
+3. Run `kalien-contract/scripts/deploy-futurenet.sh`. It writes the new
+   `shared/thruput/deployments/futurenet.json`.
 4. Allow every lane relay on the new score contract, then `bun run deploy` (with `--secrets` if
    the lane keys changed). The Worker's state is per score contract, so it starts clean.
 5. Run `bun run smoke` and `bun run scripts/e2e-runs.ts --api-url <worker-url>`.
@@ -155,7 +147,7 @@ A wipe changes the network hash, all addresses, and all balances. Keys in
   entry on the score contract and about 0.002 HOG per new KALIEN holder on the token. Alert when
   a contract balance drops below 5 HOG; top up with `thruput transfer`. An empty contract stalls
   new runs (they are excluded from blocks, not failed).
-- **Faucet.** `faucet_requestAirdrop` on devnet (on the old devnet it gave 1,000 HOG per call).
+- **Faucet.** `faucet_requestAirdrop` on Futurenet (on the old Futurenet it gave 1,000 HOG per call).
 
 ## Secrets
 

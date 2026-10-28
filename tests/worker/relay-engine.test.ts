@@ -282,7 +282,7 @@ describe("RelayEngine", () => {
     ]);
   });
 
-  it("treats a wallet abort that used the whole child budget as out of gas (devnet case)", async () => {
+  it("treats a wallet abort that used the whole child budget as out of gas (Futurenet case)", async () => {
     const run = await newRun(mediumTape);
     const first = scoreGas(DEFAULT_RELAY_POLICY, 5000) + DEFAULT_RELAY_POLICY.walletGasOverhead;
     chain.minGasToSucceed = first + 1n;

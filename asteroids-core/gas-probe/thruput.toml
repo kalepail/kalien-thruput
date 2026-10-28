@@ -19,15 +19,15 @@ default_key = "kt-core-local"
 # address = "0x0000000000000000000000000000000000000000000000000000000000000000"
 # owner_public_key = "0x0000000000000000000000000000000000000000000000000000000000000000"
 
-[profile.devnet]
-network = "devnet"
+[profile.futurenet]
+network = "futurenet"
 default_key = "kt-core-devnet"
-# Set with `thruput wallet use <NAME> --profile devnet`.
+# Set with `thruput wallet use <NAME> --profile futurenet`.
 # default_wallet = "alice"
 
-[profile.devnet.contracts]
+[profile.futurenet.contracts]
 # gas-probe = "<base58 address>"
 
-# [profile.devnet.wallets.alice]
+# [profile.futurenet.wallets.alice]
 # address = "0x0000000000000000000000000000000000000000000000000000000000000000"
 # owner_public_key = "0x0000000000000000000000000000000000000000000000000000000000000000"

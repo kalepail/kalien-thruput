@@ -1,6 +1,6 @@
 # Security headers for every static response (HTML, JS, CSS, fonts).
 # The player's secret key lives in localStorage, so the CSP allows scripts only
-# from this origin and network reads only from this origin and the devnet RPC
+# from this origin and network reads only from this origin and the Futurenet RPC
 # (review item 17). Update connect-src if /api/config ever points at another RPC.
 # media-src: game music (src/game/AudioSystem.ts). Fonts are bundled files.
 /*

@@ -11,7 +11,7 @@ network = "local"
 
 [profile.local.contracts]
 
-[profile.devnet]
-network = "devnet"
+[profile.futurenet]
+network = "futurenet"
 
-[profile.devnet.contracts]
+[profile.futurenet.contracts]

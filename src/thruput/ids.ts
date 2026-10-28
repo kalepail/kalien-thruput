@@ -1,5 +1,5 @@
 // Thruput identifiers (addresses, hashes, network hash) are 32 bytes. Since the
-// wire-14 devnet they are base58 on the wire, in tools, and in this UI. Older
+// wire-14 Futurenet they are base58 on the wire, in tools, and in this UI. Older
 // data (pre-upgrade API rows, backups, local storage) used 0x hex, so parsing
 // accepts both and display always uses base58.
 

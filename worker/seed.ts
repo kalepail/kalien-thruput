@@ -1,6 +1,6 @@
 import type { ChainContext } from "./chain/context";
 import { SEED_ACTIVE_EPOCHS, SEED_EPOCH_SECONDS } from "./constants";
-import deployment from "../shared/thruput/deployments/devnet.json";
+import deployment from "../shared/thruput/deployments/futurenet.json";
 import type { WorkerEnv } from "./env";
 import { getSeed, recordSeed } from "./leaderboard/store";
 

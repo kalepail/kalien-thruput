@@ -1,7 +1,7 @@
 ![Kalien](public/kalien-meta-2.jpg)
 # Kalien
 
-Kalien is a deterministic Asteroids game on the **Thruput devnet**. You play in the browser. The
+Kalien is a deterministic Asteroids game on **Thruput Futurenet**. You play in the browser. The
 game records your inputs on a tape. A Thruput smart contract replays the tape on chain with the
 Rust game core, checks the score, keeps your best score per 10-minute seed epoch, and mints
 KALIEN for each improvement.
@@ -11,12 +11,12 @@ first visit. A relay pays the transaction, and your signature binds the run to y
 
 - App: `https://thruput.kalien.xyz` (live; the same Worker also answers at
   `https://kalien-thruput.sdf-ecosystem.workers.dev`)
-- Chain: Thruput devnet (wire format 14, base58 identifiers), RPC `https://rpc.thruput.network`,
+- Chain: Thruput Futurenet (wire format 14, base58 identifiers), RPC `https://rpc.thruput.network`,
   explorer `https://explorer.thruput.network/`
 - Contracts (v3): score `C56KRpv5dFR5EEynb3FVWcyt8Gst85SEQ611ZL3zdgmo`, token
   `HmuwsXqTSooVKLLkREKxWHB93Tea1B6ASh8Z9ywXxNMp` on network
   `DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7FcNT` (source of truth:
-  `shared/thruput/deployments/devnet.json`)
+  `shared/thruput/deployments/futurenet.json`)
 
 ## Components
 
@@ -24,8 +24,8 @@ first visit. A relay pays the transaction, and your signature binds the run to y
 |---|---|
 | [`asteroids-core/`](asteroids-core/README.md) | Rust game core and strict tape verifier (`no_std`, used on chain) |
 | [`src/game/`](src/game/) | TypeScript twin of the game core (browser play, Worker pre-check) |
-| [`kalien-contract/`](kalien-contract/README.md) | Thruput contracts (`thruput-sdk =0.57.0`): `kalien_score` (on-chain replay, best scores, mint) and `kalien_token` (KALIEN) |
-| [`shared/thruput/`](shared/thruput/README.md) | Claim digest helper, generated TS bindings, devnet deployment record |
+| [`kalien-contract/`](kalien-contract/README.md) | Thruput contracts (`thruput-sdk =0.58.0`): `kalien_score` (on-chain replay, best scores, mint) and `kalien_token` (KALIEN) |
+| [`shared/thruput/`](shared/thruput/README.md) | Claim digest helper, generated TS bindings, Futurenet deployment record |
 | [`worker/`](worker/README.md) | Cloudflare Worker: API, relay lanes (Durable Objects), seed cron, leaderboard indexer |
 | [`src/`](src/) | React client: key wallet, play, submit, run history, leaderboard, replay |
 | [`cli/`](cli/README.md) | `kalien` terminal client: key file, bots, submit, status |
@@ -37,17 +37,11 @@ How the parts fit: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## How to run and deploy
 
-> **Access note.** The build needs `@thruputchain/client` and `@thruputchain/protocol`, which
-> Project Thruput publishes as private GitHub Packages. Without access to them, `bun install`
-> fails. You can still read the code, run the Rust game core and its tests, and play the live
-> app at `https://thruput.kalien.xyz`.
-
-### Play against the live devnet (fastest)
+### Play against Futurenet (fastest)
 
 ```bash
-export GH_NPM_TOKEN="$(gh auth token)"   # @thruputchain packages come from GitHub Packages
-bun install
-bun run dev                              # browser app + Worker; contracts from shared/thruput/deployments/devnet.json
+bun install                              # @thruputchain packages come from npm
+bun run dev                              # browser app + Worker; contracts from shared/thruput/deployments/futurenet.json
 ```
 
 The local Worker needs `.dev.vars` (copy `.dev.vars.example`: `RELAY_SECRETS`, `DEV_API_KEY`).
@@ -56,13 +50,12 @@ To use the deployed API instead: `KALIEN_API_PROXY=https://thruput.kalien.xyz bu
 ### Full stack on a local node
 
 ```bash
-export CARGO_HOME=$HOME/.cargo-thruput
-# 1. A local chain (CLI 0.41.0, hog-devnode 0.1.31). The key gets 1,000 HOG at genesis.
+# 1. A local chain (CLI 0.42.0, hog-devnode 0.1.31). The key gets 1,000 HOG at genesis.
 thruput node --port 9745 --key <your-key> --initial-account-hog 1000
-# 2. Contracts on it: deploy-devnet.sh in rehearsal mode (separate deployment file and secrets).
+# 2. Contracts on it: deploy-futurenet.sh in rehearsal mode (separate deployment file and secrets).
 KALIEN_RPC_URL=http://127.0.0.1:9745 KALIEN_DEPLOYMENT_FILE=$TMPDIR/local-deploy.json \
 KALIEN_SECRETS_DIR=$TMPDIR/kalien-secrets KALIEN_FIXTURE_RUNS_FILE=$TMPDIR/local-fixtures.json \
-  kalien-contract/scripts/deploy-devnet.sh --skip-fixtures
+  kalien-contract/scripts/deploy-futurenet.sh --skip-fixtures
 # 3. Worker + app against the node: copy .dev.vars.example to .dev.vars.local and fill the
 #    local-node block (THRUPUT_RPC_URL, SCORE_CONTRACT, TOKEN_CONTRACT) and the relay secrets.
 CLOUDFLARE_ENV=local node node_modules/vite/bin/vite.js dev --port 5174
@@ -85,20 +78,20 @@ kalien-contract/scripts/test.sh                                     # contracts:
 bun run asteroids-core/parity/parity.ts                             # TS/Rust replay parity
 ```
 
-### Deploy after a devnet wipe
+### Deploy after a Futurenet wipe
 
 ```bash
-kalien-contract/scripts/deploy-devnet.sh   # new contracts, relay lanes allowed, writes devnet.json
+kalien-contract/scripts/deploy-futurenet.sh   # new contracts, relay lanes allowed, writes futurenet.json
                                             # (the Worker refuses its fixtureSeedIds by itself)
 bun worker/ops/relay-keys.ts --fund         # fund relay lanes below 50 HOG
 bash worker/ops/deploy.sh --secrets         # checks, build from HEAD, D1 migrations, deploy, secrets
 bun run smoke                               # smoke test against the deployed Worker
 ```
 
-Step by step, with funding and secrets: [docs/OPERATIONS.md](docs/OPERATIONS.md#devnet-reset-after-a-wipe).
+Step by step, with funding and secrets: [docs/OPERATIONS.md](docs/OPERATIONS.md#futurenet-reset-after-a-wipe).
 
 Copied tapes can earn the same reward under another key. Decision 2026-10-24: accepted for
-devnet; options kept for a future mainnet-like deployment. See
+Futurenet; options kept for a future mainnet-like deployment. See
 [docs/games/asteroids/04-TAPE-REUSE-AND-REPLAY-POLICY.md](docs/games/asteroids/04-TAPE-REUSE-AND-REPLAY-POLICY.md).
 
 ## Docs
@@ -113,8 +106,8 @@ devnet; options kept for a future mainnet-like deployment. See
 
 - Secrets live in `.dev.vars`, `.env`, `~/.config/thruput/keys/`, and
   `~/.config/kalien-thruput/` (never in git).
-- Devnet can be wiped. Then the network hash and all addresses change; see
-  [docs/OPERATIONS.md](docs/OPERATIONS.md#devnet-reset-after-a-wipe).
+- Futurenet can be wiped. Then the network hash and all addresses change; see
+  [docs/OPERATIONS.md](docs/OPERATIONS.md#futurenet-reset-after-a-wipe).
 
 ## License
 

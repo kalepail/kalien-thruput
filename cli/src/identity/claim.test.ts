@@ -32,7 +32,7 @@ const RFC_SECRET = "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae
 const RFC_PUBLIC = "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a";
 const RFC_EMPTY_SIG =
   "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b";
-// From `thruput keys import` + `keys ls --json` (thruput 0.36.0, devnet wire 14) for RFC_SECRET.
+// From `thruput keys import` + `keys ls --json` (thruput 0.36.0, Futurenet wire 14) for RFC_SECRET.
 const RFC_PUBLIC_B58 = "FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z";
 const RFC_PUBLIC_KEY_HASH_B58 = "9xarfCYUWxzeV2RSX5B9h6fZK4CoR2WfVvBf2rfvc1yB";
 const RFC_ADDRESS = "D4E11uoczkwDh6eUMTXs29SrALae4yn6g8xYQtP1bDiQ";

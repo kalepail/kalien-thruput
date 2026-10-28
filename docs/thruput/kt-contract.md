@@ -11,24 +11,24 @@ Agent: `kt-contract`. Owns `kalien-contract/`, `shared/thruput/`, devnet keys an
   ≥ 16.7 HOG free for a full tape.
 - **Fixture epochs of the live v3 deploy** (checked on-chain): 2988058 (`0x5F41772E`, active until
   2026-10-25 09:40 UTC), 2988059 (`0x43C9C6CD`, 09:50), 2988060 (`0xDEADBEEF`, 10:00). They are now
-  in `shared/thruput/deployments/devnet.json` as `fixtureSeedIds` and `fixtureEpochs`. The public
+  in `shared/thruput/deployments/futurenet.json` as `fixtureSeedIds` and `fixtureEpochs`. The public
   tapes `autopilot/fixtures/public/kalien-911260-seed1598125870-single-mutation.tape` and
   `asteroids-core/tests/fixtures/local/offline-supernova-hunt-seed5f41772e-score35850-frames11390.tape`
   are still unclaimed for 2988058, so the Worker block (kt-worker) is what protects them. A
   no-op-mutated copy of any fixture tape would also pass the contract, so the block must cover
   the whole epoch, not single tapes.
 - `KalienConfig.fixtureSeedIds?` and `isFixtureSeedId(config, seedId)` in `kalien.ts`.
-- **Deploy script (`deploy-devnet.sh`, `kalien.ts fixtures`), for future deploys:**
+- **Deploy script (`deploy-futurenet.sh`, `kalien.ts fixtures`), for future deploys:**
   - fixture epochs are 3 unseeded epochs starting 4 epochs above the oldest active one
     (`--epoch-margin`), so they expire within about 40–60 minutes;
   - after the fixture runs, every git-tracked `.tape` whose seed matches a fixture epoch is
-    claimed with a throwaway key (results in `devnet-fixture-runs.json` → `claims`);
-  - `fixtureSeedIds` / `fixtureEpochs` are written to `devnet.json`;
-  - review item 13: the script refuses when `devnet.json` already names the live network
+    claimed with a throwaway key (results in `futurenet-fixture-runs.json` → `claims`);
+  - `fixtureSeedIds` / `fixtureEpochs` are written to `futurenet.json`;
+  - review item 13: the script refuses when `futurenet.json` already names the live network
     (`--force` overrides); secret files are written to a temp file and moved (no truncation);
   - overrides for a rehearsal: `KALIEN_RPC_URL`, `KALIEN_DEPLOYMENT_FILE`, `KALIEN_FIXTURE_RUNS_FILE`,
     `KALIEN_SECRETS_DIR`, `KALIEN_FUND_TIMES`; new tool commands `balance`, `network-hash`.
-- **Tested:** full rehearsal of `deploy-devnet.sh` on an isolated local node (own `XDG_CONFIG_HOME`
+- **Tested:** full rehearsal of `deploy-futurenet.sh` on an isolated local node (own `XDG_CONFIG_HOME`
   and `XDG_CACHE_HOME`, port 9645): fixture epochs 2987961–63 (current 2988100); four fixtures
   confirmed (gas limits now 8.15M … 167M); both extra `0x5F41772E` tapes claimed; `fixtureSeedIds`
   written; re-run refused by the guard; `kalien.ts integration` passed on the same node. The node is
@@ -50,8 +50,8 @@ Agent: `kt-contract`. Owns `kalien-contract/`, `shared/thruput/`, devnet keys an
 | test player (`kalien-test-player`) | `5KWwyykYcxUEmDFdA8sgUX7BbiXL3VtiYS8KdBRp4nwi` (937,200 KALIEN) |
 | settings | `relay_only = true`, `seeding_locked = true`, `paused = false`; each contract holds ≈ 50 HOG for storage |
 
-Deploy transactions are in `shared/thruput/deployments/devnet.json`. Fixture runs
-(`kalien-contract/deployments/devnet-fixture-runs.json`), through `kalien-relay`:
+Deploy transactions are in `shared/thruput/deployments/futurenet.json`. Fixture runs
+(`kalien-contract/deployments/futurenet-fixture-runs.json`), through `kalien-relay`:
 
 | tape | seed_id | frames | score | gas used | gas limit | tx |
 |---|---:|---:|---:|---:|---:|---|
@@ -117,7 +117,7 @@ Memory with the 18,024-byte tape: peak 46,080–47,104 bytes of 65,536 with the 
     `onSigned({ transactionHash, signedTransaction })` runs before `sendTransaction`; persist both.
     It never resubmits; on `unknown`, poll `getSubmitResult(client, config, transactionHash)`.
     `ensureCurrentSeed(wallet, config)` for the cron.
-- `claim.ts`: `claimMessage` accepts base58 (as in `devnet.json`) or hex; `pubkeyAccountAddress`
+- `claim.ts`: `claimMessage` accepts base58 (as in `futurenet.json`) or hex; `pubkeyAccountAddress`
   returns base58; `publicKeyHash` and `pubkeyAccountAddressBytes` are new.
 - Relay secrets (kt-worker): unchanged files `~/.config/kalien-thruput/relay.secret` and
   `relay-2..4.secret` (64 hex chars, 32-byte seed). The deploy script writes `relay-N.secret` only
@@ -160,7 +160,7 @@ review, hardened redeploy) are done.
 
 - Contracts `kalien_score` and `kalien_token`: 34 native tests and 7 RV32 tests pass.
 - `shared/thruput/`: `claim.ts`, `kalien.ts` (read, event and relay helpers), bindings,
-  `deployments/devnet.json`. 25 bun tests pass offline; the live devnet test passes.
+  `deployments/futurenet.json`. 25 bun tests pass offline; the live devnet test passes.
 - **The score contract changed (interface v2) and is redeployed on devnet. New addresses
   below. The v1 contracts are superseded.** The Worker config must move to the v2 addresses.
 - One transaction replays a full 36,000-frame tape. No chunked replay.
@@ -179,10 +179,10 @@ review, hardened redeploy) are done.
 | settings | `relay_only = true`, `seeding_locked = true`, `paused = false` |
 
 Each contract got 50 HOG for storage deposits. Deployer ≈ 800 HOG, relay ≈ 1,000 HOG left.
-Deploy and settings transactions: `shared/thruput/deployments/devnet.json` and the deploy log.
+Deploy and settings transactions: `shared/thruput/deployments/futurenet.json` and the deploy log.
 
 Fixture submissions on v2 (relay submits, test player signs;
-`kalien-contract/deployments/devnet-fixture-runs.json`):
+`kalien-contract/deployments/futurenet-fixture-runs.json`):
 
 | tape | seed_id | frames | score | gas used | gas limit | tx |
 |---|---:|---:|---:|---:|---:|---|
@@ -234,7 +234,7 @@ Gas of each rejection with a full 18,024-byte tape (`rv32_rejection_gas`):
 ## Shared helpers (`shared/thruput/kalien.ts`) — for kt-worker, kt-client, kt-cli
 
 Pure fetch-based functions over `@thruputchain/client` 0.18.0. They run in a Worker, a
-browser and Bun. Pass the parsed `deployments/devnet.json` as `config`.
+browser and Bun. Pass the parsed `deployments/futurenet.json` as `config`.
 
 - `connectKalien(config, { transport? })`: client pinned to `config.networkHash`. A wiped devnet
   throws `NetworkMismatchError`.
@@ -319,7 +319,7 @@ and `rv32_rejection_gas`.
   `seeding_locked`; `SettingsChanged` replaces `PausedChanged`; new `RelayChanged`; errors 13, 14, 28.
 - Tests: `tests/adversarial.rs`, `rv32_rejection_gas`, updated seed test.
 - Tools: `kalien.ts harden` (allow relay, relay-only, optional `--lock-seeding`);
-  `deploy-devnet.sh` runs it before and after the fixtures. `record-rpc-fixtures.ts`.
+  `deploy-futurenet.sh` runs it before and after the fixtures. `record-rpc-fixtures.ts`.
 - Shared: `shared/thruput/kalien.ts`, `kalien.test.ts`, `test-data/devnet-rpc.json`;
   `SCORE_ERRORS` now lives in `kalien.ts`.
 - Plan: "Interface v2" in `docs/thruput/PORT-PLAN.md`.
@@ -336,7 +336,7 @@ kalien-contract/scripts/test.sh
 bun test shared/thruput/                                   # 25 pass, 1 skip (live)
 KALIEN_LIVE=1 bun test shared/thruput/kalien.test.ts -t live   # 1 pass against v2
 node_modules/.bin/tsc -p kalien-contract/tsconfig.json         # clean
-kalien-contract/scripts/deploy-devnet.sh                       # v2 table above
+kalien-contract/scripts/deploy-futurenet.sh                       # v2 table above
 ```
 
 ## For kt-worker
@@ -369,7 +369,7 @@ kalien-contract/scripts/deploy-devnet.sh                       # v2 table above
 - My commit `3e453f8` included kt-worker's uncommitted "Worker API v0 (as built)" edit of
   `docs/thruput/PORT-PLAN.md` (same file, before the pathspec rule mattered for shared files).
   Their text is intact; nothing was lost.
-- After a devnet wipe: `kalien-contract/scripts/deploy-devnet.sh`. It redeploys v2, runs the
+- After a devnet wipe: `kalien-contract/scripts/deploy-futurenet.sh`. It redeploys v2, runs the
   fixtures, turns on relay-only mode and locks seeding.
 
 ## Round 1 notes still valid

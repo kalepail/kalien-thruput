@@ -138,7 +138,7 @@ from block height and time), Worker relay lanes and deploy scripts, devnet reset
 funding, secrets, and the strict-rule fix. `docs/ARCHITECTURE.md` ends with the copycat-tape
 decision for the user; `docs/games/asteroids/04-TAPE-REUSE-AND-REPLAY-POLICY.md` has the
 options, including kt-contract's per-player seed. Facts in flux are marked `TODO(lead)`: v3
-contract details, final devnet addresses (`devnet.json` still holds pre-wipe v2 addresses), the
+contract details, final devnet addresses (`futurenet.json` still holds pre-wipe v2 addresses), the
 deployed Worker URL, lane count and funding, browser/CLI address cross-check, rate limits.
 ZK, RISC Zero, Boundless, Soroban, and Stellar-ingestion docs were already archived in round 2
 (`docs/archive/zk/`). Not changed (other owners): `shared/README.md` still describes the
@@ -444,7 +444,7 @@ All commands use `CARGO_HOME=$HOME/.cargo-thruput`.
 | `cargo test --release` in `gas-probe` | 2 native tests pass |
 | `thruput test --show-output` in `gas-probe` | 3 RV32 tests pass (gas table, memory table, tamper) |
 | local node + `thruput call gas-probe replay 0x<tape> --gas-limit 90000000` | 5/5 succeeded |
-| devnet `thruput call ... --profile devnet --gas-limit 80000000` | 3/3 succeeded |
+| devnet `thruput call ... --profile futurenet --gas-limit 80000000` | 3/3 succeeded |
 
 ## Environment notes for other agents
 
@@ -455,7 +455,7 @@ All commands use `CARGO_HOME=$HOME/.cargo-thruput`.
   `[registries]` in the project `.cargo/config.toml` (the contract agent does the same).
 - `cargo`, `thruput build`, and git commits need the sandbox off (`~/.cargo-thruput` and
   `~/.gnupg` are not writable in the sandbox).
-- `thruput airdrop --profile devnet` fails (no `faucet_url`; the hosted faucet URL returns 404 on
+- `thruput airdrop --profile futurenet` fails (no `faucet_url`; the hosted faucet URL returns 404 on
   `/v1/network`). The RPC method works: `groundhog_requestAirdrop` with
   `{ recipient: <32-byte hex address>, clientNonce: <1–32 random bytes hex> }` gave 1,000 HOG.
 - `thruput node` writes the active endpoint into `~/.config/thruput/config.toml`. I ran it on port

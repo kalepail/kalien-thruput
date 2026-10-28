@@ -4,7 +4,7 @@
  *
  * Everything here talks JSON-RPC through the client (fetch only, no Node APIs), so it runs in
  * a Cloudflare Worker, a browser tab, and Bun. Pass the deployment config
- * (`deployments/devnet.json`) and a client from `connectKalien`.
+ * (`deployments/futurenet.json`) and a client from `connectKalien`.
  *
  * Identifiers (addresses, transaction hashes, network hash) are base58 strings in this API,
  * as on the wire. Payload bytes (player pubkey, tape hash, signatures) are `0x` hex.
@@ -28,7 +28,7 @@ import {
   createPubkeyAccount,
   createThruputClient,
   createWalletClient,
-  devnet,
+  futurenet,
   hashSignedTransaction,
   serializeSignedTransaction,
   toBase58,
@@ -44,7 +44,7 @@ import { bytes32, fromHex, tapeHash, toHex } from "./claim";
 
 export type Hex = `0x${string}`;
 
-/** The fields of `deployments/devnet.json` these helpers need (base58 identifiers). */
+/** The fields of `deployments/futurenet.json` these helpers need (base58 identifiers). */
 export interface KalienConfig {
   networkHash: string;
   rpcUrl: string;
@@ -140,12 +140,12 @@ export function parseAddress(text: string | ContractAddress): ContractAddress {
 
 /**
  * Connect to the deployment's RPC. The client checks wire format 14, the methods it needs,
- * and that the endpoint serves `config.networkHash` (a devnet wipe changes the hash; this
+ * and that the endpoint serves `config.networkHash` (a Futurenet wipe changes the hash; this
  * then throws `NetworkMismatchError`). Pass `transport` to share one HTTP transport.
  */
 export async function connectKalien(config: KalienConfig, options: { transport?: Transport } = {}) {
   return createThruputClient({
-    cluster: devnet({ rpcUrl: config.rpcUrl, networkHash: toNetworkHash(sha256Hash(bytes32(config.networkHash, "networkHash"))) }),
+    cluster: futurenet({ rpcUrl: config.rpcUrl, networkHash: toNetworkHash(sha256Hash(bytes32(config.networkHash, "networkHash"))) }),
     ...(options.transport ? { transport: options.transport } : {}),
   });
 }

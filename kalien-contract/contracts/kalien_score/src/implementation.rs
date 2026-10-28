@@ -333,7 +333,7 @@ impl KalienScore {
     }
 
     /// Admin only: fix the seed of an active epoch that has no seed yet.
-    /// Devnet uses this to replay fixture tapes, whose seeds are fixed.
+    /// Futurenet uses this to replay fixture tapes, whose seeds are fixed.
     pub fn set_seed(&mut self, seed_id: u32, seed: u32) {
         let config = self._require_admin();
         ensure(!config.seeding_locked, ScoreError::SeedingLocked);

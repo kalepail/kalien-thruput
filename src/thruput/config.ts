@@ -1,5 +1,5 @@
 // Runtime Thruput network config, served by the Worker at `/api/config`.
-// Devnet resets change the network hash and contract addresses, so the browser
+// Futurenet resets change the network hash and contract addresses, so the browser
 // never hard-codes them; it reads them once per page load.
 
 import { fetchWithTimeout } from "@/lib/api";
@@ -70,12 +70,12 @@ async function fetchThruputConfig(): Promise<ThruputConfig> {
   return config;
 }
 
-// The last config this page saw. A devnet reset changes the network hash and
+// The last config this page saw. A Futurenet reset changes the network hash and
 // the contracts; an open tab must notice, or it signs for the old network.
 let currentConfig: ThruputConfig | null = null;
 const changeListeners = new Set<(config: ThruputConfig) => void>();
 
-/** Network hash plus contracts: what a devnet reset changes. */
+/** Network hash plus contracts: what a Futurenet reset changes. */
 export function configIdentity(config: ThruputConfig): string {
   return `${config.networkHash}|${config.scoreContract}|${config.tokenContract}`;
 }

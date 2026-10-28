@@ -11,7 +11,7 @@ const repoRoot = resolve(import.meta.dir, "../../..");
 const tape = new Uint8Array(readFileSync(join(repoRoot, "test-fixtures/test-short.tape")));
 const identity = identityFromSecret(new Uint8Array(32).fill(5));
 
-// Thruput serves identifiers as base58 since the wire-14 devnet upgrade.
+// Thruput serves identifiers as base58 since the wire-14 Futurenet upgrade.
 const NETWORK_HASH = toBase58(new Uint8Array(32).fill(0xaa));
 const SCORE_CONTRACT = toBase58(new Uint8Array(32).fill(0xbb));
 

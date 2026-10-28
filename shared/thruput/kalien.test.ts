@@ -81,12 +81,12 @@ describe("constants and local checks", () => {
   });
 });
 
-// Live devnet tests. Run with: KALIEN_LIVE=1 bun test shared/thruput/kalien.test.ts
+// Live Futurenet tests. Run with: KALIEN_LIVE=1 bun test shared/thruput/kalien.test.ts
 const live = process.env.KALIEN_LIVE === "1" ? describe : describe.skip;
-live("live devnet (wire 14)", () => {
-  const deployment = JSON.parse(readFileSync(join(import.meta.dir, "deployments/devnet.json"), "utf8"));
-  // Written by kalien-contract/scripts/deploy-devnet.sh for the same deployment.
-  const runs = JSON.parse(readFileSync(join(import.meta.dir, "../../kalien-contract/deployments/devnet-fixture-runs.json"), "utf8"));
+live("live Futurenet (wire 14)", () => {
+  const deployment = JSON.parse(readFileSync(join(import.meta.dir, "deployments/futurenet.json"), "utf8"));
+  // Written by kalien-contract/scripts/deploy-futurenet.sh for the same deployment.
+  const runs = JSON.parse(readFileSync(join(import.meta.dir, "../../kalien-contract/deployments/futurenet-fixture-runs.json"), "utf8"));
 
   test("reads config, seeds, balances and token metadata", async () => {
     expect(runs.scoreContract).toBe(deployment.scoreContract);

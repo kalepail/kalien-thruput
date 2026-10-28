@@ -67,15 +67,6 @@ panic = "abort"
 lto = true
 codegen-units = 1
 
-[registries]
-thruput = { index = "sparse+https://crates.thruput.network/api/v1/crates/" }
-# A parent-directory `~/.cargo/config.toml` on some machines names the same
-# index `groundhog`, and Cargo rejects two names for one index URL. Point that
-# unused name somewhere else so the walk-up config cannot clash.
-groundhog = { index = "sparse+https://groundhog-registry-unused.invalid/" }
-
-[source]
-thruput = { registry = "sparse+https://crates.thruput.network/api/v1/crates/" }
 
 # Optimize the sim in host test builds so 36,000-frame replays stay fast.
 [profile.dev.package.asteroids-verifier-core]

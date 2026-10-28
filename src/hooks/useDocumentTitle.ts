@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 const BASE_TITLE = "Kalien";
 const DEFAULT_DESCRIPTION =
-  "Play deterministic Asteroids. A Thruput devnet contract replays every run on-chain, ranks it, and mints KALIEN.";
+  "Play deterministic Asteroids. A Thruput Futurenet contract replays every run on-chain, ranks it, and mints KALIEN.";
 const DEFAULT_IMAGE = "https://thruput.kalien.xyz/kalien-meta-2.jpg";
 const DEFAULT_TYPE = "website";
 const FALLBACK_SITE_URL = "https://thruput.kalien.xyz";

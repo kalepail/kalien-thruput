@@ -37,7 +37,7 @@ import {
   createPubkeyAccount,
   createThruputClient,
   createWalletClient,
-  devnet,
+  futurenet,
   prepareContractDeployment,
   rv32Contract,
   toBase58,
@@ -116,7 +116,7 @@ function loadSecretFile(path: string): Uint8Array {
 
 /** Unpinned client (deploy time: the network hash is read from the endpoint). */
 async function connectRpc(rpcUrl: string) {
-  return createThruputClient({ cluster: devnet({ rpcUrl }) });
+  return createThruputClient({ cluster: futurenet({ rpcUrl }) });
 }
 type AnyClient = Awaited<ReturnType<typeof connectRpc>> | KalienClient;
 
@@ -242,7 +242,7 @@ async function cmdDeploy(args: Record<string, string>) {
   });
   const local = /127\.0\.0\.1|localhost/.test(rpcUrl);
   const out: Deployment = {
-    network: local ? "local" : "devnet",
+    network: local ? "local" : "futurenet",
     networkHash: toBase58(client.network.networkHash),
     rpcUrl,
     explorerUrl: local ? null : "https://explorer.thruput.network/",
@@ -434,7 +434,7 @@ async function cmdIntegration(args: Record<string, string>) {
   await setSeed(deployer, config, shortId, 0xdeadbeef);
   await setSeed(deployer, config, realId, 0x43c9c6cd);
   await setSeed(deployer, config, maxId, 1_598_125_870);
-  // Relay-only with the test relay allowed, as on devnet.
+  // Relay-only with the test relay allowed, as on Futurenet.
   for (const invocation of [
     KalienScore.v0_1.addRelay.invocation(d.score, gasAmount(5_000_000n), { relay: relay.account.address }),
     KalienScore.v0_1.setRelayOnly.invocation(d.score, gasAmount(5_000_000n), { relayOnly: true }),

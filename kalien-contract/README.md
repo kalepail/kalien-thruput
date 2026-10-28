@@ -13,12 +13,9 @@ The interface (methods, claim message, address rule, errors, events, gas) is in
 
 ## Setup
 
-- Always set `CARGO_HOME=$HOME/.cargo-thruput` (`scripts/env.sh` does this).
-- `.cargo/config.toml` comes from `thruput new`, plus two changes:
+- `.cargo/config.toml` comes from `thruput new`, plus one change:
   - a 16 KiB guest stack (`--defsym=__stack_size=16384`, before `-T`). The default 30 KiB stack
     leaves too little heap for the 18,024-byte calldata of a full tape.
-  - an unused `groundhog` registry entry, so a parent `~/.cargo/config.toml` that names the
-    same index `groundhog` cannot clash with `thruput`.
 - `kalien_score` enables the sdk `alloc` feature on RV32. Without it, calldata is capped at
   4,096 bytes.
 
@@ -40,23 +37,23 @@ thruput node --port 9645 &        # one managed node per machine: see docs/thrup
 bun kalien-contract/scripts/kalien.ts integration --rpc http://127.0.0.1:9645
 ```
 
-## Devnet
+## Futurenet
 
 ```bash
-kalien-contract/scripts/deploy-devnet.sh            # after a devnet wipe, too
+kalien-contract/scripts/deploy-futurenet.sh            # after a Futurenet wipe, too
 ```
 
 It creates the keys `kalien-deployer`, `kalien-relay`, `kalien-test-player` if missing (in
 `~/.config/thruput/keys`), funds them from the faucet, deploys and links both contracts,
-writes `shared/thruput/deployments/devnet.json`, creates the current seed, submits the fixture
-tapes (`deployments/devnet-fixture-runs.json`), allows only `kalien-relay` to submit
+writes `shared/thruput/deployments/futurenet.json`, creates the current seed, submits the fixture
+tapes (`deployments/futurenet-fixture-runs.json`), allows only `kalien-relay` to submit
 (`relay_only`), locks `set_seed` for good, and writes the relay secret for the Worker to
 `~/.config/kalien-thruput/relay.secret` (mode 600).
 
-The script refuses to run when `devnet.json` already names the live network (pass `--force`
+The script refuses to run when `futurenet.json` already names the live network (pass `--force`
 to deploy a second pair anyway). Fixture epochs sit 4 epochs above the oldest active one, so
 they expire within about an hour; every repo tape with a fixture seed is claimed by a
-throwaway key, and `devnet.json` records `fixtureSeedIds` / `fixtureEpochs` for the Worker to
+throwaway key, and `futurenet.json` records `fixtureSeedIds` / `fixtureEpochs` for the Worker to
 refuse. Rehearse against an isolated local node with the overrides `KALIEN_RPC_URL`,
 `KALIEN_DEPLOYMENT_FILE`, `KALIEN_FIXTURE_RUNS_FILE`, `KALIEN_SECRETS_DIR`, `KALIEN_FUND_TIMES`
 (and `XDG_CONFIG_HOME` / `XDG_CACHE_HOME` for separate keys and node state).
@@ -67,5 +64,5 @@ Other commands of `scripts/kalien.ts`: `fund`, `deploy`, `ensure-seed`, `set-see
 ## Files
 
 - `fixtures/`: copies of the test tapes with known seed, frames and score.
-- `deployments/`: devnet fixture-run results and the last local integration run.
+- `deployments/`: Futurenet fixture-run results and the last local integration run.
 - `scripts/gen-claim-vectors.ts`: regenerates `shared/thruput/claim-vectors.json`.

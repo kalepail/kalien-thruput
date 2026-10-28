@@ -13,7 +13,7 @@ import { DEFAULT_API_URL } from "./constants";
 import { defaultKeyPath } from "./identity/keyfile";
 
 const HELP = `
-${ansi.brightCyan}KALIEN${ansi.reset} - Autonomous Asteroids Farming CLI (Thruput devnet)
+${ansi.brightCyan}KALIEN${ansi.reset} - Autonomous Asteroids Farming CLI (Thruput Futurenet)
 
 ${ansi.bold}USAGE${ansi.reset}
   kalien run [options]

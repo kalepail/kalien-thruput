@@ -18,12 +18,12 @@
  * `--self-test` flips thrust and fire from frame 150 on, on the TS side only (in tapes of 200+ frames) and
  * expects every such tape to be reported as a mismatch, to prove the comparison can fail.
  *
- * Needs `cargo` (CARGO_HOME defaults to ~/.cargo-thruput when unset) and builds
+ * Needs `cargo` and builds
  * `asteroids-core/parity` and `autopilot` in release mode.
  */
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, copyFileSync } from "fs";
-import { availableParallelism, homedir, tmpdir } from "os";
+import { availableParallelism, tmpdir } from "os";
 import { join, resolve } from "path";
 import { AsteroidsGame } from "../../src/game/AsteroidsGame";
 import { TapeInputSource } from "../../src/game/input-source";
@@ -76,13 +76,8 @@ function parseArgs(argv: string[]): Options {
   return options;
 }
 
-const cargoEnv = {
-  ...process.env,
-  CARGO_HOME: process.env.CARGO_HOME ?? join(homedir(), ".cargo-thruput"),
-};
-
 function run(cmd: string[], cwd: string): string {
-  const result = Bun.spawnSync(cmd, { cwd, env: cargoEnv, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(cmd, { cwd, stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== 0) {
     throw new Error(`${cmd.join(" ")} failed (${result.exitCode}):\n${result.stderr.toString()}`);
   }

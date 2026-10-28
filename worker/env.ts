@@ -5,7 +5,7 @@ export interface WorkerEnv {
   RELAY: DurableObjectNamespace<RelayDO>;
   TAPES: R2Bucket;
   LEADERBOARD_DB: D1Database;
-  // Thruput network and contracts (vars; see shared/thruput/deployments/devnet.json)
+  // Thruput network and contracts (vars; see shared/thruput/deployments/futurenet.json)
   THRUPUT_RPC_URL?: string;
   THRUPUT_NETWORK_HASH?: string;
   SCORE_CONTRACT?: string;

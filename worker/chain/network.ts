@@ -8,9 +8,9 @@ import {
   type Cluster,
   type ConnectedThruputClient,
 } from "@thruputchain/client";
-// The devnet deployment record from kt-contract. A redeploy updates this file;
+// The Futurenet deployment record from kt-contract. A redeploy updates this file;
 // a Worker build then picks it up. Non-empty env vars override each field.
-import deployment from "../../shared/thruput/deployments/devnet.json";
+import deployment from "../../shared/thruput/deployments/futurenet.json";
 import type { WorkerEnv } from "../env";
 import { normalizeId, parseId32 } from "../ids";
 
@@ -42,8 +42,8 @@ function optionalId(raw: string | undefined, name: string): string | null {
 }
 
 export function chainSettings(env: WorkerEnv): ChainSettings {
-  // An RPC override (for example a local node) drops the devnet defaults, so
-  // devnet addresses are never used against another chain.
+  // An RPC override (for example a local node) drops the Futurenet defaults, so
+  // Futurenet addresses are never used against another chain.
   const rpcOverride = env.THRUPUT_RPC_URL?.trim();
   const useDeployment = !rpcOverride || rpcOverride === deployment.rpcUrl;
   const pick = (value: string | undefined, fallback: string) =>

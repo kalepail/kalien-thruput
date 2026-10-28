@@ -28,7 +28,7 @@ export interface RunProgressProps {
 function statusDetail(status: RunStatus | "idle"): string | null {
   switch (status) {
     case "queued":
-      return "The relay will send your run to the Thruput devnet.";
+      return "The relay will send your run to Thruput Futurenet.";
     case "submitting":
       return "The score contract is replaying your tape frame by frame.";
     default:

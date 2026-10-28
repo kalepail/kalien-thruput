@@ -3,13 +3,13 @@ import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import X from "lucide-react/dist/esm/icons/x";
 import { onThruputConfigChange, refreshThruputConfig } from "@/thruput/config";
 
-/** How often an open, visible tab checks `/api/config` for a devnet reset. */
+/** How often an open, visible tab checks `/api/config` for a Futurenet reset. */
 const CHECK_INTERVAL_MS = 5 * 60_000;
 /** Focus and visibility changes check again, but not more often than this. */
 const MIN_CHECK_GAP_MS = 30_000;
 
 /**
- * Watches for a devnet reset (new network hash or contracts) while the tab is
+ * Watches for a Futurenet reset (new network hash or contracts) while the tab is
  * open. The config store then swaps the client, seed and balance; this banner
  * tells the player why their old scores and KALIEN are gone.
  */
@@ -48,7 +48,7 @@ export function NetworkChangeNotice() {
     >
       <RefreshCw className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <p className="m-0 flex-1">
-        The Thruput devnet was reset. Kalien switched to the new network. Scores and KALIEN from
+        The Thruput Futurenet was reset. Kalien switched to the new network. Scores and KALIEN from
         before the reset are gone; your player key still works.
       </p>
       <button

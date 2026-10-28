@@ -76,7 +76,7 @@ export function nextPollStep(input: {
     return {
       action: "stop",
       message:
-        "the Worker has no record of this run (was the devnet reset?). Check My Runs for its status",
+        "the Worker has no record of this run (was the Futurenet reset?). Check My Runs for its status",
     };
   }
   if (input.elapsedMs >= RUN_POLL_MAX_MS) {
@@ -159,7 +159,7 @@ export function useRunSubmission(options?: UseRunSubmissionOptions): UseRunSubmi
           created = await signAndPost();
         } catch (err) {
           // The Worker refused the claim signature: this tab may still hold the
-          // config from before a devnet reset. The POST was refused outright (no
+          // config from before a Futurenet reset. The POST was refused outright (no
           // chain write), so re-signing once for the new network is safe.
           if (!(err instanceof RunApiError) || err.code !== "bad_signature") throw err;
           const changed = await refreshThruputConfig().catch(() => false);

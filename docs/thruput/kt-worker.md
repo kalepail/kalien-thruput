@@ -43,7 +43,7 @@ and smoke-tested.** URL: https://kalien-thruput.sdf-ecosystem.workers.dev
 ### 1. Urgent: fixture epochs (review item 2)
 
 - The v3 deploy set seeds for `seed_id` 2988058 (`0x5F41772E`), 2988059 (`0x43C9C6CD`) and
-  2988060 (`0xDEADBEEF`) to match public tapes (`kalien-contract/deployments/devnet-fixture-runs.json`;
+  2988060 (`0xDEADBEEF`) to match public tapes (`kalien-contract/deployments/futurenet-fixture-runs.json`;
   read back from the contract with `seed(id)`).
 - `BLOCKED_SEED_IDS` (var, plus `fixtureSeedIds` from the deploy record if present) makes the
   POST answer 403 `seed_blocked` right after it parses `seed_id`, before any chain call.
@@ -163,7 +163,7 @@ and `POST /api/admin/runs/:id/retry`.
 
 **Status: deployed and smoke-tested. URL: https://kalien-thruput.sdf-ecosystem.workers.dev**
 
-- Contracts: from `shared/thruput/deployments/devnet.json` (v3): score
+- Contracts: from `shared/thruput/deployments/futurenet.json` (v3): score
   `8fFcXcMDi3RE71YvHE2uG3yAhuSBzHPJqy2uxPgktjTT`, token `AZGTgZfoVoLZpTquPLpPpA1pUbvC4SRfLc5tjWXfHk87`,
   network hash `DWELtFbbKjeYDPqJQoxcHPEq5UGPnbnFM74yYdHy48uj`. No Worker code change was needed.
 - Deploy: `bash worker/ops/deploy.sh --secrets` (checks, build, remote D1 migration, deploy, secrets
@@ -198,7 +198,7 @@ It is **not deployed** yet: I wait for the lead (kt-contract v3 on the new devne
 | Commit | What |
 |---|---|
 | `d27f265` | Relay lanes (`RELAY_SECRETS`), run-list paging, alarm recovery, load test |
-| `b988988` | Contracts from `shared/thruput/deployments/devnet.json`; deploy and smoke scripts |
+| `b988988` | Contracts from `shared/thruput/deployments/futurenet.json`; deploy and smoke scripts |
 | `39e76b5` | State per score contract (D1 + relay objects); relay faults retried; padding check |
 | `c16c601` | Wire-14 migration, base58 ids, allowlist routing, `local` wrangler env |
 
@@ -275,7 +275,7 @@ Remote D1 migration (a 7403 error appeared once, then a remote query worked), `R
 
 ### Requests
 
-- **kt-contract:** the working-tree `shared/thruput/deployments/devnet.json` (uncommitted) pins
+- **kt-contract:** the working-tree `shared/thruput/deployments/futurenet.json` (uncommitted) pins
   network hash `DHsdn1…`, but devnet reports `DWELtF…`; the Worker refuses that RPC. Please
   commit the v3 record with the current hash. Allow the four lane addresses above.
   `shared/thruput/kalien.ts` is still pre-wire-14 (`PrivateKeySigner`); the Worker does not use it

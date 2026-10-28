@@ -30,13 +30,13 @@ thruput-integration-test = []
 # buffer, and a 36,000-frame tape is 18,024 bytes. With it the calldata goes
 # into one exact-size heap buffer (the replay itself does not allocate).
 [target.'cfg(target_arch = "riscv32")'.dependencies]
-thruput-sdk = { version = "=0.57.0", registry = "thruput", features = ["alloc"] }
+thruput-sdk = { version = "=0.58.0", features = ["alloc"] }
 
 [target.'cfg(not(target_arch = "riscv32"))'.dependencies]
-thruput-sdk = { version = "=0.57.0", registry = "thruput", features = ["std"] }
+thruput-sdk = { version = "=0.58.0", features = ["std"] }
 
 [dependencies]
-thruput-erc20-if = { version = "=0.1.68", registry = "thruput" }
+thruput-erc20-if = { version = "=0.1.71" }
 # For the `KalienTokenAdmin` client (`handover_token`); no token entrypoints are linked.
 kalien_token = { path = "../kalien_token" }
 asteroids-verifier-core = { path = "../../../asteroids-core", default-features = false }
@@ -48,5 +48,5 @@ ed25519-dalek = "2"
 sha2 = "0.10"
 hex = "0.4"
 serde_json = "1"
-thruput-trace = { version = "=0.61.0", registry = "thruput" }
+thruput-trace = { version = "=0.63.0" }
 asteroids-verifier-core = { path = "../../../asteroids-core" }
