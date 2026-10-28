@@ -3,18 +3,18 @@
   "networkHash": "DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7FcNT",
   "rpcUrl": "https://rpc.thruput.network",
   "explorerUrl": "https://explorer.thruput.network/",
-  "scoreContract": "C56KRpv5dFR5EEynb3FVWcyt8Gst85SEQ611ZL3zdgmo",
-  "tokenContract": "HmuwsXqTSooVKLLkREKxWHB93Tea1B6ASh8Z9ywXxNMp",
+  "scoreContract": "FCZt7ntXiX9HCns3wnpHpfsKWZycohQ8DRKU5ma8JXLe",
+  "tokenContract": "88aVzPCEnZeh67FuPB5vdVuBXLrCuxkYRxiPS75ErRUY",
   "admin": "5y9nbDvLXhF87vezDQQKKfHd9DccibjUutkHrhE5UojK",
-  "deployedAt": "2026-10-27T18:00:41.643Z",
+  "deployedAt": "2026-10-28T23:03:04.016Z",
   "deployTxs": {
-    "deployToken": "GuB4iaC6hqsz1nu6yD6YA8cAJ9EydAZcibKTnNSGprEU",
-    "deployScore": "DJ4SkVrH62zfQAwYff7RiM1PAowvh116rWotx4WqLbJi",
-    "setTokenAdministrator": "nTLgUKdNVDe9tvdmYCTqTX5272rXjcwtQrh2H2sn8Uw"
+    "deployToken": "5oyyL6NTFBbSSJyyZkgdavs9qq9QmFLU4AGbm3NhPHkU",
+    "deployScore": "J2nLmnFtFhFDGioeqxR2VPziQCUBnS8bd2G555EUsY6z",
+    "setTokenAdministrator": "2HsnuA6N5qL4Jf1qAx2N1iYTahhkR8mJ95Q8nNtEqjNJ"
   },
   "artifacts": {
     "kalien_token": {
-      "sha256": "0x552900afc39d85f32ad5102bc77a8e4ee1a483bf33221363d510e7711b6eb162",
+      "sha256": "0xf69c1345697fe0e212a77cfd2a2684e205067d2ca80e8edc3e9d7b27a25bb692",
       "bytes": 27192
     },
     "kalien_score": {
@@ -23,25 +23,25 @@
     }
   },
   "fixtureSeedIds": [
-    2988401,
-    2988402,
-    2988403
+    2988575,
+    2988576,
+    2988577
   ],
   "fixtureEpochs": [
     {
-      "seedId": 2988401,
+      "seedId": 2988575,
       "seed": 3735928559,
-      "activeUntil": "2026-10-27T18:50:00.000Z"
+      "activeUntil": "2026-10-28T23:50:00.000Z"
     },
     {
-      "seedId": 2988402,
+      "seedId": 2988576,
       "seed": 1137297101,
-      "activeUntil": "2026-10-27T19:00:00.000Z"
+      "activeUntil": "2026-10-29T00:00:00.000Z"
     },
     {
-      "seedId": 2988403,
+      "seedId": 2988577,
       "seed": 1598125870,
-      "activeUntil": "2026-10-27T19:10:00.000Z"
+      "activeUntil": "2026-10-29T00:10:00.000Z"
     }
   ]
 }

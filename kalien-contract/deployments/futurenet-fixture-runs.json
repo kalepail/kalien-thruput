@@ -1,36 +1,36 @@
 {
   "network": "DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7FcNT",
-  "scoreContract": "C56KRpv5dFR5EEynb3FVWcyt8Gst85SEQ611ZL3zdgmo",
-  "tokenContract": "HmuwsXqTSooVKLLkREKxWHB93Tea1B6ASh8Z9ywXxNMp",
+  "scoreContract": "FCZt7ntXiX9HCns3wnpHpfsKWZycohQ8DRKU5ma8JXLe",
+  "tokenContract": "88aVzPCEnZeh67FuPB5vdVuBXLrCuxkYRxiPS75ErRUY",
   "player": "5KWwyykYcxUEmDFdA8sgUX7BbiXL3VtiYS8KdBRp4nwi",
   "kalienBalance": "9372000000000",
   "fixtureEpochs": [
     {
-      "seedId": 2988401,
+      "seedId": 2988575,
       "seed": 3735928559,
-      "activeUntil": "2026-10-27T18:50:00.000Z"
+      "activeUntil": "2026-10-28T23:50:00.000Z"
     },
     {
-      "seedId": 2988402,
+      "seedId": 2988576,
       "seed": 1137297101,
-      "activeUntil": "2026-10-27T19:00:00.000Z"
+      "activeUntil": "2026-10-29T00:00:00.000Z"
     },
     {
-      "seedId": 2988403,
+      "seedId": 2988577,
       "seed": 1598125870,
-      "activeUntil": "2026-10-27T19:10:00.000Z"
+      "activeUntil": "2026-10-29T00:10:00.000Z"
     }
   ],
   "runs": [
     {
       "tape": "test-short.tape",
-      "seedId": 2988401,
+      "seedId": 2988575,
       "seed": 3735928559,
-      "setSeedTx": "B9vUizJKsQBEiHpK1GeZQKPXj8dgSBZ8W8NVXasAiBbK",
-      "transactionHash": "2FM7M7r9FH2tJ761TD9Kpv6fRXGpsrAHLPySpc8MmNqd",
+      "setSeedTx": "7nNsPfa6TYxdnC2nuYvoCbpkJDtXUsZgbE3w19tRr8GY",
+      "transactionHash": "D5E4Qnpe8xpEqphiLkqShgY3JR7wduQjoNDHSRcBXyCy",
       "gasLimit": "8150000",
-      "gasUsed": "1550305",
-      "blockHeight": "2443",
+      "gasUsed": "1550319",
+      "blockHeight": "53402",
       "executionResult": "return",
       "status": "confirmed",
       "errorCode": null,
@@ -39,8 +39,8 @@
         "player": "5KWwyykYcxUEmDFdA8sgUX7BbiXL3VtiYS8KdBRp4nwi",
         "playerPubkey": "0x7d8514ff9be63ffedf4bc3b0d8dab79a543e93cd438d2cd178e9a49bfaac60ec",
         "relay": "94febNxmANEba5YFYVrrKvYEpTq7dEXzhqPARRCnUkMJ",
-        "submittedAt": 1793124057,
-        "seedId": 2988401,
+        "submittedAt": 1793228599,
+        "seedId": 2988575,
         "seed": 3735928559,
         "frameCount": 700,
         "finalScore": 1480,
@@ -49,17 +49,17 @@
         "mintedDelta": "14800000000",
         "tapeHash": "0xedeb1bb0d05e69eabddf0bde5d95d635f18bb3fbb332f6b6d6f7841538dc91c4"
       },
-      "explorer": "https://explorer.thruput.network/tx/2FM7M7r9FH2tJ761TD9Kpv6fRXGpsrAHLPySpc8MmNqd"
+      "explorer": "https://explorer.thruput.network/tx/D5E4Qnpe8xpEqphiLkqShgY3JR7wduQjoNDHSRcBXyCy"
     },
     {
       "tape": "test-medium.tape",
-      "seedId": 2988401,
+      "seedId": 2988575,
       "seed": 3735928559,
-      "setSeedTx": "B9vUizJKsQBEiHpK1GeZQKPXj8dgSBZ8W8NVXasAiBbK",
-      "transactionHash": "3FPPNvwQnxKAS5Z8inhfVqv6gjuaG3xXq1pDa9wsfdfN",
+      "setSeedTx": "7nNsPfa6TYxdnC2nuYvoCbpkJDtXUsZgbE3w19tRr8GY",
+      "transactionHash": "2jbJNyBzcQBWh8uYaSFDfoJ5YWvhzQNRfGhfxExM7sc8",
       "gasLimit": "27500000",
-      "gasUsed": "9817921",
-      "blockHeight": "2444",
+      "gasUsed": "9817925",
+      "blockHeight": "53403",
       "executionResult": "return",
       "status": "confirmed",
       "errorCode": null,
@@ -68,8 +68,8 @@
         "player": "5KWwyykYcxUEmDFdA8sgUX7BbiXL3VtiYS8KdBRp4nwi",
         "playerPubkey": "0x7d8514ff9be63ffedf4bc3b0d8dab79a543e93cd438d2cd178e9a49bfaac60ec",
         "relay": "94febNxmANEba5YFYVrrKvYEpTq7dEXzhqPARRCnUkMJ",
-        "submittedAt": 1793124059,
-        "seedId": 2988401,
+        "submittedAt": 1793228601,
+        "seedId": 2988575,
         "seed": 3735928559,
         "frameCount": 5000,
         "finalScore": 11190,
@@ -78,17 +78,17 @@
         "mintedDelta": "97100000000",
         "tapeHash": "0xee4a145acc60cd12bb9f2e501cc9436d5a757d9f03fcbf3659837caf97715b6b"
       },
-      "explorer": "https://explorer.thruput.network/tx/3FPPNvwQnxKAS5Z8inhfVqv6gjuaG3xXq1pDa9wsfdfN"
+      "explorer": "https://explorer.thruput.network/tx/2jbJNyBzcQBWh8uYaSFDfoJ5YWvhzQNRfGhfxExM7sc8"
     },
     {
       "tape": "test-real-game.tape",
-      "seedId": 2988402,
+      "seedId": 2988576,
       "seed": 1137297101,
-      "setSeedTx": "AMR4FVA51b6um9xUMbjjvXwerUz6xykzD74Dp84KYQuv",
-      "transactionHash": "9E1Ad7xYXd5Y1wy5A2kdUMA7PxovamJZ46LUVoqT32SH",
+      "setSeedTx": "DaTyH4vEhBDj27ePojVZaHAACFB6nChvuj15n6RytMxM",
+      "transactionHash": "2JS9mt26AdrGrvff3SVtcTYZZQiCncy8VwwpQ4M2njbb",
       "gasLimit": "34893500",
-      "gasUsed": "14342009",
-      "blockHeight": "2446",
+      "gasUsed": "14342013",
+      "blockHeight": "53405",
       "executionResult": "return",
       "status": "confirmed",
       "errorCode": null,
@@ -97,8 +97,8 @@
         "player": "5KWwyykYcxUEmDFdA8sgUX7BbiXL3VtiYS8KdBRp4nwi",
         "playerPubkey": "0x7d8514ff9be63ffedf4bc3b0d8dab79a543e93cd438d2cd178e9a49bfaac60ec",
         "relay": "94febNxmANEba5YFYVrrKvYEpTq7dEXzhqPARRCnUkMJ",
-        "submittedAt": 1793124063,
-        "seedId": 2988402,
+        "submittedAt": 1793228605,
+        "seedId": 2988576,
         "seed": 1137297101,
         "frameCount": 6643,
         "finalScore": 14870,
@@ -107,17 +107,17 @@
         "mintedDelta": "148700000000",
         "tapeHash": "0xd3d4aac058d4685c0b180af805de96dbd3014856f70c62184a790e9713c460d3"
       },
-      "explorer": "https://explorer.thruput.network/tx/9E1Ad7xYXd5Y1wy5A2kdUMA7PxovamJZ46LUVoqT32SH"
+      "explorer": "https://explorer.thruput.network/tx/2JS9mt26AdrGrvff3SVtcTYZZQiCncy8VwwpQ4M2njbb"
     },
     {
       "tape": "kalien-911140-seed1598125870.tape",
-      "seedId": 2988403,
+      "seedId": 2988577,
       "seed": 1598125870,
-      "setSeedTx": "4q9pFWHi95wf7BGYePYcqseDy7ifZ1xZjPkw6LYSfhEB",
-      "transactionHash": "C4U36fstysMvktyr747N7xnmbNWJ2TvUigW9kafHwrm4",
+      "setSeedTx": "7fJRiDUmDuvbtWj1neNmDocbgPHod3jSP9k2uwfkC8bU",
+      "transactionHash": "4z6kV92mjvnf93iU6UywFft4nfxS8dS69T81MxEsRaJj",
       "gasLimit": "167000000",
-      "gasUsed": "67608070",
-      "blockHeight": "2448",
+      "gasUsed": "67608056",
+      "blockHeight": "53407",
       "executionResult": "return",
       "status": "confirmed",
       "errorCode": null,
@@ -126,8 +126,8 @@
         "player": "5KWwyykYcxUEmDFdA8sgUX7BbiXL3VtiYS8KdBRp4nwi",
         "playerPubkey": "0x7d8514ff9be63ffedf4bc3b0d8dab79a543e93cd438d2cd178e9a49bfaac60ec",
         "relay": "94febNxmANEba5YFYVrrKvYEpTq7dEXzhqPARRCnUkMJ",
-        "submittedAt": 1793124067,
-        "seedId": 2988403,
+        "submittedAt": 1793228609,
+        "seedId": 2988577,
         "seed": 1598125870,
         "frameCount": 36000,
         "finalScore": 911140,
@@ -136,28 +136,28 @@
         "mintedDelta": "9111400000000",
         "tapeHash": "0x2f0234a86ffea4099b4011f06ef9483b53f3c6c5afcd2915870153c9ed1c58b6"
       },
-      "explorer": "https://explorer.thruput.network/tx/C4U36fstysMvktyr747N7xnmbNWJ2TvUigW9kafHwrm4"
+      "explorer": "https://explorer.thruput.network/tx/4z6kV92mjvnf93iU6UywFft4nfxS8dS69T81MxEsRaJj"
     }
   ],
   "claims": [
     {
       "tape": "asteroids-core/tests/fixtures/local/offline-supernova-hunt-seed5f41772e-score35850-frames11390.tape",
-      "seedId": 2988403,
+      "seedId": 2988577,
       "seed": 1598125870,
       "status": "confirmed",
       "errorName": null,
       "finalScore": 35850,
-      "transactionHash": "FDgyp1iy5K75d3dzCLpRefzxCb7hPXbFzsfP4dPQzxwa"
+      "transactionHash": "A2MZbr5NMxYAKkhKRn824GD5EzcTDcSqGYKuDXbB5Twc"
     },
     {
       "tape": "autopilot/fixtures/public/kalien-911260-seed1598125870-single-mutation.tape",
-      "seedId": 2988403,
+      "seedId": 2988577,
       "seed": 1598125870,
       "status": "confirmed",
       "errorName": null,
       "finalScore": 911260,
-      "transactionHash": "7Nd9bYcUFZCcv15idsExY8Hx2pVrEM4vvJhizjAStLAh"
+      "transactionHash": "EShLBZj33PUr2tUmGhjJuGQmRKxg7QXVRFx4fvpyNr3t"
     }
   ],
-  "at": "2026-10-27T18:01:15.419Z"
+  "at": "2026-10-28T23:03:37.132Z"
 }
