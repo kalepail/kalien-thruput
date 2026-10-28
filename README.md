@@ -13,8 +13,8 @@ first visit. A relay pays the transaction, and your signature binds the run to y
   `https://kalien-thruput.sdf-ecosystem.workers.dev`)
 - Chain: Thruput Futurenet (wire format 14, base58 identifiers), RPC `https://rpc.thruput.network`,
   explorer `https://explorer.thruput.network/`
-- Contracts (v3): score `C56KRpv5dFR5EEynb3FVWcyt8Gst85SEQ611ZL3zdgmo`, token
-  `HmuwsXqTSooVKLLkREKxWHB93Tea1B6ASh8Z9ywXxNMp` on network
+- Contracts (v3): score `FCZt7ntXiX9HCns3wnpHpfsKWZycohQ8DRKU5ma8JXLe`, token
+  `88aVzPCEnZeh67FuPB5vdVuBXLrCuxkYRxiPS75ErRUY` on network
   `DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7FcNT` (source of truth:
   `shared/thruput/deployments/futurenet.json`)
 

@@ -89,8 +89,8 @@ Deployed on wire-14 Futurenet (network `DFizVugYrvktaiKivvCx2P1ApArLuyYmH6vN3HN7
 
 | Item | Value |
 |---|---|
-| Score contract | `C56KRpv5dFR5EEynb3FVWcyt8Gst85SEQ611ZL3zdgmo` |
-| Token contract | `HmuwsXqTSooVKLLkREKxWHB93Tea1B6ASh8Z9ywXxNMp` |
+| Score contract | `FCZt7ntXiX9HCns3wnpHpfsKWZycohQ8DRKU5ma8JXLe` |
+| Token contract | `88aVzPCEnZeh67FuPB5vdVuBXLrCuxkYRxiPS75ErRUY` |
 | Relays | 4 lanes on the allowlist (up to 8), about 999 HOG each |
 | Settings | relay-only on, seeding locked |
 
@@ -174,7 +174,7 @@ Stellar". API: `docs/thruput/PORT-PLAN.md` ("Worker API v0 (as built)").
   locations.
 - **Blocked epochs.** The Worker refuses the deploy record's `fixtureSeedIds` and any ids in
   `BLOCKED_SEED_IDS` (`wrangler.jsonc`). On this Futurenet these are the fixture epochs
-  2988105–2988107, whose seeds have public solutions.
+  2988575–2988577, whose seeds have public solutions.
 - **RPC rules (wire 14).** Named params objects, base58 identifiers, lowercase `0x` hex
   payloads, decimal-string heights and gas. Admission (`sendTransaction`) is not commitment
   (`getTransactionStatus`), and commitment is not success (`receipt.execution.result`). Cursor
@@ -283,10 +283,10 @@ layout per epoch.
 
 **Decision 2026-10-24: accepted for Futurenet; options kept for a future mainnet-like deployment.**
 
-## Deployment status (2026-10-27)
+## Deployment status (2026-10-28)
 
 - Worker live at `https://thruput.kalien.xyz` (custom domain; also
-  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `457563ca` (2026-10-27, after Futurenet wipe).
+  `https://kalien-thruput.sdf-ecosystem.workers.dev`), version `997d13e5` (2026-10-28, SDK 0.58.0 redeploy).
 - Contracts v3 on wire-14 Futurenet; addresses in `shared/thruput/deployments/futurenet.json` and
   the table under "On-chain contracts".
 - 4 relay lanes, about 999 HOG each.
