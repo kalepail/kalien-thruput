@@ -8,7 +8,10 @@ import "@fontsource/monaspace-neon/600.css";
 import "@fontsource/monaspace-neon/700.css";
 import { ErrorBoundary } from "./components/shared/ErrorBoundary";
 import App from "./App.tsx";
+import { installChunkReload } from "./lib/chunkReload";
 import "./index.css";
+
+installChunkReload();
 
 const root = document.getElementById("root");
 if (root) {
