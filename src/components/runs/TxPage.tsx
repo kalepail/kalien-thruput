@@ -200,7 +200,7 @@ export function TxPage() {
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-xs text-text-dim hover:text-link"
             >
-              Explorer (team access)
+              Explorer
               <ExternalLink className="size-3" aria-hidden="true" />
             </a>
           ) : null}

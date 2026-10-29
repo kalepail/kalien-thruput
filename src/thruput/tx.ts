@@ -1,5 +1,5 @@
-// In-app transaction view. The public explorer needs team access, so the
-// browser reads the transaction itself: lifecycle status, receipt, and the
+// In-app transaction view. The browser reads the transaction itself, so the page
+// can show Kalien details the explorer does not: lifecycle status, receipt, and the
 // decoded `ScoreSubmitted` event when it is a Kalien run.
 //
 // Wire-14 rules: a committed receipt can still describe failed execution

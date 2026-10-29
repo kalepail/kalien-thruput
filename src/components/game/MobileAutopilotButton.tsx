@@ -15,11 +15,11 @@ export function MobileAutopilotButton({
   onToggleEndless,
 }: MobileAutopilotButtonProps) {
   return (
-    <div className="absolute right-3 bottom-3 z-10 flex flex-col items-end gap-2 sm:hidden">
+    <div className="grid grid-cols-2 gap-2 sm:hidden">
       <Button
         variant={active ? "active" : "space"}
         size="default"
-        className="gap-2 px-4 opacity-90 active:opacity-100"
+        className="gap-2 px-4"
         onClick={(e) => {
           e.stopPropagation();
           onToggle();
@@ -30,21 +30,19 @@ export function MobileAutopilotButton({
         <span className="text-[0.72rem]">{active ? "AUTO ON" : "AUTO OFF"}</span>
       </Button>
 
-      <div className="flex max-w-[calc(100vw-1.5rem)] items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant={endlessEnabled ? "active" : "space"}
-          size="sm"
-          className="h-8 rounded-full px-3 text-[0.62rem]"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleEndless?.();
-          }}
-          aria-label={endlessEnabled ? "Disable endless mode" : "Enable endless mode"}
-        >
-          <span>{endlessEnabled ? "ENDLESS ON" : "ENDLESS OFF"}</span>
-        </Button>
-      </div>
+      <Button
+        type="button"
+        variant={endlessEnabled ? "active" : "space"}
+        size="default"
+        className="px-4"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleEndless?.();
+        }}
+        aria-label={endlessEnabled ? "Disable endless mode" : "Enable endless mode"}
+      >
+        <span className="text-[0.72rem]">{endlessEnabled ? "ENDLESS ON" : "ENDLESS OFF"}</span>
+      </Button>
     </div>
   );
 }

@@ -436,6 +436,13 @@ export function GamePageWrapper() {
     setEndlessModeEnabled((enabled) => !enabled);
   }, [autopilotEnabled, replayJobId]);
 
+  const handleStartAutopilotRun = useCallback(
+    ({ endless }: { endless: boolean }) => {
+      startLiveRunWithMode({ autopilot: true, endless });
+    },
+    [startLiveRunWithMode],
+  );
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const isAutopilotHotkey = event.code === "KeyA";
@@ -645,6 +652,7 @@ export function GamePageWrapper() {
         endlessModeDetail={endlessModeDetail}
         onAutopilotStateChange={handleAutopilotStateChange}
         onToggleEndlessMode={handleToggleEndlessMode}
+        onStartAutopilotRun={handleStartAutopilotRun}
         autoStartSignal={autoStartSignal}
       />
     </PageShell>

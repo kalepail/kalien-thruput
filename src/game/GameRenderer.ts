@@ -884,7 +884,10 @@ export class GameRenderer {
 
     ctx.font = "500 12px 'Monaspace Krypton', monospace";
     ctx.fillStyle = "#6b7280";
-    ctx.fillText(`SEED 0x${state.gameSeed.toString(16).toUpperCase().padStart(8, "0")}`, 20, 44);
+    // The menu has no run seed yet (the header shows the current one); do not draw 0x00000000.
+    if (state.mode !== "menu" || state.gameSeed !== 0) {
+      ctx.fillText(`SEED 0x${state.gameSeed.toString(16).toUpperCase().padStart(8, "0")}`, 20, 44);
+    }
 
     this.drawShipLives(ctx, 20, WORLD_HEIGHT - 45, state.lives);
 
