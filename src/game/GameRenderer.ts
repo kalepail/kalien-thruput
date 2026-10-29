@@ -77,6 +77,8 @@ export interface GameRenderState {
   endlessModeDetail: string | null;
   replayInfo: ReplayInfo | null;
   isReplaySession: boolean;
+  /** Coarse primary pointer: show tap-to-watch-autopilot copy instead of keyboard help. */
+  touchPlay: boolean;
 }
 
 export interface ReplayInfo {
@@ -1043,6 +1045,18 @@ export class GameRenderer {
         ctx.fillStyle = "rgba(157, 224, 255, 0.65)";
         ctx.font = "500 16px 'Monaspace Krypton', 'SFMono-Regular', monospace";
         ctx.fillText(`next window in ${minutes}:${seconds}`, boxX, boxY + 36);
+      } else if (state.touchPlay) {
+        ctx.font = "600 30px 'Monaspace Krypton', 'SFMono-Regular', monospace";
+        ctx.fillText("On phones, the autopilot flies.", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.5);
+        ctx.shadowColor = "#22d3ee";
+        ctx.fillStyle = "#22d3ee";
+        ctx.fillText("Submit its runs to earn KALIEN.", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.58);
+
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#4ade80";
+        ctx.fillStyle = "#4ade80";
+        ctx.font = "700 34px 'Monaspace Krypton', 'SFMono-Regular', monospace";
+        ctx.fillText("Tap to Watch the Autopilot", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.74);
       } else {
         ctx.font = "600 24px 'Monaspace Krypton', 'SFMono-Regular', monospace";
         ctx.fillText("Arrow Keys: Turn + Thrust", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.46);
@@ -1067,7 +1081,11 @@ export class GameRenderer {
     if (state.mode === "paused") {
       ctx.fillText("PAUSED", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.45);
       ctx.font = "600 24px 'Monaspace Krypton', 'SFMono-Regular', monospace";
-      ctx.fillText("Press P / Enter or Tap to Resume", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.66);
+      ctx.fillText(
+        state.touchPlay ? "Tap to Resume" : "Press P / Enter or Tap to Resume",
+        WORLD_WIDTH * 0.5,
+        WORLD_HEIGHT * 0.66,
+      );
     }
 
     if (state.mode === "game-over") {
@@ -1093,12 +1111,16 @@ export class GameRenderer {
           WORLD_WIDTH * 0.5,
           WORLD_HEIGHT * 0.56,
         );
-        ctx.fillText("Press Enter, R, or Tap to Restart", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.64);
+        if (state.touchPlay) {
+          ctx.fillText("Tap to Watch Again", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.64);
+        } else {
+          ctx.fillText("Press Enter, R, or Tap to Restart", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.64);
 
-        ctx.shadowColor = "#a855f7";
-        ctx.fillStyle = "#a855f7";
-        ctx.font = "600 24px 'Monaspace Krypton', 'SFMono-Regular', monospace";
-        ctx.fillText("D: Save Replay Tape", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.72);
+          ctx.shadowColor = "#a855f7";
+          ctx.fillStyle = "#a855f7";
+          ctx.font = "600 24px 'Monaspace Krypton', 'SFMono-Regular', monospace";
+          ctx.fillText("D: Save Replay Tape", WORLD_WIDTH * 0.5, WORLD_HEIGHT * 0.72);
+        }
       }
     }
 

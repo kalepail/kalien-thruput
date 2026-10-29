@@ -71,7 +71,7 @@ export function ControlsHint({
             ? "Loading replay. Live gameplay is locked."
             : isReplay
               ? "Use the replay controls below to pause, change speed, or exit."
-              : "Tap Auto to launch an autopilot run. Endless keeps playing and submits each new best."}
+              : "Phones watch the autopilot play. Tap the game to start; Endless keeps playing and submits each new best."}
       </p>
     </div>
   );

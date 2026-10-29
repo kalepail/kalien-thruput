@@ -290,6 +290,13 @@ export class AsteroidsGame {
   // Notifies UI when entering or exiting a replay session
   onReplayStateChange: ((state: ReplaySessionState) => void) | null = null;
   onAutopilotStateChange: ((enabled: boolean) => void) | null = null;
+  // Touch devices have no steering controls: a tap that would launch a run calls this
+  // instead, so the UI starts an autopilot run. Unset, a tap starts a manual run.
+  onTouchLaunch: (() => void) | null = null;
+  private readonly coarsePointer =
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia("(pointer: coarse)")
+      : null;
 
   // Current frame input (read at start of updateSimulation, used by updateShip)
   private currentFrameInput: {
@@ -336,9 +343,13 @@ export class AsteroidsGame {
     }
   };
 
-  private readonly pointerDownHandler = (): void => {
+  private readonly pointerDownHandler = (event: PointerEvent): void => {
     if ((this.mode === "menu" || this.mode === "game-over") && this.canStartLiveRun()) {
       this.audio.enable();
+      if (event.pointerType !== "mouse" && this.isTouchPlay() && this.onTouchLaunch) {
+        this.onTouchLaunch();
+        return;
+      }
       this.startNewGame();
     } else if (this.mode === "paused" && !this.pauseFromHidden) {
       this.mode = "playing";
@@ -1589,6 +1600,7 @@ export class AsteroidsGame {
           }
         : null,
       isReplaySession: this.replayTape !== null,
+      touchPlay: this.isTouchPlay(),
     };
   }
 
@@ -1760,6 +1772,11 @@ export class AsteroidsGame {
     // Stop recording during replay
     this.recorder = null;
     this.emitReplayStateChange();
+  }
+
+  /** True when the primary pointer is coarse (a phone or tablet): those players watch the autopilot. */
+  private isTouchPlay(): boolean {
+    return this.coarsePointer?.matches ?? false;
   }
 
   private canStartLiveRun(): boolean {
