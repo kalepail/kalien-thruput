@@ -7,8 +7,8 @@ import { abbreviateHex } from "@/lib/format";
 import { canonicalIdOr } from "@/thruput/ids";
 import { cn } from "@/lib/utils";
 
-// The public explorer needs team access, so links open our own pages first
-// (`/tx/:hash`, the player page) and keep the explorer as a small second link.
+// Links open our own pages first (`/tx/:hash`, the player page), which show the Kalien
+// run details, and keep the public explorer as a small second link.
 
 /** Link to the in-app transaction page, plus a small explorer icon link. */
 export function TxLink({ txHash, className }: { txHash: string; className?: string }) {
@@ -29,8 +29,8 @@ export function TxLink({ txHash, className }: { txHash: string; className?: stri
         target="_blank"
         rel="noreferrer"
         className="inline-flex text-text-dim hover:text-link"
-        title="Explorer (team access)"
-        aria-label="Open in explorer (team access)"
+        title="Open in the Thruput explorer"
+        aria-label="Open in the Thruput explorer"
       >
         <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
       </a>
@@ -64,7 +64,7 @@ export function AddressLinks({
         rel="noreferrer"
         className="inline-flex items-center gap-1 text-text-dim hover:text-link"
       >
-        Explorer (team access)
+        Explorer
         <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
       </a>
     </span>
