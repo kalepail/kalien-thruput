@@ -232,6 +232,20 @@ export function GamePanel({
     };
   }, [autopilotEnabled, gameReady, syncAutopilotState]);
 
+  // Touch devices: a tap on the canvas launches an autopilot run (no touch steering).
+  useEffect(() => {
+    const game = gameRef.current;
+    if (!gameReady || !game) {
+      return;
+    }
+    game.onTouchLaunch = onStartAutopilotRun
+      ? () => onStartAutopilotRun({ endless: endlessModeEnabled })
+      : null;
+    return () => {
+      game.onTouchLaunch = null;
+    };
+  }, [endlessModeEnabled, gameReady, onStartAutopilotRun]);
+
   useEffect(() => {
     if (!gameReady || isReplayRoute || replayState.active) {
       return;
