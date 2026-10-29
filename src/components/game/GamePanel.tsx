@@ -26,6 +26,8 @@ export interface GamePanelProps {
   endlessModeDetail?: string | null;
   onAutopilotStateChange?: (enabled: boolean) => void;
   onToggleEndlessMode?: () => void;
+  /** Start a live autopilot run from the menu or game-over screen (phone controls). */
+  onStartAutopilotRun?: (options: { endless: boolean }) => void;
   autoStartSignal?: number;
   className?: string;
 }
@@ -109,6 +111,7 @@ export function GamePanel({
   endlessModeDetail,
   onAutopilotStateChange,
   onToggleEndlessMode,
+  onStartAutopilotRun,
   autoStartSignal = 0,
   className,
 }: GamePanelProps) {
@@ -277,11 +280,30 @@ export function GamePanel({
     syncAutopilotState(game.isAutopilotEnabled());
   }, [autoStartSignal, gameReady, isReplayRoute, syncAutopilotState]);
 
+  // Phone controls: from the menu or game-over screen, Auto and Endless start an autopilot run
+  // (as the A and E keys do on desktop); during a run they toggle.
+  const canStartFromControls = useCallback(() => {
+    const mode = gameRef.current?.getMode();
+    return Boolean(onStartAutopilotRun) && (mode === "menu" || mode === "game-over");
+  }, [onStartAutopilotRun]);
+
   const handleToggleAutopilot = useCallback(() => {
     const current = gameRef.current;
     if (!current) return;
+    if (canStartFromControls()) {
+      onStartAutopilotRun?.({ endless: endlessModeEnabled });
+      return;
+    }
     current.toggleAutopilot();
-  }, []);
+  }, [canStartFromControls, endlessModeEnabled, onStartAutopilotRun]);
+
+  const handleToggleEndless = useCallback(() => {
+    if (canStartFromControls()) {
+      onStartAutopilotRun?.({ endless: true });
+      return;
+    }
+    onToggleEndlessMode?.();
+  }, [canStartFromControls, onStartAutopilotRun, onToggleEndlessMode]);
 
   const handleToggleReplayPause = useCallback(() => {
     gameRef.current?.toggleReplayPause();
@@ -325,15 +347,6 @@ export function GamePanel({
         )}
       >
         <AsteroidsCanvas onGameOver={handleGameOver} onGameReady={handleGameReady} />
-
-        {!isReplayRoute && !replayState.active && (
-          <MobileAutopilotButton
-            active={autopilotOn}
-            onToggle={handleToggleAutopilot}
-            endlessEnabled={endlessModeEnabled}
-            onToggleEndless={onToggleEndlessMode}
-          />
-        )}
 
         {replayState.active && !overlay && !replayError && (
           <MobileReplayControls
@@ -387,6 +400,16 @@ export function GamePanel({
           </div>
         )}
       </div>
+
+      {/* Phones: below the canvas, so the controls never cover the playfield or the menu text. */}
+      {!isReplayRoute && !replayState.active && (
+        <MobileAutopilotButton
+          active={autopilotOn}
+          onToggle={handleToggleAutopilot}
+          endlessEnabled={endlessModeEnabled}
+          onToggleEndless={handleToggleEndless}
+        />
+      )}
 
       <ControlsHint mode={controlsHintMode} endlessModeEnabled={endlessModeEnabled} />
     </section>
